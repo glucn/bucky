@@ -1,124 +1,169 @@
-const { ipcRenderer, desktopCapturer } = require("electron");
 import "./index.css";
 
-console.log(
-  '👋 This message is being logged by "renderer.js", included via webpack'
-);
-
-// const startButton = document.getElementById("startButton");
-// const stopButton = document.getElementById("stopButton");
-// const video = document.querySelector("video");
 const fullScreenButton = document.getElementById("fullScreenButton");
+const areaButton = document.getElementById("areaButton");
 const preview = document.querySelector("#preview");
 
-// startButton.addEventListener("click", () => {
-//   console.log("startButton clicked");
-//   navigator.mediaDevices
-//     .getDisplayMedia({
-//       audio: true,
-//       video: {
-//         width: 320,
-//         height: 240,
-//         frameRate: 30,
-//       },
-//     })
-//     .then((stream) => {
-//       video.srcObject = stream;
-//       video.onloadedmetadata = (e) => video.play();
-//     })
-//     .catch((e) => console.log(e));
-// });
+// Function to capture screenshot from a stream
+const captureScreenshot = (stream, cropArea = null) => {
+  const video = document.createElement("video");
+  video.style.cssText = "position:absolute;top:-10000px;left:-10000px;";
 
-// stopButton.addEventListener("click", () => {
-//   console.log("stopButton clicked");
-//   video.pause();
-// });
+  video.onloadedmetadata = () => {
+    video.style.height = video.videoHeight + "px";
+    video.style.width = video.videoWidth + "px";
+    video.play();
 
-fullScreenButton.addEventListener("click", async () => {
-  console.log("fullScreenButton clicked");
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
 
-  const handleStream = (stream) => {
-    console.log(stream);
-
-    // Create hidden video tag
-    const video = document.createElement("video");
-    video.style.cssText = "position:absolute;top:-10000px;left:-10000px;";
-
-    video.onloadedmetadata = () => {
-      // Set video ORIGINAL height (screenshot)
-      video.style.height = video.videoHeight + "px";
-      video.style.width = video.videoWidth + "px";
-
-      video.play();
-
-      // Create canvas
-      const canvas = document.createElement("canvas");
+    if (cropArea) {
+      // Set canvas size to the selected area
+      canvas.width = cropArea.width;
+      canvas.height = cropArea.height;
+      // Draw only the selected area
+      ctx.drawImage(
+        video,
+        cropArea.x,
+        cropArea.y,
+        cropArea.width,
+        cropArea.height,
+        0,
+        0,
+        cropArea.width,
+        cropArea.height
+      );
+    } else {
+      // Draw full screen
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      // Draw video on canvas
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    }
 
-      preview.setAttribute("src", canvas.toDataURL("image/png"));
+    preview.setAttribute("src", canvas.toDataURL("image/png"));
+    video.remove();
 
-      // Remove hidden video tag
-      video.remove();
-
-      try {
-        // Destroy connect to stream
-        stream.getTracks()[0].stop();
-      } catch (e) {
-        console.error("Error stopping stream:", e);
-      }
-    };
-
-    video.srcObject = stream;
-    document.body.appendChild(video);
+    try {
+      stream.getTracks()[0].stop();
+    } catch (e) {
+      console.error("Error stopping stream:", e);
+    }
   };
 
+  video.srcObject = stream;
+  document.body.appendChild(video);
+};
+
+// Function to handle area selection
+const handleAreaSelection = (stream) => {
+  const video = document.createElement("video");
+  video.style.cssText = "position:absolute;top:-10000px;left:-10000px;";
+  video.srcObject = stream;
+  document.body.appendChild(video);
+
+  video.onloadedmetadata = () => {
+    video.style.height = video.videoHeight + "px";
+    video.style.width = video.videoWidth + "px";
+    video.play();
+
+    // Create selection overlay
+    const overlay = document.createElement("div");
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      cursor: crosshair;
+      z-index: 9999;
+    `;
+
+    let isSelecting = false;
+    let startX, startY;
+    let selectionBox = null;
+
+    overlay.addEventListener("mousedown", (e) => {
+      isSelecting = true;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      selectionBox = document.createElement("div");
+      selectionBox.style.cssText = `
+        position: fixed;
+        border: 2px solid #fff;
+        background: rgba(255, 255, 255, 0.1);
+        pointer-events: none;
+        z-index: 10000;
+      `;
+      document.body.appendChild(selectionBox);
+    });
+
+    overlay.addEventListener("mousemove", (e) => {
+      if (!isSelecting) return;
+
+      const width = e.clientX - startX;
+      const height = e.clientY - startY;
+
+      selectionBox.style.left = `${width < 0 ? e.clientX : startX}px`;
+      selectionBox.style.top = `${height < 0 ? e.clientY : startY}px`;
+      selectionBox.style.width = `${Math.abs(width)}px`;
+      selectionBox.style.height = `${Math.abs(height)}px`;
+    });
+
+    overlay.addEventListener("mouseup", (e) => {
+      if (!isSelecting) return;
+      isSelecting = false;
+
+      const width = e.clientX - startX;
+      const height = e.clientY - startY;
+
+      const cropArea = {
+        x: width < 0 ? e.clientX : startX,
+        y: height < 0 ? e.clientY : startY,
+        width: Math.abs(width),
+        height: Math.abs(height),
+      };
+
+      // Clean up
+      overlay.remove();
+      selectionBox.remove();
+      video.remove();
+
+      // Capture the selected area
+      captureScreenshot(stream, cropArea);
+    });
+
+    document.body.appendChild(overlay);
+  };
+};
+
+// Full screen screenshot
+fullScreenButton.addEventListener("click", () => {
   navigator.mediaDevices
     .getDisplayMedia({
       audio: false,
       video: {
-        width: 320,
-        height: 240,
-        frameRate: 30,
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 },
       },
     })
-    .then((stream) => handleStream(stream))
-    .catch((e) => {
-      console.log(e);
-    });
+    .then((stream) => captureScreenshot(stream))
+    .catch((e) => console.error("Error capturing screenshot:", e));
+});
 
-  //   desktopCapturer
-  //     .getSources({ types: ["window", "screen"] })
-  //     .then(async (sources) => {
-  //       // const sources = await ipcRenderer.invoke("get-sources");
-  //       console.log("Available sources:", sources);
-
-  //       for (const source of sources) {
-  //         // Filter: main screen
-  //         if (source.name === document.title) {
-  //           try {
-  //             const stream = await navigator.mediaDevices.getUserMedia({
-  //               audio: false,
-  //               video: {
-  //                 mandatory: {
-  //                   chromeMediaSource: "desktop",
-  //                   chromeMediaSourceId: source.id,
-  //                   minWidth: 1280,
-  //                   maxWidth: 4000,
-  //                   minHeight: 720,
-  //                   maxHeight: 4000,
-  //                 },
-  //               },
-  //             });
-
-  //             handleStream(stream);
-  //           } catch (e) {
-  //             console.error("Error getting user media:", e);
-  //           }
-  //         }
-  //       }
-  //     });
+// Area selection screenshot
+areaButton.addEventListener("click", () => {
+  navigator.mediaDevices
+    .getDisplayMedia({
+      audio: false,
+      video: {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 },
+      },
+    })
+    .then((stream) => handleAreaSelection(stream))
+    .catch((e) => console.error("Error capturing screenshot:", e));
 });

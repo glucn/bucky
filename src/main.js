@@ -1,10 +1,4 @@
-const {
-  app,
-  BrowserWindow,
-  desktopCapturer,
-  session,
-  ipcMain,
-} = require("electron");
+const { app, BrowserWindow, desktopCapturer, session } = require("electron");
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require("electron-squirrel-startup")) {
@@ -20,7 +14,6 @@ const createWindow = () => {
       nodeIntegration: true,
       contextIsolation: false,
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
-      // enableBlinkFeatures: "ScreenCapture",
     },
   });
 
@@ -29,13 +22,8 @@ const createWindow = () => {
       desktopCapturer
         .getSources({ types: ["window", "screen"] })
         .then((sources) => {
-          // Grant access to the first screen found.
           callback({ video: sources[0], audio: "loopback" });
         });
-      // If true, use the system picker if available.
-      // Note: this is currently experimental. If the system picker
-      // is available, it will be used and the media request handler
-      // will not be invoked.
     },
     { useSystemPicker: true }
   );
@@ -46,16 +34,6 @@ const createWindow = () => {
   // Open the DevTools.
   mainWindow.webContents.openDevTools();
 };
-
-// Handle screen capture request
-// ipcMain.handle("get-sources", async () => {
-//   const sources = await desktopCapturer.getSources({
-//     types: ["screen"],
-//     // types: ["window", "screen"],
-//     thumbnailSize: { width: 0, height: 0 },
-//   });
-//   return sources;
-// });
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -80,6 +58,3 @@ app.on("window-all-closed", () => {
     app.quit();
   }
 });
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and import them here.
