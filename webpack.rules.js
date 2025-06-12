@@ -17,12 +17,16 @@ module.exports = [
     },
   },
   {
-    test: /\.js$/,
-    exclude: /node_modules/,
+    test: /\.(js|ts|tsx)$/,
+    exclude: /(node_modules|.webpack)/,
     use: {
       loader: "babel-loader",
       options: {
-        presets: ["@babel/preset-env"],
+        presets: [
+          "@babel/preset-env",
+          "@babel/preset-react",
+          "@babel/preset-typescript",
+        ],
       },
     },
   },

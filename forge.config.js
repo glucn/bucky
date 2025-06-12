@@ -37,15 +37,17 @@ module.exports = {
           config: "./webpack.renderer.config.js",
           entryPoints: [
             {
-              html: "./src/index.html",
-              js: "./src/renderer.js",
+              html: "./src/renderer/index.html",
+              js: "./src/renderer/index.tsx",
               name: "main_window",
               preload: {
-                js: "./src/preload.js",
+                js: "./src/preload.ts",
+                config: "./webpack.preload.config.js",
               },
             },
           ],
-          nodeIntegration: true,
+          nodeIntegration: false,
+          contextIsolation: true,
           devContentSecurityPolicy:
             "default-src 'self' 'unsafe-inline' data:; script-src 'self' 'unsafe-eval' 'unsafe-inline' data:",
         },
