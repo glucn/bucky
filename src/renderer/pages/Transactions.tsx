@@ -6,6 +6,12 @@ interface Account {
   currency: string;
 }
 
+interface Category {
+  id: string;
+  name: string;
+  type: string;
+}
+
 interface Transaction {
   id: string;
   accountId: string;
@@ -14,46 +20,80 @@ interface Transaction {
   category: string;
   date: string;
   description?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export const Transactions: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [newTransaction, setNewTransaction] = useState<Omit<Transaction, "id">>(
-    {
-      accountId: "",
-      amount: 0,
-      type: "expense",
-      category: "",
-      date: new Date().toISOString().split("T")[0],
-      description: "",
-    }
-  );
+  const [newTransaction, setNewTransaction] = useState<
+    Omit<Transaction, "id" | "createdAt" | "updatedAt">
+  >({
+    accountId: "",
+    amount: 0,
+    type: "expense",
+    category: "",
+    date: new Date().toISOString().split("T")[0],
+    description: "",
+  });
+  const [newCategory, setNewCategory] = useState({
+    name: "",
+    type: "expense",
+  });
 
   useEffect(() => {
     const fetchData = async () => {
-      const accountsData = await window.electron.ipcRenderer.invoke(
-        "get-accounts"
-      );
-      const transactionsData = await window.electron.ipcRenderer.invoke(
-        "get-transactions"
-      );
-      setAccounts(accountsData);
-      setTransactions(transactionsData);
+      try {
+        console.log("Fetching accounts and categories...");
+        const [accountsData, categoriesData] = await Promise.all([
+          window.electron.ipcRenderer.invoke("get-accounts"),
+          window.electron.ipcRenderer.invoke("get-categories"),
+        ]);
+        console.log("Accounts data:", accountsData);
+        console.log("Categories data:", categoriesData);
+        setAccounts(accountsData);
+        setCategories(categoriesData);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
     };
 
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (newTransaction.accountId) {
+      const fetchTransactions = async () => {
+        try {
+          console.log(
+            "Fetching transactions for account:",
+            newTransaction.accountId
+          );
+          const transactionsData = await window.electron.ipcRenderer.invoke(
+            "get-transactions",
+            newTransaction.accountId
+          );
+          console.log("Transactions data:", transactionsData);
+          setTransactions(transactionsData);
+        } catch (error) {
+          console.error("Error fetching transactions:", error);
+        }
+      };
+      fetchTransactions();
+    }
+  }, [newTransaction.accountId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const updatedTransactions = await window.electron.ipcRenderer.invoke(
+    const transaction = await window.electron.ipcRenderer.invoke(
       "add-transaction",
       newTransaction
     );
-    setTransactions(updatedTransactions);
+    setTransactions([transaction, ...transactions]);
     setNewTransaction({
-      accountId: "",
+      accountId: newTransaction.accountId,
       amount: 0,
       type: "expense",
       category: "",
@@ -62,8 +102,71 @@ export const Transactions: React.FC = () => {
     });
   };
 
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const category = await window.electron.ipcRenderer.invoke(
+      "add-category",
+      newCategory
+    );
+    setCategories([...categories, category]);
+    setNewCategory({ name: "", type: "expense" });
+  };
+
   return (
     <div className="space-y-6">
+      <div className="bg-white shadow rounded-lg p-6">
+        <h2 className="text-lg font-medium text-gray-900 mb-4">
+          Add New Category
+        </h2>
+        <form onSubmit={handleAddCategory} className="space-y-4">
+          <div>
+            <label
+              htmlFor="categoryName"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Category Name
+            </label>
+            <input
+              type="text"
+              id="categoryName"
+              value={newCategory.name}
+              onChange={(e) =>
+                setNewCategory({ ...newCategory, name: e.target.value })
+              }
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              required
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="categoryType"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Type
+            </label>
+            <select
+              id="categoryType"
+              value={newCategory.type}
+              onChange={(e) =>
+                setNewCategory({ ...newCategory, type: e.target.value })
+              }
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+            >
+              <option value="expense">Expense</option>
+              <option value="income">Income</option>
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+          >
+            Add Category
+          </button>
+        </form>
+      </div>
+
       <div className="bg-white shadow rounded-lg p-6">
         <h2 className="text-lg font-medium text-gray-900 mb-4">
           Add New Transaction
@@ -151,8 +254,7 @@ export const Transactions: React.FC = () => {
             >
               Category
             </label>
-            <input
-              type="text"
+            <select
               id="category"
               value={newTransaction.category}
               onChange={(e) =>
@@ -163,7 +265,16 @@ export const Transactions: React.FC = () => {
               }
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
               required
-            />
+            >
+              <option value="">Select a category</option>
+              {categories
+                .filter((cat) => cat.type === newTransaction.type)
+                .map((category) => (
+                  <option key={category.id} value={category.name}>
+                    {category.name}
+                  </option>
+                ))}
+            </select>
           </div>
 
           <div>
@@ -247,26 +358,19 @@ export const Transactions: React.FC = () => {
               {transactions.map((transaction) => (
                 <tr key={transaction.id}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {transaction.date}
+                    {new Date(transaction.date).toLocaleDateString()}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {transaction.category}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    ${transaction.amount.toFixed(2)}
+                    {transaction.amount.toFixed(2)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        transaction.type === "income"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-red-100 text-red-800"
-                      }`}
-                    >
-                      {transaction.type}
-                    </span>
+                    {transaction.type.charAt(0).toUpperCase() +
+                      transaction.type.slice(1)}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {transaction.description}
                   </td>
                 </tr>

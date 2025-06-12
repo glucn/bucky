@@ -90,3 +90,8 @@ typings/
 
 # Electron-Forge
 out/
+
+# Prisma
+prisma/dev.db
+prisma/*.js
+prisma/generated/

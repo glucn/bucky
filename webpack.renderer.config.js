@@ -1,6 +1,7 @@
 const rules = require("./webpack.rules");
 const plugins = require("./webpack.plugins");
 const path = require("path");
+const HtmlWebpackPlugin = require("html-webpack-plugin");
 
 rules.push({
   test: /\.css$/,
@@ -12,15 +13,23 @@ rules.push({
 });
 
 module.exports = {
+  mode: "development",
   entry: "./src/renderer/index.tsx",
   output: {
     filename: "renderer.js",
     path: path.resolve(__dirname, ".webpack/renderer"),
+    publicPath: "http://localhost:3001/",
   },
   module: {
     rules,
   },
-  plugins: plugins,
+  plugins: [
+    ...plugins,
+    new HtmlWebpackPlugin({
+      template: path.resolve(__dirname, "src/renderer/index.html"),
+      inject: true,
+    }),
+  ],
   resolve: {
     extensions: [".js", ".ts", ".jsx", ".tsx", ".css"],
     alias: {
@@ -29,8 +38,15 @@ module.exports = {
   },
   target: "web",
   devServer: {
+    port: 3001,
+    hot: true,
+    static: {
+      directory: path.join(__dirname, ".webpack/renderer"),
+      publicPath: "/",
+    },
+    historyApiFallback: true,
     headers: {
-      "Content-Type": "application/javascript",
+      "Access-Control-Allow-Origin": "*",
     },
   },
 };

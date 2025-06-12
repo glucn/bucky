@@ -3,14 +3,18 @@ import React, { useEffect, useState } from "react";
 interface Account {
   id: string;
   name: string;
+  type: string;
   balance: number;
   currency: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export const Accounts: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [newAccount, setNewAccount] = useState({
     name: "",
+    type: "bank",
     balance: 0,
     currency: "USD",
   });
@@ -28,12 +32,12 @@ export const Accounts: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const updatedAccounts = await window.electron.ipcRenderer.invoke(
+    const account = await window.electron.ipcRenderer.invoke(
       "add-account",
       newAccount
     );
-    setAccounts(updatedAccounts);
-    setNewAccount({ name: "", balance: 0, currency: "USD" });
+    setAccounts([...accounts, account]);
+    setNewAccount({ name: "", type: "bank", balance: 0, currency: "USD" });
   };
 
   return (
@@ -60,6 +64,28 @@ export const Accounts: React.FC = () => {
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
               required
             />
+          </div>
+
+          <div>
+            <label
+              htmlFor="type"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Account Type
+            </label>
+            <select
+              id="type"
+              value={newAccount.type}
+              onChange={(e) =>
+                setNewAccount({ ...newAccount, type: e.target.value })
+              }
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+            >
+              <option value="cash">Cash</option>
+              <option value="bank">Bank</option>
+              <option value="credit">Credit Card</option>
+              <option value="investment">Investment</option>
+            </select>
           </div>
 
           <div>
@@ -127,6 +153,9 @@ export const Accounts: React.FC = () => {
                   Name
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Type
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Balance
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -139,6 +168,10 @@ export const Accounts: React.FC = () => {
                 <tr key={account.id}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {account.name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {(account.type || "Unknown").charAt(0).toUpperCase() +
+                      (account.type || "Unknown").slice(1)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {(account.balance ?? 0).toFixed(2)}

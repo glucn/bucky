@@ -7,5 +7,9 @@ module.exports = [
   }),
   new webpack.DefinePlugin({
     "process.type": JSON.stringify(process.type),
+    "process.env.NODE_ENV": JSON.stringify(
+      process.env.NODE_ENV || "development"
+    ),
   }),
+  new webpack.HotModuleReplacementPlugin(),
 ];
