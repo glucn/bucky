@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import path from "path";
 import { app } from "electron";
+import { AccountType, toAccountType } from "../shared/accountTypes";
 
 class DatabaseService {
   private static instance: DatabaseService;
@@ -56,13 +57,13 @@ class DatabaseService {
   // Account operations
   public async createAccount(data: {
     name: string;
-    type: string;
+    type: AccountType | string;
     currency?: string;
   }) {
     return this.prisma.account.create({
       data: {
         name: data.name,
-        type: data.type,
+        type: typeof data.type === "string" ? data.type : (data.type as string),
         currency: data.currency || "USD",
       },
     });
@@ -72,8 +73,13 @@ class DatabaseService {
     try {
       console.log("Fetching accounts from database...");
       const accounts = await this.prisma.account.findMany();
-      console.log("Accounts fetched:", accounts);
-      return accounts;
+      // Convert type to AccountType for each account
+      const typedAccounts = accounts.map((acc) => ({
+        ...acc,
+        type: toAccountType(acc.type),
+      }));
+      console.log("Accounts fetched:", typedAccounts);
+      return typedAccounts;
     } catch (error) {
       console.error("Error fetching accounts:", error);
       throw error;
@@ -81,10 +87,12 @@ class DatabaseService {
   }
 
   public async getAccount(id: string) {
-    return this.prisma.account.findUnique({
+    const acc = await this.prisma.account.findUnique({
       where: { id },
       include: { lines: { include: { entry: true } } },
     });
+    if (!acc) return null;
+    return { ...acc, type: toAccountType(acc.type) };
   }
 
   // Double-entry transaction operations
@@ -131,22 +139,33 @@ class DatabaseService {
    * Returns lines for the account, joined with their entry.
    */
   public async getJournalEntriesForAccount(accountId: string) {
-    return this.prisma.journalLine.findMany({
+    const lines = await this.prisma.journalLine.findMany({
       where: { accountId },
       include: { entry: true, account: true },
       orderBy: { entry: { date: "desc" } },
     });
+    // Convert account.type to AccountType in each line
+    return lines.map((line) => ({
+      ...line,
+      account: line.account
+        ? { ...line.account, type: toAccountType(line.account.type) }
+        : line.account,
+    }));
   }
 
   public async createOpeningBalanceEntry(
     balances: { accountId: string; balance: number }[],
     entryDate: Date
   ) {
-    const ASSET_TYPES = ["cash", "bank", "investment"];
+    const ASSET_TYPES = [
+      AccountType.Cash,
+      AccountType.Bank,
+      AccountType.Investment,
+    ];
     // Liabilities have a natural credit balance.
     // A positive balance means money you owe, which is a credit on your books.
     // So, the amount in the journal line will be negative.
-    const LIABILITY_TYPES = ["credit"];
+    const LIABILITY_TYPES = [AccountType.Credit];
 
     return this.prisma.$transaction(async (tx) => {
       // 1. Get or create the 'Opening Balance Equity' account
@@ -158,7 +177,7 @@ class DatabaseService {
         equityAccount = await tx.account.create({
           data: {
             name: "Opening Balance Equity",
-            type: "EQUITY",
+            type: AccountType.Equity,
           },
         });
       }
@@ -189,9 +208,10 @@ class DatabaseService {
         }
 
         let amount = 0;
-        if (ASSET_TYPES.includes(account.type)) {
+        const accType = toAccountType(account.type);
+        if (ASSET_TYPES.includes(accType)) {
           amount = item.balance; // Debits are positive
-        } else if (LIABILITY_TYPES.includes(account.type)) {
+        } else if (LIABILITY_TYPES.includes(accType)) {
           amount = -item.balance; // Credits are negative
         }
 
@@ -246,6 +266,138 @@ class DatabaseService {
     } catch (error) {
       console.error("Error fetching categories:", error);
       throw error;
+    }
+  }
+
+  // --- Dashboard Data Methods ---
+
+  /**
+   * Get net worth: sum of all asset accounts minus sum of all liability accounts.
+   */
+  public async getNetWorth() {
+    // Define asset and liability types (customize as needed)
+    const ASSET_TYPES = [
+      AccountType.Cash,
+      AccountType.Bank,
+      AccountType.Investment,
+    ];
+    const LIABILITY_TYPES = [
+      AccountType.Credit,
+      AccountType.Loan,
+      AccountType.Liability,
+    ];
+
+    const accounts = await this.prisma.account.findMany({
+      include: { lines: true },
+    });
+
+    let assets = 0;
+    let liabilities = 0;
+
+    for (const acc of accounts) {
+      const balance = acc.lines.reduce((sum, line) => sum + line.amount, 0);
+      const accType = toAccountType(acc.type);
+      if (ASSET_TYPES.includes(accType)) {
+        assets += balance;
+      } else if (LIABILITY_TYPES.includes(accType)) {
+        liabilities += balance;
+      }
+    }
+    return { assets, liabilities, netWorth: assets - liabilities };
+  }
+
+  /**
+   * Get total income and expenses for the current month.
+   */
+  public async getIncomeExpenseThisMonth() {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999
+    );
+
+    // Get all journal entries for this month
+    const entries = await this.prisma.journalEntry.findMany({
+      where: {
+        date: {
+          gte: startOfMonth,
+          lte: endOfMonth,
+        },
+      },
+      include: {
+        lines: {
+          include: { account: true },
+        },
+      },
+    });
+
+    let income = 0;
+    let expenses = 0;
+    for (const entry of entries) {
+      for (const line of entry.lines) {
+        const type = toAccountType(line.account.type);
+        if (type === AccountType.Income) {
+          income += line.amount;
+        } else if (type === AccountType.Expense) {
+          expenses += line.amount;
+        }
+      }
+    }
+    // Usually, income is negative (credit), expenses positive (debit), so take absolute values
+    return {
+      income: Math.abs(income),
+      expenses: Math.abs(expenses),
+    };
+  }
+
+  /**
+   * Get the most recent N transactions (journal entries), including their lines and accounts.
+   */
+  public async getRecentTransactions(limit: number = 10) {
+    return this.prisma.journalEntry.findMany({
+      orderBy: { date: "desc" },
+      take: limit,
+      include: {
+        lines: {
+          include: { account: true },
+        },
+      },
+    });
+  }
+
+  /**
+   * Create a set of default accounts (including income and expense categories) if they do not exist.
+   */
+  public async ensureDefaultAccounts() {
+    const defaultAccounts = [
+      // Assets
+      { name: "Cash", type: AccountType.Cash, currency: "USD" },
+      { name: "Bank", type: AccountType.Bank, currency: "USD" },
+      // Liabilities
+      { name: "Credit Card", type: AccountType.Credit, currency: "USD" },
+      // Income
+      { name: "Salary", type: AccountType.Income, currency: "USD" },
+      { name: "Interest Income", type: AccountType.Income, currency: "USD" },
+      // Expenses
+      { name: "Groceries", type: AccountType.Expense, currency: "USD" },
+      { name: "Rent", type: AccountType.Expense, currency: "USD" },
+      { name: "Utilities", type: AccountType.Expense, currency: "USD" },
+      { name: "Dining Out", type: AccountType.Expense, currency: "USD" },
+      { name: "Entertainment", type: AccountType.Expense, currency: "USD" },
+    ];
+    for (const acc of defaultAccounts) {
+      const exists = await this.prisma.account.findFirst({
+        where: { name: acc.name, type: acc.type as string },
+      });
+      if (!exists) {
+        await this.prisma.account.create({ data: acc });
+      }
     }
   }
 }

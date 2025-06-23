@@ -23,6 +23,11 @@ async function initialize() {
     await databaseService.initialize();
     console.log("Database initialized successfully");
 
+    // Ensure default accounts exist
+    console.log("Ensuring default accounts exist...");
+    await databaseService.ensureDefaultAccounts();
+    console.log("Default accounts ensured");
+
     // Set up IPC handlers
     console.log("Setting up IPC handlers...");
     setupIpcHandlers();
@@ -50,6 +55,9 @@ function setupIpcHandlers() {
   ipcMain.removeHandler("get-categories");
   ipcMain.removeHandler("add-category");
   ipcMain.removeHandler("create-opening-balance-entry");
+  ipcMain.removeHandler("get-net-worth");
+  ipcMain.removeHandler("get-income-expense-this-month");
+  ipcMain.removeHandler("get-recent-transactions");
 
   ipcMain.handle("get-accounts", async () => {
     console.log("Handling get-accounts request");
@@ -111,6 +119,21 @@ function setupIpcHandlers() {
       );
     }
   );
+
+  ipcMain.handle("get-net-worth", async () => {
+    console.log("Handling get-net-worth request");
+    return databaseService.getNetWorth();
+  });
+
+  ipcMain.handle("get-income-expense-this-month", async () => {
+    console.log("Handling get-income-expense-this-month request");
+    return databaseService.getIncomeExpenseThisMonth();
+  });
+
+  ipcMain.handle("get-recent-transactions", async (_, limit: number = 10) => {
+    console.log("Handling get-recent-transactions request, limit:", limit);
+    return databaseService.getRecentTransactions(limit);
+  });
 
   console.log("All IPC handlers registered");
 }

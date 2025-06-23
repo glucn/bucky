@@ -1,7 +1,9 @@
+import { AccountType } from "../shared/accountTypes";
+
 export type Account = {
   id: string;
   name: string;
-  type: string;
+  type: AccountType;
   currency: string;
 };
 
@@ -16,4 +18,13 @@ declare global {
   interface Window {
     electron: IElectronAPI;
   }
+}
+
+export function toAccountType(
+  type: string,
+  fallback: AccountType = AccountType.Cash
+): AccountType {
+  return (Object.values(AccountType) as string[]).includes(type)
+    ? (type as AccountType)
+    : fallback;
 }
