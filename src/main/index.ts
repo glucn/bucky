@@ -49,6 +49,7 @@ function setupIpcHandlers() {
   ipcMain.removeHandler("add-transaction");
   ipcMain.removeHandler("get-categories");
   ipcMain.removeHandler("add-category");
+  ipcMain.removeHandler("create-opening-balance-entry");
 
   ipcMain.handle("get-accounts", async () => {
     console.log("Handling get-accounts request");
@@ -87,6 +88,29 @@ function setupIpcHandlers() {
     console.log("Handling add-category request:", category);
     return databaseService.createCategory(category);
   });
+
+  ipcMain.handle(
+    "create-opening-balance-entry",
+    async (
+      _,
+      {
+        balances,
+        entryDate,
+      }: {
+        balances: { accountId: string; balance: number }[];
+        entryDate: string;
+      }
+    ) => {
+      console.log("Handling create-opening-balance-entry request:", {
+        balances,
+        entryDate,
+      });
+      return databaseService.createOpeningBalanceEntry(
+        balances,
+        new Date(entryDate)
+      );
+    }
+  );
 
   console.log("All IPC handlers registered");
 }

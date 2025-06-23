@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import { Accounts } from "./pages/Accounts";
 import { Transactions } from "./pages/Transactions";
 import { Dashboard } from "./pages/Dashboard";
+import { OpeningBalances } from "./pages/OpeningBalances";
 
 const App: React.FC = () => {
   return (
@@ -45,6 +46,7 @@ const App: React.FC = () => {
             <Route path="/" element={<Dashboard />} />
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/transactions" element={<Transactions />} />
+            <Route path="/opening-balances" element={<OpeningBalances />} />
           </Routes>
         </main>
       </div>

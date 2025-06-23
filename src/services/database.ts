@@ -138,6 +138,95 @@ class DatabaseService {
     });
   }
 
+  public async createOpeningBalanceEntry(
+    balances: { accountId: string; balance: number }[],
+    entryDate: Date
+  ) {
+    const ASSET_TYPES = ["cash", "bank", "investment"];
+    // Liabilities have a natural credit balance.
+    // A positive balance means money you owe, which is a credit on your books.
+    // So, the amount in the journal line will be negative.
+    const LIABILITY_TYPES = ["credit"];
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Get or create the 'Opening Balance Equity' account
+      let equityAccount = await tx.account.findFirst({
+        where: { name: "Opening Balance Equity" },
+      });
+
+      if (!equityAccount) {
+        equityAccount = await tx.account.create({
+          data: {
+            name: "Opening Balance Equity",
+            type: "EQUITY",
+          },
+        });
+      }
+
+      // 2. Create the Journal Entry
+      const journalEntry = await tx.journalEntry.create({
+        data: {
+          date: entryDate,
+          description: "Opening Balance",
+          category: "SYSTEM",
+        },
+      });
+
+      const accounts = await tx.account.findMany({
+        where: { id: { in: balances.map((b) => b.accountId) } },
+      });
+      const accountMap = new Map(accounts.map((a) => [a.id, a]));
+
+      // 3. Create Journal Lines for each account
+      const linesData = [];
+      let total = 0;
+
+      for (const item of balances) {
+        const account = accountMap.get(item.accountId);
+        if (!account) {
+          // Or handle this error more gracefully
+          throw new Error(`Account with id ${item.accountId} not found.`);
+        }
+
+        let amount = 0;
+        if (ASSET_TYPES.includes(account.type)) {
+          amount = item.balance; // Debits are positive
+        } else if (LIABILITY_TYPES.includes(account.type)) {
+          amount = -item.balance; // Credits are negative
+        }
+
+        if (amount !== 0) {
+          linesData.push({
+            entryId: journalEntry.id,
+            accountId: item.accountId,
+            amount,
+            description: "Opening Balance",
+          });
+          total += amount;
+        }
+      }
+
+      // 4. Create the balancing line for the equity account
+      if (total !== 0) {
+        linesData.push({
+          entryId: journalEntry.id,
+          accountId: equityAccount.id,
+          amount: -total, // The balancing amount
+          description: "Opening Balance",
+        });
+      }
+
+      // 5. Create all lines in one go
+      if (linesData.length > 0) {
+        await tx.journalLine.createMany({
+          data: linesData,
+        });
+      }
+
+      return journalEntry;
+    });
+  }
+
   // Category operations
   public async createCategory(data: { name: string; type: string }) {
     return this.prisma.category.create({

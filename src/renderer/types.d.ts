@@ -1,3 +1,10 @@
+export type Account = {
+  id: string;
+  name: string;
+  type: string;
+  currency: string;
+};
+
 interface IElectronAPI {
   ipcRenderer: {
     invoke(channel: string, ...args: any[]): Promise<any>;
