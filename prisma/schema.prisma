@@ -11,33 +11,39 @@ datasource db {
 }
 
 model Account {
-  id          String   @id @default(uuid())
-  name        String
-  type        String   // e.g., "cash", "bank", "credit", "investment"
-  balance     Float    @default(0)
-  currency    String   @default("USD")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  transactions Transaction[]
+  id        String   @id @default(uuid())
+  name      String
+  type      String   // e.g., "cash", "bank", "credit", "investment"
+  currency  String   @default("USD")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lines     JournalLine[]
 }
 
-model Transaction {
-  id          String   @id @default(uuid())
+model JournalEntry {
+  id          String        @id @default(uuid())
   date        DateTime
-  amount      Float
-  type        String   // "income" or "expense"
-  category    String
   description String?
-  accountId   String
-  account     Account  @relation(fields: [accountId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  category    String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  lines       JournalLine[]
+}
+
+model JournalLine {
+  id            String        @id @default(uuid())
+  entryId       String
+  accountId     String
+  amount        Float         // Positive for debit, negative for credit (or vice versa, depending on convention)
+  description   String?
+  entry         JournalEntry  @relation(fields: [entryId], references: [id])
+  account       Account       @relation(fields: [accountId], references: [id])
 }
 
 model Category {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  type        String   // "income" or "expense"
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  name      String   @unique
+  type      String   // "income" or "expense"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 } 

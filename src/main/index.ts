@@ -57,7 +57,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle("get-transactions", async (_, accountId: string) => {
     console.log("Handling get-transactions request for account:", accountId);
-    return databaseService.getTransactions(accountId);
+    return databaseService.getJournalEntriesForAccount(accountId);
   });
 
   ipcMain.handle("add-account", async (_, account) => {
@@ -67,7 +67,8 @@ function setupIpcHandlers() {
 
   ipcMain.handle("add-transaction", async (_, transaction) => {
     console.log("Handling add-transaction request:", transaction);
-    return databaseService.createTransaction(transaction);
+    // transaction should include: date, amount, category, description, fromAccountId, toAccountId
+    return databaseService.createJournalEntry(transaction);
   });
 
   ipcMain.handle("get-categories", async () => {

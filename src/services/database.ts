@@ -83,44 +83,59 @@ class DatabaseService {
   public async getAccount(id: string) {
     return this.prisma.account.findUnique({
       where: { id },
-      include: { transactions: true },
+      include: { lines: { include: { entry: true } } },
     });
   }
 
-  // Transaction operations
-  public async createTransaction(data: {
+  // Double-entry transaction operations
+  /**
+   * Create a double-entry journal entry (transaction).
+   * @param data { date, amount, category, description, fromAccountId, toAccountId }
+   * fromAccountId: The account to credit (e.g., cash/bank for expense, income for income)
+   * toAccountId: The account to debit (e.g., expense for expense, cash/bank for income)
+   */
+  public async createJournalEntry(data: {
     date: string | Date;
     amount: number;
-    type: string;
     category: string;
     description?: string;
-    accountId: string;
+    fromAccountId: string;
+    toAccountId: string;
   }) {
-    return this.prisma.transaction.create({
+    return this.prisma.journalEntry.create({
       data: {
         date: new Date(data.date),
-        amount: data.amount,
-        type: data.type,
-        category: data.category,
         description: data.description,
-        accountId: data.accountId,
+        category: data.category,
+        lines: {
+          create: [
+            {
+              accountId: data.fromAccountId,
+              amount: -Math.abs(data.amount), // Credit
+              description: data.description,
+            },
+            {
+              accountId: data.toAccountId,
+              amount: Math.abs(data.amount), // Debit
+              description: data.description,
+            },
+          ],
+        },
       },
+      include: { lines: true },
     });
   }
 
-  public async getTransactions(accountId: string) {
-    try {
-      console.log("Fetching transactions for account:", accountId);
-      const transactions = await this.prisma.transaction.findMany({
-        where: { accountId },
-        orderBy: { date: "desc" },
-      });
-      console.log("Transactions fetched:", transactions);
-      return transactions;
-    } catch (error) {
-      console.error("Error fetching transactions:", error);
-      throw error;
-    }
+  /**
+   * Get all journal entries (transactions) for an account.
+   * Returns lines for the account, joined with their entry.
+   */
+  public async getJournalEntriesForAccount(accountId: string) {
+    return this.prisma.journalLine.findMany({
+      where: { accountId },
+      include: { entry: true, account: true },
+      orderBy: { entry: { date: "desc" } },
+    });
   }
 
   // Category operations

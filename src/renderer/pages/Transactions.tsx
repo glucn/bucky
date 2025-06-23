@@ -12,28 +12,32 @@ interface Category {
   type: string;
 }
 
-interface Transaction {
+interface JournalEntry {
   id: string;
-  accountId: string;
-  amount: number;
-  type: "income" | "expense";
-  category: string;
   date: string;
   description?: string;
-  createdAt: string;
-  updatedAt: string;
+  category: string;
+  lines: JournalLine[];
+}
+
+interface JournalLine {
+  id: string;
+  entryId: string;
+  accountId: string;
+  amount: number;
+  description?: string;
+  entry: JournalEntry;
+  account: Account;
 }
 
 export const Transactions: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [newTransaction, setNewTransaction] = useState<
-    Omit<Transaction, "id" | "createdAt" | "updatedAt">
-  >({
-    accountId: "",
+  const [transactions, setTransactions] = useState<JournalLine[]>([]);
+  const [newTransaction, setNewTransaction] = useState({
+    fromAccountId: "",
+    toAccountId: "",
     amount: 0,
-    type: "expense",
     category: "",
     date: new Date().toISOString().split("T")[0],
     description: "",
@@ -64,18 +68,13 @@ export const Transactions: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (newTransaction.accountId) {
+    if (newTransaction.fromAccountId) {
       const fetchTransactions = async () => {
         try {
-          console.log(
-            "Fetching transactions for account:",
-            newTransaction.accountId
-          );
           const transactionsData = await window.electron.ipcRenderer.invoke(
             "get-transactions",
-            newTransaction.accountId
+            newTransaction.fromAccountId
           );
-          console.log("Transactions data:", transactionsData);
           setTransactions(transactionsData);
         } catch (error) {
           console.error("Error fetching transactions:", error);
@@ -83,7 +82,7 @@ export const Transactions: React.FC = () => {
       };
       fetchTransactions();
     }
-  }, [newTransaction.accountId]);
+  }, [newTransaction.fromAccountId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,11 +90,11 @@ export const Transactions: React.FC = () => {
       "add-transaction",
       newTransaction
     );
-    setTransactions([transaction, ...transactions]);
+    setTransactions([...(transaction.lines || []), ...transactions]);
     setNewTransaction({
-      accountId: newTransaction.accountId,
+      fromAccountId: newTransaction.fromAccountId,
+      toAccountId: "",
       amount: 0,
-      type: "expense",
       category: "",
       date: new Date().toISOString().split("T")[0],
       description: "",
@@ -174,18 +173,18 @@ export const Transactions: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
-              htmlFor="account"
+              htmlFor="fromAccount"
               className="block text-sm font-medium text-gray-700"
             >
-              Account
+              From Account
             </label>
             <select
-              id="account"
-              value={newTransaction.accountId}
+              id="fromAccount"
+              value={newTransaction.fromAccountId}
               onChange={(e) =>
                 setNewTransaction({
                   ...newTransaction,
-                  accountId: e.target.value,
+                  fromAccountId: e.target.value,
                 })
               }
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
@@ -199,30 +198,33 @@ export const Transactions: React.FC = () => {
               ))}
             </select>
           </div>
-
           <div>
             <label
-              htmlFor="type"
+              htmlFor="toAccount"
               className="block text-sm font-medium text-gray-700"
             >
-              Type
+              To Account
             </label>
             <select
-              id="type"
-              value={newTransaction.type}
+              id="toAccount"
+              value={newTransaction.toAccountId}
               onChange={(e) =>
                 setNewTransaction({
                   ...newTransaction,
-                  type: e.target.value as "income" | "expense",
+                  toAccountId: e.target.value,
                 })
               }
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              required
             >
-              <option value="expense">Expense</option>
-              <option value="income">Income</option>
+              <option value="">Select an account</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name} ({account.currency})
+                </option>
+              ))}
             </select>
           </div>
-
           <div>
             <label
               htmlFor="amount"
@@ -267,13 +269,11 @@ export const Transactions: React.FC = () => {
               required
             >
               <option value="">Select a category</option>
-              {categories
-                .filter((cat) => cat.type === newTransaction.type)
-                .map((category) => (
-                  <option key={category.id} value={category.name}>
-                    {category.name}
-                  </option>
-                ))}
+              {categories.map((category) => (
+                <option key={category.id} value={category.name}>
+                  {category.name}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -347,7 +347,7 @@ export const Transactions: React.FC = () => {
                   Amount
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Type
+                  Account
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Description
@@ -355,26 +355,27 @@ export const Transactions: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {transactions.map((transaction) => (
-                <tr key={transaction.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(transaction.date).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {transaction.category}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {transaction.amount.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {transaction.type.charAt(0).toUpperCase() +
-                      transaction.type.slice(1)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {transaction.description}
-                  </td>
-                </tr>
-              ))}
+              {transactions
+                .filter((line) => line.entry)
+                .map((line) => (
+                  <tr key={line.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(line.entry.date).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {line.entry.category}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {line.amount.toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {line.account?.name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {line.description || line.entry.description}
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>

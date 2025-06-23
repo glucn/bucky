@@ -4,7 +4,6 @@ interface Account {
   id: string;
   name: string;
   type: string;
-  balance: number;
   currency: string;
   createdAt: string;
   updatedAt: string;
@@ -12,6 +11,9 @@ interface Account {
 
 export const Accounts: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accountBalances, setAccountBalances] = useState<
+    Record<string, number>
+  >({});
   const [newAccount, setNewAccount] = useState({
     name: "",
     type: "bank",
@@ -30,11 +32,32 @@ export const Accounts: React.FC = () => {
     fetchAccounts();
   }, []);
 
+  // Compute balances for all accounts
+  useEffect(() => {
+    const fetchAllBalances = async () => {
+      const balances: Record<string, number> = {};
+      for (const account of accounts) {
+        const lines = await window.electron.ipcRenderer.invoke(
+          "get-transactions",
+          account.id
+        );
+        balances[account.id] = lines.reduce(
+          (sum: number, line: { amount: number }) => sum + line.amount,
+          0
+        );
+      }
+      setAccountBalances(balances);
+    };
+    if (accounts.length > 0) {
+      fetchAllBalances();
+    }
+  }, [accounts]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const account = await window.electron.ipcRenderer.invoke(
       "add-account",
-      newAccount
+      { ...newAccount, balance: undefined } // balance is not used in schema
     );
     setAccounts([...accounts, account]);
     setNewAccount({ name: "", type: "bank", balance: 0, currency: "USD" });
@@ -174,7 +197,7 @@ export const Accounts: React.FC = () => {
                       (account.type || "Unknown").slice(1)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {(account.balance ?? 0).toFixed(2)}
+                    {(accountBalances[account.id] ?? 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {account.currency}

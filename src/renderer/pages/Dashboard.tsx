@@ -4,29 +4,37 @@ interface Account {
   id: string;
   name: string;
   type: string;
-  balance: number;
   currency: string;
   createdAt: string;
   updatedAt: string;
 }
 
-interface Transaction {
+interface JournalEntry {
   id: string;
-  accountId: string;
-  amount: number;
-  type: "income" | "expense";
-  category: string;
   date: string;
   description?: string;
-  createdAt: string;
-  updatedAt: string;
+  category: string;
+  lines: JournalLine[];
+}
+
+interface JournalLine {
+  id: string;
+  entryId: string;
+  accountId: string;
+  amount: number;
+  description?: string;
+  entry: JournalEntry;
+  account: Account;
 }
 
 export const Dashboard: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<JournalLine[]>([]);
   const [totalBalance, setTotalBalance] = useState(0);
   const [selectedAccount, setSelectedAccount] = useState<string>("");
+  const [accountBalances, setAccountBalances] = useState<
+    Record<string, number>
+  >({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -55,9 +63,26 @@ export const Dashboard: React.FC = () => {
     }
   }, [selectedAccount]);
 
+  // Compute balances for all accounts
   useEffect(() => {
-    const total = accounts.reduce((sum, account) => sum + account.balance, 0);
-    setTotalBalance(total);
+    const fetchAllBalances = async () => {
+      const balances: Record<string, number> = {};
+      for (const account of accounts) {
+        const lines: JournalLine[] = await window.electron.ipcRenderer.invoke(
+          "get-transactions",
+          account.id
+        );
+        balances[account.id] = lines.reduce(
+          (sum, line) => sum + line.amount,
+          0
+        );
+      }
+      setAccountBalances(balances);
+      setTotalBalance(Object.values(balances).reduce((sum, b) => sum + b, 0));
+    };
+    if (accounts.length > 0) {
+      fetchAllBalances();
+    }
   }, [accounts]);
 
   const formatCurrency = (amount: number, currency: string) => {
@@ -94,33 +119,31 @@ export const Dashboard: React.FC = () => {
           </select>
         </div>
         <div className="mt-4">
-          {transactions.slice(0, 5).map((transaction) => (
+          {transactions.slice(0, 5).map((line) => (
             <div
-              key={transaction.id}
+              key={line.id}
               className="flex items-center justify-between py-3 border-b last:border-b-0"
             >
               <div>
                 <p className="text-sm font-medium text-gray-900">
-                  {transaction.category}
+                  {line.entry.category}
                 </p>
                 <p className="text-sm text-gray-500">
-                  {new Date(transaction.date).toLocaleDateString()}
+                  {new Date(line.entry.date).toLocaleDateString()}
                 </p>
-                {transaction.description && (
+                {(line.description || line.entry.description) && (
                   <p className="text-sm text-gray-500">
-                    {transaction.description}
+                    {line.description || line.entry.description}
                   </p>
                 )}
               </div>
               <p
                 className={`text-sm font-medium ${
-                  transaction.type === "income"
-                    ? "text-green-600"
-                    : "text-red-600"
+                  line.amount > 0 ? "text-green-600" : "text-red-600"
                 }`}
               >
-                {transaction.type === "income" ? "+" : "-"}
-                {formatCurrency(Math.abs(transaction.amount), "USD")}
+                {line.amount > 0 ? "+" : "-"}
+                {formatCurrency(Math.abs(line.amount), "USD")}
               </p>
             </div>
           ))}
@@ -145,7 +168,10 @@ export const Dashboard: React.FC = () => {
                 </p>
               </div>
               <p className="text-sm font-medium text-gray-900">
-                {formatCurrency(account.balance, account.currency)}
+                {formatCurrency(
+                  accountBalances[account.id] ?? 0,
+                  account.currency
+                )}
               </p>
             </div>
           ))}
