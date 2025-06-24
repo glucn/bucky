@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Papa from "papaparse";
 
 interface Account {
   id: string;
@@ -46,6 +47,21 @@ export const Transactions: React.FC = () => {
     name: "",
     type: "expense",
   });
+
+  // CSV Import State
+  const [csvRows, setCsvRows] = useState<any[]>([]);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [fieldMap, setFieldMap] = useState<{ [key: string]: string }>({});
+  const [showMapping, setShowMapping] = useState(false);
+  const [importPreview, setImportPreview] = useState<any[]>([]);
+  const systemFields = [
+    "date",
+    "amount",
+    "description",
+    "fromAccountId",
+    "toAccountId",
+    "category",
+  ];
 
   useEffect(() => {
     const fetchData = async () => {
@@ -109,6 +125,70 @@ export const Transactions: React.FC = () => {
     );
     setCategories([...categories, category]);
     setNewCategory({ name: "", type: "expense" });
+  };
+
+  // Attempt to auto-map CSV headers to system fields
+  const autoMapFields = (headers: string[]) => {
+    const map: { [key: string]: string } = {};
+    systemFields.forEach((field) => {
+      const match = headers.find((h) =>
+        h.toLowerCase().includes(field.toLowerCase())
+      );
+      if (match) map[field] = match;
+    });
+    return map;
+  };
+
+  // Handle CSV file upload
+  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const headers = results.meta.fields || [];
+        setCsvHeaders(headers);
+        setCsvRows(results.data as any[]);
+        const autoMap = autoMapFields(headers);
+        setFieldMap(autoMap);
+        setShowMapping(true);
+      },
+    });
+  };
+
+  // Handle field mapping change
+  const handleFieldMapChange = (systemField: string, csvField: string) => {
+    setFieldMap((prev) => ({ ...prev, [systemField]: csvField }));
+  };
+
+  // Preview mapped data
+  useEffect(() => {
+    if (csvRows.length && Object.keys(fieldMap).length) {
+      const preview = csvRows.map((row) => {
+        const mapped: any = {};
+        systemFields.forEach((field) => {
+          mapped[field] = row[fieldMap[field]] || "";
+        });
+        return mapped;
+      });
+      setImportPreview(preview);
+    }
+  }, [csvRows, fieldMap]);
+
+  // Send mapped data to backend
+  const handleImport = async () => {
+    try {
+      await window.electron.ipcRenderer.invoke("import-transactions", {
+        transactions: importPreview,
+      });
+      setShowMapping(false);
+      setCsvRows([]);
+      setImportPreview([]);
+      // Optionally, refresh transactions list here
+    } catch (err) {
+      alert("Failed to import transactions");
+    }
   };
 
   return (
@@ -379,6 +459,73 @@ export const Transactions: React.FC = () => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* CSV Import Section */}
+      <div className="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 className="text-lg font-medium text-gray-900 mb-4">
+          Import Transactions from CSV
+        </h2>
+        <input type="file" accept=".csv" onChange={handleCsvUpload} />
+        {showMapping && (
+          <div className="mt-4">
+            <h3 className="font-semibold mb-2">
+              Map CSV Columns to System Fields
+            </h3>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              {systemFields.map((field) => (
+                <div key={field} className="flex items-center space-x-2">
+                  <label className="w-32 font-medium">{field}</label>
+                  <select
+                    value={fieldMap[field] || ""}
+                    onChange={(e) =>
+                      handleFieldMapChange(field, e.target.value)
+                    }
+                    className="border rounded px-2 py-1"
+                  >
+                    <option value="">-- Not Mapped --</option>
+                    {csvHeaders.map((header) => (
+                      <option key={header} value={header}>
+                        {header}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <h4 className="font-semibold mb-2">Preview</h4>
+            <div className="overflow-x-auto max-h-48 border rounded">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr>
+                    {systemFields.map((field) => (
+                      <th key={field} className="px-2 py-1 border-b">
+                        {field}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {importPreview.slice(0, 5).map((row, i) => (
+                    <tr key={i}>
+                      {systemFields.map((field) => (
+                        <td key={field} className="px-2 py-1 border-b">
+                          {row[field]}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button
+              className="mt-4 px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"
+              onClick={handleImport}
+            >
+              Import Transactions
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

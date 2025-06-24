@@ -58,6 +58,7 @@ function setupIpcHandlers() {
   ipcMain.removeHandler("get-net-worth");
   ipcMain.removeHandler("get-income-expense-this-month");
   ipcMain.removeHandler("get-recent-transactions");
+  ipcMain.removeHandler("import-transactions");
 
   ipcMain.handle("get-accounts", async () => {
     console.log("Handling get-accounts request");
@@ -133,6 +134,40 @@ function setupIpcHandlers() {
   ipcMain.handle("get-recent-transactions", async (_, limit: number = 10) => {
     console.log("Handling get-recent-transactions request, limit:", limit);
     return databaseService.getRecentTransactions(limit);
+  });
+
+  ipcMain.handle("import-transactions", async (_, { transactions }) => {
+    console.log("Handling import-transactions request");
+    // Each transaction should have: date, amount, category, description, fromAccountId, toAccountId
+    try {
+      const results = [];
+      for (const tx of transactions) {
+        // Basic validation: skip if required fields are missing
+        if (
+          !tx.date ||
+          !tx.amount ||
+          !tx.fromAccountId ||
+          !tx.toAccountId ||
+          !tx.category
+        )
+          continue;
+        const result = await databaseService.createJournalEntry({
+          date: tx.date,
+          amount: Number(tx.amount),
+          category: tx.category,
+          description: tx.description,
+          fromAccountId: tx.fromAccountId,
+          toAccountId: tx.toAccountId,
+        });
+        results.push(result);
+      }
+      return { success: true, count: results.length };
+    } catch (err) {
+      console.error("Failed to import transactions", err);
+      let message = "Unknown error";
+      if (err instanceof Error) message = err.message;
+      return { success: false, error: message };
+    }
   });
 
   console.log("All IPC handlers registered");
