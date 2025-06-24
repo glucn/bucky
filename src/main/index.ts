@@ -52,6 +52,7 @@ function setupIpcHandlers() {
   ipcMain.removeHandler("get-transactions");
   ipcMain.removeHandler("add-account");
   ipcMain.removeHandler("add-transaction");
+  ipcMain.removeHandler("delete-transaction");
   ipcMain.removeHandler("get-categories");
   ipcMain.removeHandler("add-category");
   ipcMain.removeHandler("create-opening-balance-entry");
@@ -79,6 +80,21 @@ function setupIpcHandlers() {
     console.log("Handling add-transaction request:", transaction);
     // transaction should include: date, amount, category, description, fromAccountId, toAccountId
     return databaseService.createJournalEntry(transaction);
+  });
+
+  ipcMain.handle("delete-transaction", async (_, entryId: string) => {
+    console.log("Handling delete-transaction request for entry:", entryId);
+    try {
+      const result = await databaseService.deleteJournalEntry(entryId);
+      console.log("Transaction deleted successfully:", result);
+      return { success: true, deletedEntry: result };
+    } catch (error) {
+      console.error("Error deleting transaction:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
   });
 
   ipcMain.handle("get-categories", async () => {

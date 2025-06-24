@@ -63,6 +63,11 @@ export const Transactions: React.FC = () => {
     "category",
   ];
 
+  // Delete transaction state
+  const [deletingTransactionId, setDeletingTransactionId] = useState<
+    string | null
+  >(null);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -99,6 +104,20 @@ export const Transactions: React.FC = () => {
       fetchTransactions();
     }
   }, [newTransaction.fromAccountId]);
+
+  const refreshTransactions = async () => {
+    if (newTransaction.fromAccountId) {
+      try {
+        const transactionsData = await window.electron.ipcRenderer.invoke(
+          "get-transactions",
+          newTransaction.fromAccountId
+        );
+        setTransactions(transactionsData);
+      } catch (error) {
+        console.error("Error refreshing transactions:", error);
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -188,6 +207,61 @@ export const Transactions: React.FC = () => {
       // Optionally, refresh transactions list here
     } catch (err) {
       alert("Failed to import transactions");
+    }
+  };
+
+  const handleDeleteTransaction = async (entryId: string) => {
+    // Find the transaction details for better confirmation
+    const transactionLines = transactions.filter(
+      (line) => line.entryId === entryId
+    );
+    if (transactionLines.length === 0) {
+      alert("Transaction not found");
+      return;
+    }
+
+    const entry = transactionLines[0].entry;
+    const fromAccount =
+      transactionLines.find((line) => line.amount < 0)?.account?.name ||
+      "Unknown";
+    const toAccount =
+      transactionLines.find((line) => line.amount > 0)?.account?.name ||
+      "Unknown";
+    const amount = Math.abs(transactionLines[0].amount);
+
+    const confirmMessage = `Are you sure you want to delete this transaction?
+
+Date: ${new Date(entry.date).toLocaleDateString()}
+Category: ${entry.category}
+Amount: $${amount.toFixed(2)}
+From: ${fromAccount}
+To: ${toAccount}
+Description: ${entry.description || "No description"}
+
+This action cannot be undone and will affect your account balances.`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    setDeletingTransactionId(entryId);
+    try {
+      const result = await window.electron.ipcRenderer.invoke(
+        "delete-transaction",
+        entryId
+      );
+      if (result.success) {
+        // Refresh the transactions list to ensure UI is in sync
+        await refreshTransactions();
+        alert("Transaction deleted successfully");
+      } else {
+        alert(`Failed to delete transaction: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error deleting transaction:", error);
+      alert("Failed to delete transaction. Please try again.");
+    } finally {
+      setDeletingTransactionId(null);
     }
   };
 
@@ -410,9 +484,17 @@ export const Transactions: React.FC = () => {
       </div>
 
       <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">
-          Recent Transactions
-        </h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-medium text-gray-900">
+            Recent Transactions
+          </h2>
+          <button
+            onClick={refreshTransactions}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+          >
+            Refresh
+          </button>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -431,6 +513,9 @@ export const Transactions: React.FC = () => {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Description
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -453,6 +538,21 @@ export const Transactions: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {line.description || line.entry.description}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <button
+                        className={`text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed ${
+                          deletingTransactionId === line.entry.id
+                            ? "opacity-50"
+                            : ""
+                        }`}
+                        onClick={() => handleDeleteTransaction(line.entry.id)}
+                        disabled={deletingTransactionId === line.entry.id}
+                      >
+                        {deletingTransactionId === line.entry.id
+                          ? "Deleting..."
+                          : "Delete"}
+                      </button>
                     </td>
                   </tr>
                 ))}

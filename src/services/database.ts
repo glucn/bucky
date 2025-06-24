@@ -372,6 +372,40 @@ class DatabaseService {
   }
 
   /**
+   * Delete a journal entry (transaction) and all its associated lines.
+   * This maintains data integrity by deleting both the entry and lines in a transaction.
+   */
+  public async deleteJournalEntry(entryId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      // First, delete all journal lines associated with this entry
+      await tx.journalLine.deleteMany({
+        where: { entryId },
+      });
+
+      // Then delete the journal entry itself
+      const deletedEntry = await tx.journalEntry.delete({
+        where: { id: entryId },
+      });
+
+      return deletedEntry;
+    });
+  }
+
+  /**
+   * Get a specific journal entry by ID with its lines and accounts.
+   */
+  public async getJournalEntry(entryId: string) {
+    return this.prisma.journalEntry.findUnique({
+      where: { id: entryId },
+      include: {
+        lines: {
+          include: { account: true },
+        },
+      },
+    });
+  }
+
+  /**
    * Create a set of default accounts (including income and expense categories) if they do not exist.
    */
   public async ensureDefaultAccounts() {
