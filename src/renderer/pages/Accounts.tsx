@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Account } from "../types";
+import { AccountType, toAccountType } from "../../shared/accountTypes";
 
 export const Accounts: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -11,8 +12,8 @@ export const Accounts: React.FC = () => {
   >({});
   const [newAccount, setNewAccount] = useState({
     name: "",
-    type: "bank",
-    currency: "CAD",
+    type: AccountType.User,
+    currency: "USD",
   });
   const [deletingAccountId, setDeletingAccountId] = useState<string | null>(
     null
@@ -65,7 +66,7 @@ export const Accounts: React.FC = () => {
       newAccount
     );
     fetchAccounts();
-    setNewAccount({ name: "", type: "bank", currency: "USD" });
+    setNewAccount({ name: "", type: AccountType.User, currency: "USD" });
   };
 
   const handleDeleteOrArchive = async (account: Account) => {
@@ -169,7 +170,10 @@ export const Accounts: React.FC = () => {
               id="type"
               value={newAccount.type}
               onChange={(e) =>
-                setNewAccount({ ...newAccount, type: e.target.value })
+                setNewAccount({
+                  ...newAccount,
+                  type: toAccountType(e.target.value),
+                })
               }
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
             >

@@ -10,15 +10,27 @@ datasource db {
   url      = "file:./dev.db"
 }
 
+enum AccountSubtype {
+  asset
+  liability
+}
+
+enum AccountType {
+  user
+  category
+  system
+}
+
 model Account {
-  id        String   @id @default(uuid())
+  id        String      @id @default(uuid())
   name      String
-  type      String   // e.g., "cash", "bank", "credit", "investment"
-  currency  String   @default("USD")
-  isArchived Boolean @default(false)
+  type      AccountType
+  subtype   AccountSubtype @default(asset)
+  currency  String      @default("USD")
+  isArchived Boolean   @default(false)
   archivedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
   lines     JournalLine[]
 }
 

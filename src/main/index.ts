@@ -23,10 +23,15 @@ async function initialize() {
     await databaseService.initialize();
     console.log("Database initialized successfully");
 
-    // Ensure default accounts exist
-    console.log("Ensuring default accounts exist...");
-    await databaseService.ensureDefaultAccounts();
-    console.log("Default accounts ensured");
+    // Ensure default accounts exist only if there are no accounts
+    const existingAccounts = await databaseService.getAccounts(true);
+    if (!existingAccounts || existingAccounts.length === 0) {
+      console.log("No accounts found. Ensuring default accounts exist...");
+      await databaseService.ensureDefaultAccounts();
+      console.log("Default accounts ensured");
+    } else {
+      console.log("Accounts already exist. Skipping default account creation.");
+    }
 
     // Set up IPC handlers
     console.log("Setting up IPC handlers...");

@@ -1,7 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 import path from "path";
-import { app } from "electron";
-import { AccountType, toAccountType } from "../shared/accountTypes";
+import {
+  AccountType,
+  toAccountType,
+  AccountSubtype,
+} from "../shared/accountTypes";
 
 class DatabaseService {
   private static instance: DatabaseService;
@@ -63,7 +66,7 @@ class DatabaseService {
     return this.prisma.account.create({
       data: {
         name: data.name,
-        type: typeof data.type === "string" ? data.type : (data.type as string),
+        type: data.type as AccountType,
         currency: data.currency || "USD",
       },
     });
@@ -225,15 +228,11 @@ class DatabaseService {
     balances: { accountId: string; balance: number }[],
     entryDate: Date
   ) {
-    const ASSET_TYPES = [
-      AccountType.Cash,
-      AccountType.Bank,
-      AccountType.Investment,
-    ];
+    const ASSET_TYPES = [AccountType.User];
     // Liabilities have a natural credit balance.
     // A positive balance means money you owe, which is a credit on your books.
     // So, the amount in the journal line will be negative.
-    const LIABILITY_TYPES = [AccountType.Credit];
+    const LIABILITY_TYPES = [AccountType.System];
 
     return this.prisma.$transaction(async (tx) => {
       // 1. Get or create the 'Opening Balance Equity' account
@@ -245,7 +244,7 @@ class DatabaseService {
         equityAccount = await tx.account.create({
           data: {
             name: "Opening Balance Equity",
-            type: AccountType.Equity,
+            type: AccountType.System,
           },
         });
       }
@@ -340,21 +339,9 @@ class DatabaseService {
   // --- Dashboard Data Methods ---
 
   /**
-   * Get net worth: sum of all asset accounts minus sum of all liability accounts.
+   * Get net worth: sum of all user accounts (assets/liabilities) only.
    */
   public async getNetWorth() {
-    // Define asset and liability types (customize as needed)
-    const ASSET_TYPES = [
-      AccountType.Cash,
-      AccountType.Bank,
-      AccountType.Investment,
-    ];
-    const LIABILITY_TYPES = [
-      AccountType.Credit,
-      AccountType.Loan,
-      AccountType.Liability,
-    ];
-
     const accounts = await this.prisma.account.findMany({
       include: { lines: true },
     });
@@ -363,19 +350,21 @@ class DatabaseService {
     let liabilities = 0;
 
     for (const acc of accounts) {
-      const balance = acc.lines.reduce((sum, line) => sum + line.amount, 0);
-      const accType = toAccountType(acc.type);
-      if (ASSET_TYPES.includes(accType)) {
-        assets += balance;
-      } else if (LIABILITY_TYPES.includes(accType)) {
-        liabilities += balance;
+      if (acc.type === AccountType.User) {
+        const balance = acc.lines.reduce((sum, line) => sum + line.amount, 0);
+        const subtype = (acc as any).subtype;
+        if (subtype === "asset") {
+          assets += balance;
+        } else if (subtype === "liability") {
+          liabilities += balance;
+        }
       }
     }
-    return { assets, liabilities, netWorth: assets - liabilities };
+    return { netWorth: assets - liabilities, assets, liabilities };
   }
 
   /**
-   * Get total income and expenses for the current month.
+   * Get total income and expenses for the current month (category accounts only).
    */
   public async getIncomeExpenseThisMonth() {
     const now = new Date();
@@ -409,15 +398,16 @@ class DatabaseService {
     let expenses = 0;
     for (const entry of entries) {
       for (const line of entry.lines) {
-        const type = toAccountType(line.account.type);
-        if (type === AccountType.Income) {
-          income += line.amount;
-        } else if (type === AccountType.Expense) {
-          expenses += line.amount;
+        if (line.account.type === AccountType.Category) {
+          // You may want to further distinguish income vs. expense by account name or add a sub-type
+          if (line.account.name.toLowerCase().includes("income")) {
+            income += line.amount;
+          } else {
+            expenses += line.amount;
+          }
         }
       }
     }
-    // Usually, income is negative (credit), expenses positive (debit), so take absolute values
     return {
       income: Math.abs(income),
       expenses: Math.abs(expenses),
@@ -474,28 +464,83 @@ class DatabaseService {
   }
 
   /**
-   * Create a set of default accounts (including income and expense categories) if they do not exist.
+   * Create a set of default accounts (user, system, category) if they do not exist.
    */
   public async ensureDefaultAccounts() {
     const defaultAccounts = [
-      // Assets
-      { name: "Cash", type: AccountType.Cash, currency: "USD" },
-      { name: "Bank", type: AccountType.Bank, currency: "USD" },
-      // Liabilities
-      { name: "Credit Card", type: AccountType.Credit, currency: "USD" },
-      // Income
-      { name: "Salary", type: AccountType.Income, currency: "USD" },
-      { name: "Interest Income", type: AccountType.Income, currency: "USD" },
-      // Expenses
-      { name: "Groceries", type: AccountType.Expense, currency: "USD" },
-      { name: "Rent", type: AccountType.Expense, currency: "USD" },
-      { name: "Utilities", type: AccountType.Expense, currency: "USD" },
-      { name: "Dining Out", type: AccountType.Expense, currency: "USD" },
-      { name: "Entertainment", type: AccountType.Expense, currency: "USD" },
+      // User accounts
+      {
+        name: "Cash",
+        type: AccountType.User,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+      },
+      {
+        name: "Bank",
+        type: AccountType.User,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+      },
+      {
+        name: "Credit Card",
+        type: AccountType.User,
+        subtype: AccountSubtype.Liability,
+        currency: "USD",
+      },
+      // System accounts
+      {
+        name: "Opening Balance Equity",
+        type: AccountType.System,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+      },
+      // Category accounts
+      {
+        name: "Salary",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+      },
+      {
+        name: "Interest Income",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+      },
+      {
+        name: "Groceries",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+      },
+      {
+        name: "Rent",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+      },
+      {
+        name: "Utilities",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+      },
+      {
+        name: "Dining Out",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+      },
+      {
+        name: "Entertainment",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+      },
     ];
     for (const acc of defaultAccounts) {
       const exists = await this.prisma.account.findFirst({
-        where: { name: acc.name, type: acc.type as string },
+        where: { name: acc.name, type: acc.type },
       });
       if (!exists) {
         await this.prisma.account.create({ data: acc });
