@@ -4,31 +4,44 @@ import { Account } from "../types";
 
 export const Accounts: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [archivedAccounts, setArchivedAccounts] = useState<Account[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
   const [accountBalances, setAccountBalances] = useState<
     Record<string, number>
   >({});
   const [newAccount, setNewAccount] = useState({
     name: "",
     type: "bank",
-    currency: "USD",
+    currency: "CAD",
   });
+  const [deletingAccountId, setDeletingAccountId] = useState<string | null>(
+    null
+  );
+  const [archivingAccountId, setArchivingAccountId] = useState<string | null>(
+    null
+  );
+  const [restoringAccountId, setRestoringAccountId] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
-    const fetchAccounts = async () => {
-      const accountsData = await window.electron.ipcRenderer.invoke(
-        "get-accounts"
-      );
-      setAccounts(accountsData);
-    };
-
     fetchAccounts();
   }, []);
+
+  const fetchAccounts = async () => {
+    const allAccounts = await window.electron.ipcRenderer.invoke(
+      "get-accounts",
+      true // include archived
+    );
+    setAccounts(allAccounts.filter((a: Account) => !a.isArchived));
+    setArchivedAccounts(allAccounts.filter((a: Account) => a.isArchived));
+  };
 
   // Compute balances for all accounts
   useEffect(() => {
     const fetchAllBalances = async () => {
       const balances: Record<string, number> = {};
-      for (const account of accounts) {
+      for (const account of [...accounts, ...archivedAccounts]) {
         const lines = await window.electron.ipcRenderer.invoke(
           "get-transactions",
           account.id
@@ -40,10 +53,10 @@ export const Accounts: React.FC = () => {
       }
       setAccountBalances(balances);
     };
-    if (accounts.length > 0) {
+    if (accounts.length > 0 || archivedAccounts.length > 0) {
       fetchAllBalances();
     }
-  }, [accounts]);
+  }, [accounts, archivedAccounts]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,8 +64,72 @@ export const Accounts: React.FC = () => {
       "add-account",
       newAccount
     );
-    setAccounts([...accounts, account]);
+    fetchAccounts();
     setNewAccount({ name: "", type: "bank", currency: "USD" });
+  };
+
+  const handleDeleteOrArchive = async (account: Account) => {
+    // Check if account can be deleted
+    const result = await window.electron.ipcRenderer.invoke(
+      "can-delete-account",
+      account.id
+    );
+    if (result.canDelete) {
+      // Confirm hard delete
+      if (
+        confirm(
+          `Are you sure you want to delete the account "${account.name}"? This action cannot be undone.`
+        )
+      ) {
+        setDeletingAccountId(account.id);
+        const delResult = await window.electron.ipcRenderer.invoke(
+          "delete-account",
+          account.id
+        );
+        setDeletingAccountId(null);
+        if (delResult.success) {
+          alert("Account deleted successfully");
+          fetchAccounts();
+        } else {
+          alert(`Failed to delete account: ${delResult.error}`);
+        }
+      }
+    } else {
+      // Prompt to archive
+      if (
+        confirm(
+          `The account "${account.name}" has ${result.transactionCount} transaction(s).\nYou cannot delete it, but you can archive it.\nArchived accounts are hidden from active lists but preserved for reporting.\n\nDo you want to archive this account?`
+        )
+      ) {
+        setArchivingAccountId(account.id);
+        const archResult = await window.electron.ipcRenderer.invoke(
+          "archive-account",
+          account.id
+        );
+        setArchivingAccountId(null);
+        if (archResult.success) {
+          alert("Account archived successfully");
+          fetchAccounts();
+        } else {
+          alert(`Failed to archive account: ${archResult.error}`);
+        }
+      }
+    }
+  };
+
+  const handleRestore = async (account: Account) => {
+    setRestoringAccountId(account.id);
+    const result = await window.electron.ipcRenderer.invoke(
+      "restore-account",
+      account.id
+    );
+    setRestoringAccountId(null);
+    if (result.success) {
+      alert("Account restored successfully");
+      fetchAccounts();
+    } else {
+      alert(`Failed to restore account: ${result.error}`);
+    }
   };
 
   return (
@@ -119,6 +196,8 @@ export const Accounts: React.FC = () => {
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
             >
               <option value="USD">USD</option>
+              <option value="CAD">CAD</option>
+              <option value="CNY">CNY</option>
               <option value="EUR">EUR</option>
               <option value="GBP">GBP</option>
               <option value="JPY">JPY</option>
@@ -137,12 +216,23 @@ export const Accounts: React.FC = () => {
       <div className="bg-white shadow rounded-lg p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-medium text-gray-900">Your Accounts</h2>
-          <Link
-            to="/opening-balances"
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-          >
-            Set Opening Balances
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              to="/opening-balances"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            >
+              Set Opening Balances
+            </Link>
+            <label className="flex items-center text-sm">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={() => setShowArchived((v) => !v)}
+                className="mr-2"
+              />
+              Show Archived
+            </label>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -159,6 +249,9 @@ export const Accounts: React.FC = () => {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Currency
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -178,11 +271,85 @@ export const Accounts: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {account.currency}
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <button
+                      className={`text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed mr-2`}
+                      onClick={() => handleDeleteOrArchive(account)}
+                      disabled={
+                        deletingAccountId === account.id ||
+                        archivingAccountId === account.id
+                      }
+                    >
+                      {deletingAccountId === account.id
+                        ? "Deleting..."
+                        : archivingAccountId === account.id
+                        ? "Archiving..."
+                        : "Delete / Archive"}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        {showArchived && archivedAccounts.length > 0 && (
+          <div className="mt-8">
+            <h3 className="text-md font-semibold text-gray-700 mb-2">
+              Archived Accounts
+            </h3>
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Balance
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Currency
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {archivedAccounts.map((account) => (
+                  <tr key={account.id} className="opacity-60">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {account.name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {(account.type || "Unknown").charAt(0).toUpperCase() +
+                        (account.type || "Unknown").slice(1)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {(accountBalances[account.id] ?? 0).toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {account.currency}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <button
+                        className={`text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed mr-2`}
+                        onClick={() => handleRestore(account)}
+                        disabled={restoringAccountId === account.id}
+                      >
+                        {restoringAccountId === account.id
+                          ? "Restoring..."
+                          : "Restore"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

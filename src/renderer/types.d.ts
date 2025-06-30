@@ -5,6 +5,8 @@ export type Account = {
   name: string;
   type: AccountType;
   currency: string;
+  isArchived: boolean;
+  archivedAt?: string | null;
 };
 
 interface IElectronAPI {

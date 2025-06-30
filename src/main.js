@@ -11,38 +11,6 @@ const Store = require("electron-store");
 // Initialize the store
 const store = new Store();
 
-// Initialize sample data if not exists
-if (!store.get("accounts")) {
-  store.set("accounts", [
-    {
-      id: "1",
-      name: "Checking Account",
-      currency: "USD",
-      balance: 5000.0,
-    },
-    {
-      id: "2",
-      name: "Savings Account",
-      currency: "USD",
-      balance: 10000.0,
-    },
-  ]);
-}
-
-if (!store.get("transactions")) {
-  store.set("transactions", [
-    {
-      id: "1",
-      accountId: "1",
-      amount: 1000,
-      type: "income",
-      category: "Salary",
-      date: new Date().toISOString().split("T")[0],
-      description: "Monthly salary",
-    },
-  ]);
-}
-
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require("electron-squirrel-startup")) {
   app.quit();

@@ -69,10 +69,13 @@ class DatabaseService {
     });
   }
 
-  public async getAccounts() {
+  public async getAccounts(includeArchived: boolean = false) {
     try {
       console.log("Fetching accounts from database...");
-      const accounts = await this.prisma.account.findMany();
+      const accounts = await this.prisma.account.findMany({
+        where: includeArchived ? {} : { isArchived: false },
+        orderBy: { createdAt: "asc" },
+      });
       // Convert type to AccountType for each account
       const typedAccounts = accounts.map((acc) => ({
         ...acc,
@@ -93,6 +96,71 @@ class DatabaseService {
     });
     if (!acc) return null;
     return { ...acc, type: toAccountType(acc.type) };
+  }
+
+  /**
+   * Check if an account can be safely deleted (no transactions).
+   * Returns object with canDelete boolean and transaction count.
+   */
+  public async canDeleteAccount(accountId: string) {
+    const account = await this.prisma.account.findUnique({
+      where: { id: accountId },
+      include: { lines: true },
+    });
+
+    if (!account) {
+      throw new Error("Account not found");
+    }
+
+    const transactionCount = account.lines.length;
+    const canDelete = transactionCount === 0;
+
+    return {
+      canDelete,
+      transactionCount,
+      account: { ...account, type: toAccountType(account.type) },
+    };
+  }
+
+  /**
+   * Archive an account (soft delete) by setting isArchived flag.
+   */
+  public async archiveAccount(accountId: string) {
+    return this.prisma.account.update({
+      where: { id: accountId },
+      data: {
+        isArchived: true,
+        archivedAt: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Hard delete an account. Only call this after verifying no transactions exist.
+   */
+  public async deleteAccount(accountId: string) {
+    // Double-check that no transactions exist
+    const canDelete = await this.canDeleteAccount(accountId);
+    if (!canDelete.canDelete) {
+      throw new Error("Cannot delete account with existing transactions");
+    }
+
+    return this.prisma.account.delete({
+      where: { id: accountId },
+    });
+  }
+
+  /**
+   * Restore an archived account (un-archive).
+   */
+  public async restoreAccount(accountId: string) {
+    return this.prisma.account.update({
+      where: { id: accountId },
+      data: {
+        isArchived: false,
+        archivedAt: null,
+      },
+    });
   }
 
   // Double-entry transaction operations

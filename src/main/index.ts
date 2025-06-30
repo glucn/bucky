@@ -60,11 +60,17 @@ function setupIpcHandlers() {
   ipcMain.removeHandler("get-income-expense-this-month");
   ipcMain.removeHandler("get-recent-transactions");
   ipcMain.removeHandler("import-transactions");
+  ipcMain.removeHandler("delete-account");
+  ipcMain.removeHandler("archive-account");
+  ipcMain.removeHandler("can-delete-account");
+  ipcMain.removeHandler("restore-account");
 
-  ipcMain.handle("get-accounts", async () => {
-    console.log("Handling get-accounts request");
-    return databaseService.getAccounts();
-  });
+  ipcMain.handle(
+    "get-accounts",
+    async (_, includeArchived: boolean = false) => {
+      return databaseService.getAccounts(includeArchived);
+    }
+  );
 
   ipcMain.handle("get-transactions", async (_, accountId: string) => {
     console.log("Handling get-transactions request for account:", accountId);
@@ -183,6 +189,46 @@ function setupIpcHandlers() {
       let message = "Unknown error";
       if (err instanceof Error) message = err.message;
       return { success: false, error: message };
+    }
+  });
+
+  ipcMain.handle("can-delete-account", async (_, accountId: string) => {
+    return databaseService.canDeleteAccount(accountId);
+  });
+
+  ipcMain.handle("delete-account", async (_, accountId: string) => {
+    try {
+      const result = await databaseService.deleteAccount(accountId);
+      return { success: true, deletedAccount: result };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  });
+
+  ipcMain.handle("archive-account", async (_, accountId: string) => {
+    try {
+      const result = await databaseService.archiveAccount(accountId);
+      return { success: true, archivedAccount: result };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  });
+
+  ipcMain.handle("restore-account", async (_, accountId: string) => {
+    try {
+      const result = await databaseService.restoreAccount(accountId);
+      return { success: true, restoredAccount: result };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
     }
   });
 
