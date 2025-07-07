@@ -24,10 +24,51 @@ export const Accounts: React.FC = () => {
   const [restoringAccountId, setRestoringAccountId] = useState<string | null>(
     null
   );
+  const [checkpointInfo, setCheckpointInfo] = useState<
+    Record<string, { hasCheckpoints: boolean; latestCheckpoint?: any }>
+  >({});
 
   useEffect(() => {
     fetchAccounts();
   }, []);
+
+  // Fetch checkpoint information for all accounts
+  useEffect(() => {
+    const fetchCheckpointInfo = async () => {
+      const checkpointData: Record<
+        string,
+        { hasCheckpoints: boolean; latestCheckpoint?: any }
+      > = {};
+
+      for (const account of [...accounts, ...archivedAccounts]) {
+        try {
+          const result = await window.electron.ipcRenderer.invoke(
+            "get-latest-checkpoint-for-account",
+            account.id
+          );
+          if (result.success && result.checkpoint) {
+            checkpointData[account.id] = {
+              hasCheckpoints: true,
+              latestCheckpoint: result.checkpoint,
+            };
+          } else {
+            checkpointData[account.id] = { hasCheckpoints: false };
+          }
+        } catch (error) {
+          console.error(
+            `Error fetching checkpoint info for account ${account.id}:`,
+            error
+          );
+          checkpointData[account.id] = { hasCheckpoints: false };
+        }
+      }
+      setCheckpointInfo(checkpointData);
+    };
+
+    if (accounts.length > 0 || archivedAccounts.length > 0) {
+      fetchCheckpointInfo();
+    }
+  }, [accounts, archivedAccounts]);
 
   const fetchAccounts = async () => {
     const allAccounts = await window.electron.ipcRenderer.invoke(
@@ -38,19 +79,36 @@ export const Accounts: React.FC = () => {
     setArchivedAccounts(allAccounts.filter((a: Account) => a.isArchived));
   };
 
-  // Compute balances for all accounts
+  // Compute balances for all accounts (using checkpoint-aware balance calculation)
   useEffect(() => {
     const fetchAllBalances = async () => {
       const balances: Record<string, number> = {};
       for (const account of [...accounts, ...archivedAccounts]) {
-        const lines = await window.electron.ipcRenderer.invoke(
-          "get-transactions",
-          account.id
-        );
-        balances[account.id] = lines.reduce(
-          (sum: number, line: { amount: number }) => sum + line.amount,
-          0
-        );
+        try {
+          const result = await window.electron.ipcRenderer.invoke(
+            "get-account-balance",
+            account.id
+          );
+          if (result.success) {
+            balances[account.id] = result.balance;
+          } else {
+            // Fallback to old method if checkpoint balance fails
+            const lines = await window.electron.ipcRenderer.invoke(
+              "get-transactions",
+              account.id
+            );
+            balances[account.id] = lines.reduce(
+              (sum: number, line: { amount: number }) => sum + line.amount,
+              0
+            );
+          }
+        } catch (error) {
+          console.error(
+            `Error fetching balance for account ${account.id}:`,
+            error
+          );
+          balances[account.id] = 0;
+        }
       }
       setAccountBalances(balances);
     };
@@ -255,6 +313,9 @@ export const Accounts: React.FC = () => {
                   Currency
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Checkpoints
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -276,20 +337,46 @@ export const Accounts: React.FC = () => {
                     {account.currency}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <button
-                      className={`text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed mr-2`}
-                      onClick={() => handleDeleteOrArchive(account)}
-                      disabled={
-                        deletingAccountId === account.id ||
-                        archivingAccountId === account.id
-                      }
-                    >
-                      {deletingAccountId === account.id
-                        ? "Deleting..."
-                        : archivingAccountId === account.id
-                        ? "Archiving..."
-                        : "Delete / Archive"}
-                    </button>
+                    {checkpointInfo[account.id]?.hasCheckpoints ? (
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          ✓ Active
+                        </span>
+                        {checkpointInfo[account.id]?.latestCheckpoint && (
+                          <span className="text-xs text-gray-500">
+                            {new Date(
+                              checkpointInfo[account.id].latestCheckpoint.date
+                            ).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">None</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <div className="flex gap-2">
+                      <Link
+                        to={`/checkpoints?account=${account.id}`}
+                        className="text-blue-600 hover:text-blue-900"
+                      >
+                        Manage
+                      </Link>
+                      <button
+                        className={`text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed`}
+                        onClick={() => handleDeleteOrArchive(account)}
+                        disabled={
+                          deletingAccountId === account.id ||
+                          archivingAccountId === account.id
+                        }
+                      >
+                        {deletingAccountId === account.id
+                          ? "Deleting..."
+                          : archivingAccountId === account.id
+                          ? "Archiving..."
+                          : "Delete / Archive"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -317,6 +404,9 @@ export const Accounts: React.FC = () => {
                     Currency
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Checkpoints
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -338,8 +428,26 @@ export const Accounts: React.FC = () => {
                       {account.currency}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {checkpointInfo[account.id]?.hasCheckpoints ? (
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            ✓ Active
+                          </span>
+                          {checkpointInfo[account.id]?.latestCheckpoint && (
+                            <span className="text-xs text-gray-500">
+                              {new Date(
+                                checkpointInfo[account.id].latestCheckpoint.date
+                              ).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">None</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <button
-                        className={`text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed mr-2`}
+                        className={`text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed`}
                         onClick={() => handleRestore(account)}
                         disabled={restoringAccountId === account.id}
                       >

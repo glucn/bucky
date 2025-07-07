@@ -181,6 +181,8 @@ class DatabaseService {
     fromAccountId: string;
     toAccountId: string;
   }) {
+    // Always round the amount to two decimals
+    const roundedAmount = Math.round(Math.abs(data.amount) * 100) / 100;
     return this.prisma.journalEntry.create({
       data: {
         date: new Date(data.date),
@@ -190,12 +192,12 @@ class DatabaseService {
           create: [
             {
               accountId: data.fromAccountId,
-              amount: -Math.abs(data.amount), // Credit
+              amount: -roundedAmount, // Credit
               description: data.description,
             },
             {
               accountId: data.toAccountId,
-              amount: Math.abs(data.amount), // Debit
+              amount: roundedAmount, // Debit
               description: data.description,
             },
           ],
@@ -211,7 +213,14 @@ class DatabaseService {
    */
   public async getJournalEntriesForAccount(accountId: string) {
     const lines = await this.prisma.journalLine.findMany({
-      where: { accountId },
+      where: {
+        accountId,
+        entry: {
+          category: {
+            not: "CHECKPOINT",
+          },
+        },
+      },
       include: { entry: true, account: true },
       orderBy: { entry: { date: "desc" } },
     });
@@ -281,6 +290,8 @@ class DatabaseService {
         } else if (LIABILITY_TYPES.includes(accType)) {
           amount = -item.balance; // Credits are negative
         }
+        // Always round the amount
+        amount = Math.round(amount * 100) / 100;
 
         if (amount !== 0) {
           linesData.push({
@@ -298,7 +309,7 @@ class DatabaseService {
         linesData.push({
           entryId: journalEntry.id,
           accountId: equityAccount.id,
-          amount: -total, // The balancing amount
+          amount: Math.round(-total * 100) / 100, // The balancing amount, rounded
           description: "Opening Balance",
         });
       }
@@ -312,28 +323,6 @@ class DatabaseService {
 
       return journalEntry;
     });
-  }
-
-  // Category operations
-  public async createCategory(data: { name: string; type: string }) {
-    return this.prisma.category.create({
-      data: {
-        name: data.name,
-        type: data.type,
-      },
-    });
-  }
-
-  public async getCategories() {
-    try {
-      console.log("Fetching categories from database...");
-      const categories = await this.prisma.category.findMany();
-      console.log("Categories fetched:", categories);
-      return categories;
-    } catch (error) {
-      console.error("Error fetching categories:", error);
-      throw error;
-    }
   }
 
   // --- Dashboard Data Methods ---
@@ -351,7 +340,8 @@ class DatabaseService {
 
     for (const acc of accounts) {
       if (acc.type === AccountType.User) {
-        const balance = acc.lines.reduce((sum, line) => sum + line.amount, 0);
+        let balance = acc.lines.reduce((sum, line) => sum + line.amount, 0);
+        balance = Math.round(balance * 100) / 100;
         const subtype = (acc as any).subtype;
         if (subtype === "asset") {
           assets += balance;
@@ -360,7 +350,13 @@ class DatabaseService {
         }
       }
     }
-    return { netWorth: assets - liabilities, assets, liabilities };
+    assets = Math.round(assets * 100) / 100;
+    liabilities = Math.round(liabilities * 100) / 100;
+    return {
+      netWorth: Math.round((assets - liabilities) * 100) / 100,
+      assets,
+      liabilities,
+    };
   }
 
   /**
@@ -408,9 +404,11 @@ class DatabaseService {
         }
       }
     }
+    income = Math.round(Math.abs(income) * 100) / 100;
+    expenses = Math.round(Math.abs(expenses) * 100) / 100;
     return {
-      income: Math.abs(income),
-      expenses: Math.abs(expenses),
+      income,
+      expenses,
     };
   }
 
@@ -419,6 +417,11 @@ class DatabaseService {
    */
   public async getRecentTransactions(limit: number = 10) {
     return this.prisma.journalEntry.findMany({
+      where: {
+        category: {
+          not: "CHECKPOINT",
+        },
+      },
       orderBy: { date: "desc" },
       take: limit,
       include: {
@@ -546,6 +549,300 @@ class DatabaseService {
         await this.prisma.account.create({ data: acc });
       }
     }
+  }
+
+  // Checkpoint functionality
+  /**
+   * Create a checkpoint for an account.
+   * This creates a special journal entry that sets the account balance to the specified value.
+   * All transactions before this checkpoint date will adjust the checkpoint transaction instead of the account directly.
+   */
+  public async createCheckpoint(data: {
+    accountId: string;
+    date: Date;
+    balance: number;
+    description?: string;
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Get or create the 'Checkpoint Adjustment' system account
+      let checkpointAccount = await tx.account.findFirst({
+        where: { name: "Checkpoint Adjustment" },
+      });
+
+      if (!checkpointAccount) {
+        checkpointAccount = await tx.account.create({
+          data: {
+            name: "Checkpoint Adjustment",
+            type: AccountType.System,
+            subtype: AccountSubtype.Asset,
+          },
+        });
+      }
+
+      // 2. Create the checkpoint record
+      const checkpoint = await tx.checkpoint.create({
+        data: {
+          accountId: data.accountId,
+          date: data.date,
+          balance: data.balance,
+          description: data.description,
+        },
+      });
+
+      // 3. Create the journal entry for the checkpoint
+      const journalEntry = await tx.journalEntry.create({
+        data: {
+          date: data.date,
+          description: data.description || `Checkpoint for ${checkpoint.id}`,
+          category: "CHECKPOINT",
+        },
+      });
+
+      // 4. Create journal lines to set the balance
+      const account = await tx.account.findUnique({
+        where: { id: data.accountId },
+      });
+
+      if (!account) {
+        throw new Error("Account not found");
+      }
+
+      // Calculate the current balance BEFORE the checkpoint date (excluding checkpoint entries)
+      const linesBeforeCheckpoint = await tx.journalLine.findMany({
+        where: {
+          accountId: data.accountId,
+          entry: {
+            date: { lte: data.date },
+            category: {
+              not: "CHECKPOINT",
+            },
+          },
+        },
+        include: { entry: true },
+      });
+
+      let currentBalance = linesBeforeCheckpoint.reduce(
+        (sum: number, line: any) => sum + line.amount,
+        0
+      );
+      currentBalance = Math.round(currentBalance * 100) / 100;
+      let adjustmentAmount =
+        Math.round((data.balance - currentBalance) * 100) / 100;
+
+      const linesData = [];
+
+      // Add the adjustment to the target account
+      if (adjustmentAmount !== 0) {
+        linesData.push({
+          entryId: journalEntry.id,
+          accountId: data.accountId,
+          amount: adjustmentAmount,
+          description: data.description || "Checkpoint adjustment",
+        });
+
+        // Add the balancing entry to the checkpoint account
+        linesData.push({
+          entryId: journalEntry.id,
+          accountId: checkpointAccount.id,
+          amount: -adjustmentAmount,
+          description: data.description || "Checkpoint adjustment",
+        });
+      }
+
+      // Create all lines
+      if (linesData.length > 0) {
+        await tx.journalLine.createMany({
+          data: linesData,
+        });
+      }
+
+      return {
+        checkpoint,
+        journalEntry,
+        adjustmentAmount,
+      };
+    });
+  }
+
+  /**
+   * Get all checkpoints for an account.
+   */
+  public async getCheckpointsForAccount(accountId: string) {
+    return this.prisma.checkpoint.findMany({
+      where: { accountId },
+      orderBy: { date: "desc" },
+      include: { account: true },
+    });
+  }
+
+  /**
+   * Get the most recent checkpoint for an account.
+   */
+  public async getLatestCheckpointForAccount(accountId: string) {
+    return this.prisma.checkpoint.findFirst({
+      where: { accountId },
+      orderBy: { date: "desc" },
+      include: { account: true },
+    });
+  }
+
+  /**
+   * Delete a checkpoint and its associated journal entry.
+   */
+  public async deleteCheckpoint(checkpointId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      // Find the checkpoint
+      const checkpoint = await tx.checkpoint.findUnique({
+        where: { id: checkpointId },
+        include: { account: true },
+      });
+
+      if (!checkpoint) {
+        throw new Error("Checkpoint not found");
+      }
+
+      // Find the associated journal entry
+      const journalEntry = await tx.journalEntry.findFirst({
+        where: {
+          category: "CHECKPOINT",
+          description: { contains: checkpoint.id },
+        },
+      });
+
+      // Delete the journal lines and entry if found
+      if (journalEntry) {
+        await tx.journalLine.deleteMany({
+          where: { entryId: journalEntry.id },
+        });
+        await tx.journalEntry.delete({
+          where: { id: journalEntry.id },
+        });
+      }
+
+      // Delete the checkpoint
+      const deletedCheckpoint = await tx.checkpoint.delete({
+        where: { id: checkpointId },
+      });
+
+      return deletedCheckpoint;
+    });
+  }
+
+  /**
+   * Get account balance at a specific date, considering checkpoints.
+   * This method calculates the balance by:
+   * 1. Finding the most recent checkpoint before or on the given date
+   * 2. Adding all transactions after the checkpoint date
+   */
+  public async getAccountBalanceAtDate(
+    accountId: string,
+    date: Date,
+    tx?: any
+  ): Promise<number> {
+    const prisma = tx || this.prisma;
+
+    // Find the most recent checkpoint before or on the given date
+    const checkpoint = await prisma.checkpoint.findFirst({
+      where: {
+        accountId,
+        date: { lte: date },
+      },
+      orderBy: { date: "desc" },
+    });
+
+    let balance = 0;
+
+    if (checkpoint) {
+      // Start with the checkpoint balance
+      balance = checkpoint.balance;
+
+      // Add all transactions after the checkpoint date up to the target date
+      // BUT exclude checkpoint entries themselves
+      const lines = await prisma.journalLine.findMany({
+        where: {
+          accountId,
+          entry: {
+            date: {
+              gt: checkpoint.date,
+              lte: date,
+            },
+            category: {
+              not: "CHECKPOINT",
+            },
+          },
+        },
+        include: { entry: true },
+      });
+
+      balance += lines.reduce((sum: number, line: any) => sum + line.amount, 0);
+    } else {
+      // No checkpoint, calculate balance from all transactions up to the date
+      // BUT exclude checkpoint entries
+      const lines = await prisma.journalLine.findMany({
+        where: {
+          accountId,
+          entry: {
+            date: { lte: date },
+            category: {
+              not: "CHECKPOINT",
+            },
+          },
+        },
+        include: { entry: true },
+      });
+
+      balance = lines.reduce((sum: number, line: any) => sum + line.amount, 0);
+    }
+
+    return balance;
+  }
+
+  /**
+   * Get the effective balance for an account, considering checkpoints.
+   * This is the main method to use for getting current account balances.
+   */
+  public async getAccountBalance(accountId: string): Promise<number> {
+    return this.getAccountBalanceAtDate(accountId, new Date());
+  }
+
+  /**
+   * Reconcile a checkpoint: delete the old checkpoint and its journal entry, then create a new one at the same date with the current sum as the new balance.
+   */
+  public async reconcileCheckpoint(checkpointId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Find the checkpoint
+      const checkpoint = await tx.checkpoint.findUnique({
+        where: { id: checkpointId },
+      });
+      if (!checkpoint) throw new Error("Checkpoint not found");
+
+      // 2. Delete the old checkpoint and its journal entry
+      await this.deleteCheckpoint(checkpointId);
+
+      // 3. Calculate the current balance up to the checkpoint date (excluding checkpoints)
+      const lines = await tx.journalLine.findMany({
+        where: {
+          accountId: checkpoint.accountId,
+          entry: {
+            date: { lte: checkpoint.date },
+            category: { not: "CHECKPOINT" },
+          },
+        },
+      });
+      let newBalance = lines.reduce(
+        (sum: number, line: any) => sum + line.amount,
+        0
+      );
+      newBalance = Math.round(newBalance * 100) / 100;
+
+      // 4. Create a new checkpoint at the same date with the new balance
+      return this.createCheckpoint({
+        accountId: checkpoint.accountId,
+        date: checkpoint.date,
+        balance: newBalance,
+        description: checkpoint.description || "Reconciled again",
+      });
+    });
   }
 }
 

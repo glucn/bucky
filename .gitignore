@@ -88,6 +88,10 @@ typings/
 # Vite
 .vite/
 
+# production
+/build
+/dist
+
 # Electron-Forge
 out/
 

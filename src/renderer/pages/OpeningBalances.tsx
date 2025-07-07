@@ -42,7 +42,7 @@ export const OpeningBalances: React.FC = () => {
             (total: number, line: { amount: number }) => total + line.amount,
             0
           );
-          balancesObj[acc.id] = sum;
+          balancesObj[acc.id] = Math.round(sum * 100) / 100;
         }
         setAccountBalances(balancesObj);
       } catch (err) {
@@ -89,7 +89,8 @@ export const OpeningBalances: React.FC = () => {
     // Calculate the diff for each selected account
     const diffsToSubmit = Array.from(selectedAccounts)
       .map((accountId) => {
-        const desired = parseFloat(balances[accountId] ?? "0");
+        const desired =
+          Math.round(parseFloat(balances[accountId] ?? "0") * 100) / 100;
         const current = accountBalances[accountId] ?? 0;
         const diff = desired - current;
         return {
@@ -160,7 +161,8 @@ export const OpeningBalances: React.FC = () => {
           <div className="space-y-4 mb-6">
             {accounts.map((account) => {
               const current = accountBalances[account.id] ?? 0;
-              const desired = parseFloat(balances[account.id] ?? "");
+              const desired =
+                Math.round(parseFloat(balances[account.id] ?? "") * 100) / 100;
               const diff = selectedAccounts.has(account.id)
                 ? isNaN(desired)
                   ? 0
@@ -185,7 +187,7 @@ export const OpeningBalances: React.FC = () => {
                     </span>
                   </label>
                   <span className="text-xs text-gray-500">
-                    Current: ${current.toFixed(2)}
+                    Current: ${Math.round(current * 100) / 100}
                   </span>
                   {selectedAccounts.has(account.id) && (
                     <>
@@ -198,9 +200,16 @@ export const OpeningBalances: React.FC = () => {
                           id={`balance-${account.id}`}
                           step="0.01"
                           value={balances[account.id] ?? ""}
-                          onChange={(e) =>
-                            handleBalanceChange(account.id, e.target.value)
-                          }
+                          onChange={(e) => {
+                            // Always round to two decimals for input
+                            let val = e.target.value;
+                            if (val !== "") {
+                              const rounded =
+                                Math.round(parseFloat(val) * 100) / 100;
+                              val = rounded.toString();
+                            }
+                            handleBalanceChange(account.id, val);
+                          }}
                           className="block w-full rounded-md border-gray-300 pl-7 pr-12 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                           placeholder="0.00"
                         />

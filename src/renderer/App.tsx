@@ -4,6 +4,7 @@ import { Accounts } from "./pages/Accounts";
 import { Transactions } from "./pages/Transactions";
 import { Dashboard } from "./pages/Dashboard";
 import { OpeningBalances } from "./pages/OpeningBalances";
+import { Checkpoints } from "./pages/Checkpoints";
 
 const App: React.FC = () => {
   return (
@@ -35,6 +36,12 @@ const App: React.FC = () => {
                   >
                     Transactions
                   </Link>
+                  <Link
+                    to="/checkpoints"
+                    className="border-transparent text-gray-500 hover:border-primary-500 hover:text-primary-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  >
+                    Checkpoints
+                  </Link>
                 </div>
               </div>
             </div>
@@ -47,6 +54,7 @@ const App: React.FC = () => {
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/opening-balances" element={<OpeningBalances />} />
+            <Route path="/checkpoints" element={<Checkpoints />} />
           </Routes>
         </main>
       </div>

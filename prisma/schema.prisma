@@ -32,6 +32,7 @@ model Account {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   lines     JournalLine[]
+  checkpoints Checkpoint[]
 }
 
 model JournalEntry {
@@ -54,10 +55,13 @@ model JournalLine {
   account       Account       @relation(fields: [accountId], references: [id])
 }
 
-model Category {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  type      String   // "income" or "expense"
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Checkpoint {
+  id            String   @id @default(uuid())
+  accountId     String
+  date          DateTime
+  balance       Float    // The target balance for the account
+  description   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  account       Account  @relation(fields: [accountId], references: [id])
 } 

@@ -58,8 +58,7 @@ function setupIpcHandlers() {
   ipcMain.removeHandler("add-account");
   ipcMain.removeHandler("add-transaction");
   ipcMain.removeHandler("delete-transaction");
-  ipcMain.removeHandler("get-categories");
-  ipcMain.removeHandler("add-category");
+
   ipcMain.removeHandler("create-opening-balance-entry");
   ipcMain.removeHandler("get-net-worth");
   ipcMain.removeHandler("get-income-expense-this-month");
@@ -69,6 +68,12 @@ function setupIpcHandlers() {
   ipcMain.removeHandler("archive-account");
   ipcMain.removeHandler("can-delete-account");
   ipcMain.removeHandler("restore-account");
+  ipcMain.removeHandler("create-checkpoint");
+  ipcMain.removeHandler("get-checkpoints-for-account");
+  ipcMain.removeHandler("get-latest-checkpoint-for-account");
+  ipcMain.removeHandler("delete-checkpoint");
+  ipcMain.removeHandler("get-account-balance");
+  ipcMain.removeHandler("reconcile-checkpoint");
 
   ipcMain.handle(
     "get-accounts",
@@ -106,23 +111,6 @@ function setupIpcHandlers() {
         error: error instanceof Error ? error.message : "Unknown error",
       };
     }
-  });
-
-  ipcMain.handle("get-categories", async () => {
-    console.log("Handling get-categories request");
-    try {
-      const categories = await databaseService.getCategories();
-      console.log("Categories retrieved:", categories);
-      return categories;
-    } catch (error) {
-      console.error("Error getting categories:", error);
-      throw error;
-    }
-  });
-
-  ipcMain.handle("add-category", async (_, category) => {
-    console.log("Handling add-category request:", category);
-    return databaseService.createCategory(category);
   });
 
   ipcMain.handle(
@@ -229,6 +217,114 @@ function setupIpcHandlers() {
     try {
       const result = await databaseService.restoreAccount(accountId);
       return { success: true, restoredAccount: result };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  });
+
+  // Checkpoint handlers
+  ipcMain.handle(
+    "create-checkpoint",
+    async (
+      _,
+      data: {
+        accountId: string;
+        date: string;
+        balance: number;
+        description?: string;
+      }
+    ) => {
+      console.log("Handling create-checkpoint request:", data);
+      try {
+        const result = await databaseService.createCheckpoint({
+          ...data,
+          date: new Date(data.date),
+        });
+        return { success: true, checkpoint: result };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-checkpoints-for-account",
+    async (_, accountId: string) => {
+      console.log(
+        "Handling get-checkpoints-for-account request for:",
+        accountId
+      );
+      try {
+        const checkpoints = await databaseService.getCheckpointsForAccount(
+          accountId
+        );
+        return { success: true, checkpoints };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-latest-checkpoint-for-account",
+    async (_, accountId: string) => {
+      console.log(
+        "Handling get-latest-checkpoint-for-account request for:",
+        accountId
+      );
+      try {
+        const checkpoint = await databaseService.getLatestCheckpointForAccount(
+          accountId
+        );
+        return { success: true, checkpoint };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle("delete-checkpoint", async (_, checkpointId: string) => {
+    console.log("Handling delete-checkpoint request for:", checkpointId);
+    try {
+      const result = await databaseService.deleteCheckpoint(checkpointId);
+      return { success: true, deletedCheckpoint: result };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  });
+
+  ipcMain.handle("get-account-balance", async (_, accountId: string) => {
+    console.log("Handling get-account-balance request for:", accountId);
+    try {
+      const balance = await databaseService.getAccountBalance(accountId);
+      return { success: true, balance };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  });
+
+  ipcMain.handle("reconcile-checkpoint", async (_, checkpointId: string) => {
+    try {
+      const result = await databaseService.reconcileCheckpoint(checkpointId);
+      return { success: true, checkpoint: result };
     } catch (error) {
       return {
         success: false,

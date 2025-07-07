@@ -4,13 +4,8 @@ import Papa from "papaparse";
 interface Account {
   id: string;
   name: string;
-  currency: string;
-}
-
-interface Category {
-  id: string;
-  name: string;
   type: string;
+  currency: string;
 }
 
 interface JournalEntry {
@@ -33,19 +28,13 @@ interface JournalLine {
 
 export const Transactions: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<JournalLine[]>([]);
   const [newTransaction, setNewTransaction] = useState({
     fromAccountId: "",
     toAccountId: "",
     amount: 0,
-    category: "",
     date: new Date().toISOString().split("T")[0],
     description: "",
-  });
-  const [newCategory, setNewCategory] = useState({
-    name: "",
-    type: "expense",
   });
 
   // CSV Import State
@@ -60,7 +49,6 @@ export const Transactions: React.FC = () => {
     "description",
     "fromAccountId",
     "toAccountId",
-    "category",
   ];
 
   // Delete transaction state
@@ -71,15 +59,12 @@ export const Transactions: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        console.log("Fetching accounts and categories...");
-        const [accountsData, categoriesData] = await Promise.all([
-          window.electron.ipcRenderer.invoke("get-accounts"),
-          window.electron.ipcRenderer.invoke("get-categories"),
-        ]);
+        console.log("Fetching accounts...");
+        const accountsData = await window.electron.ipcRenderer.invoke(
+          "get-accounts"
+        );
         console.log("Accounts data:", accountsData);
-        console.log("Categories data:", categoriesData);
         setAccounts(accountsData);
-        setCategories(categoriesData);
       } catch (error) {
         console.error("Error fetching data:", error);
       }
@@ -121,29 +106,28 @@ export const Transactions: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Get the selected category account name to use as category
+    const toAccount = accounts.find(
+      (acc) => acc.id === newTransaction.toAccountId
+    );
+    const category = toAccount?.name || "";
+
     const transaction = await window.electron.ipcRenderer.invoke(
       "add-transaction",
-      newTransaction
+      {
+        ...newTransaction,
+        category,
+      }
     );
     setTransactions([...(transaction.lines || []), ...transactions]);
     setNewTransaction({
       fromAccountId: newTransaction.fromAccountId,
       toAccountId: "",
       amount: 0,
-      category: "",
       date: new Date().toISOString().split("T")[0],
       description: "",
     });
-  };
-
-  const handleAddCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const category = await window.electron.ipcRenderer.invoke(
-      "add-category",
-      newCategory
-    );
-    setCategories([...categories, category]);
-    setNewCategory({ name: "", type: "expense" });
   };
 
   // Attempt to auto-map CSV headers to system fields
@@ -269,59 +253,6 @@ This action cannot be undone and will affect your account balances.`;
     <div className="space-y-6">
       <div className="bg-white shadow rounded-lg p-6">
         <h2 className="text-lg font-medium text-gray-900 mb-4">
-          Add New Category
-        </h2>
-        <form onSubmit={handleAddCategory} className="space-y-4">
-          <div>
-            <label
-              htmlFor="categoryName"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Category Name
-            </label>
-            <input
-              type="text"
-              id="categoryName"
-              value={newCategory.name}
-              onChange={(e) =>
-                setNewCategory({ ...newCategory, name: e.target.value })
-              }
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-              required
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="categoryType"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Type
-            </label>
-            <select
-              id="categoryType"
-              value={newCategory.type}
-              onChange={(e) =>
-                setNewCategory({ ...newCategory, type: e.target.value })
-              }
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            >
-              <option value="expense">Expense</option>
-              <option value="income">Income</option>
-            </select>
-          </div>
-
-          <button
-            type="submit"
-            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-          >
-            Add Category
-          </button>
-        </form>
-      </div>
-
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">
           Add New Transaction
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -357,7 +288,7 @@ This action cannot be undone and will affect your account balances.`;
               htmlFor="toAccount"
               className="block text-sm font-medium text-gray-700"
             >
-              To Account
+              Category
             </label>
             <select
               id="toAccount"
@@ -371,12 +302,14 @@ This action cannot be undone and will affect your account balances.`;
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
               required
             >
-              <option value="">Select an account</option>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name} ({account.currency})
-                </option>
-              ))}
+              <option value="">Select a category</option>
+              {accounts
+                .filter((account) => account.type === "category")
+                .map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
             </select>
           </div>
           <div>
@@ -401,34 +334,6 @@ This action cannot be undone and will affect your account balances.`;
               min="0"
               step="0.01"
             />
-          </div>
-
-          <div>
-            <label
-              htmlFor="category"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Category
-            </label>
-            <select
-              id="category"
-              value={newTransaction.category}
-              onChange={(e) =>
-                setNewTransaction({
-                  ...newTransaction,
-                  category: e.target.value,
-                })
-              }
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-              required
-            >
-              <option value="">Select a category</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.name}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
           </div>
 
           <div>
