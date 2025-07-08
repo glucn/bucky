@@ -789,10 +789,26 @@ class DatabaseService {
     }
 
     // Find the associated journal entry
+    // Look for journal entries that either contain the checkpoint ID in description
+    // or are checkpoint entries for this account on the same date
     const journalEntry = await tx.journalEntry.findFirst({
       where: {
         category: "CHECKPOINT",
-        description: { contains: checkpoint.id },
+        OR: [
+          { description: { contains: checkpoint.id } },
+          {
+            AND: [
+              { date: checkpoint.date },
+              {
+                lines: {
+                  some: {
+                    accountId: checkpoint.accountId,
+                  },
+                },
+              },
+            ],
+          },
+        ],
       },
     });
 
