@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import path from "path";
 import {
   AccountType,
@@ -33,7 +33,11 @@ class DatabaseService {
           url: "file:./dev.db",
         },
       },
+      log: ["query", "info", "warn", "error"],
     });
+
+    // Set connection timeout
+    this.prisma.$connect().catch(console.error);
   }
 
   public static getInstance(): DatabaseService {
@@ -557,111 +561,144 @@ class DatabaseService {
    * This creates a special journal entry that sets the account balance to the specified value.
    * All transactions before this checkpoint date will adjust the checkpoint transaction instead of the account directly.
    */
-  public async createCheckpoint(data: {
-    accountId: string;
-    date: Date;
-    balance: number;
-    description?: string;
-  }) {
-    return this.prisma.$transaction(async (tx) => {
-      // 1. Get or create the 'Checkpoint Adjustment' system account
-      let checkpointAccount = await tx.account.findFirst({
-        where: { name: "Checkpoint Adjustment" },
-      });
-
-      if (!checkpointAccount) {
-        checkpointAccount = await tx.account.create({
-          data: {
-            name: "Checkpoint Adjustment",
-            type: AccountType.System,
-            subtype: AccountSubtype.Asset,
-          },
-        });
-      }
-
-      // 2. Create the checkpoint record
-      const checkpoint = await tx.checkpoint.create({
-        data: {
-          accountId: data.accountId,
-          date: data.date,
-          balance: data.balance,
-          description: data.description,
+  public async createCheckpoint(
+    data: {
+      accountId: string;
+      date: Date;
+      balance: number;
+      description?: string;
+    },
+    tx?: any
+  ) {
+    if (tx) {
+      // If we have a transaction client, use the internal method
+      return this.createCheckpointInternal(data, tx);
+    } else {
+      // Otherwise, create a new transaction
+      return this.prisma.$transaction(
+        async (trx: Prisma.TransactionClient) => {
+          return this.createCheckpointInternal(data, trx);
         },
-      });
-
-      // 3. Create the journal entry for the checkpoint
-      const journalEntry = await tx.journalEntry.create({
-        data: {
-          date: data.date,
-          description: data.description || `Checkpoint for ${checkpoint.id}`,
-          category: "CHECKPOINT",
-        },
-      });
-
-      // 4. Create journal lines to set the balance
-      const account = await tx.account.findUnique({
-        where: { id: data.accountId },
-      });
-
-      if (!account) {
-        throw new Error("Account not found");
-      }
-
-      // Calculate the current balance BEFORE the checkpoint date (excluding checkpoint entries)
-      const linesBeforeCheckpoint = await tx.journalLine.findMany({
-        where: {
-          accountId: data.accountId,
-          entry: {
-            date: { lte: data.date },
-            category: {
-              not: "CHECKPOINT",
-            },
-          },
-        },
-        include: { entry: true },
-      });
-
-      let currentBalance = linesBeforeCheckpoint.reduce(
-        (sum: number, line: any) => sum + line.amount,
-        0
+        { timeout: 20000 }
       );
-      currentBalance = Math.round(currentBalance * 100) / 100;
-      let adjustmentAmount =
-        Math.round((data.balance - currentBalance) * 100) / 100;
+    }
+  }
 
-      const linesData = [];
-
-      // Add the adjustment to the target account
-      if (adjustmentAmount !== 0) {
-        linesData.push({
-          entryId: journalEntry.id,
-          accountId: data.accountId,
-          amount: adjustmentAmount,
-          description: data.description || "Checkpoint adjustment",
-        });
-
-        // Add the balancing entry to the checkpoint account
-        linesData.push({
-          entryId: journalEntry.id,
-          accountId: checkpointAccount.id,
-          amount: -adjustmentAmount,
-          description: data.description || "Checkpoint adjustment",
-        });
-      }
-
-      // Create all lines
-      if (linesData.length > 0) {
-        await tx.journalLine.createMany({
-          data: linesData,
-        });
-      }
-
-      return {
-        checkpoint,
-        journalEntry,
-        adjustmentAmount,
-      };
+  /**
+   * Internal method to create a checkpoint within an existing transaction.
+   */
+  private async createCheckpointInternal(
+    data: {
+      accountId: string;
+      date: Date;
+      balance: number;
+      description?: string;
+    },
+    trx: any
+  ) {
+    // 1. Get or create the 'Checkpoint Adjustment' system account
+    let checkpointAccount = await trx.account.findFirst({
+      where: { name: "Checkpoint Adjustment" },
     });
+
+    if (!checkpointAccount) {
+      checkpointAccount = await trx.account.create({
+        data: {
+          name: "Checkpoint Adjustment",
+          type: AccountType.System,
+          subtype: AccountSubtype.Asset,
+        },
+      });
+    }
+
+    // 2. Create the checkpoint record
+    const checkpoint = await trx.checkpoint.create({
+      data: {
+        accountId: data.accountId,
+        date: data.date,
+        balance: data.balance,
+        description: data.description,
+      },
+    });
+
+    // 3. Create the journal entry for the checkpoint
+    const journalEntry = await trx.journalEntry.create({
+      data: {
+        date: data.date,
+        description: data.description || `Checkpoint for ${checkpoint.id}`,
+        category: "CHECKPOINT",
+      },
+    });
+
+    // 4. Create journal lines to set the balance
+    const account = await trx.account.findUnique({
+      where: { id: data.accountId },
+    });
+
+    if (!account) {
+      throw new Error("Account not found");
+    }
+
+    // Calculate the current balance BEFORE the checkpoint date (excluding checkpoint entries)
+    const linesBeforeCheckpoint = await trx.journalLine.findMany({
+      where: {
+        accountId: data.accountId,
+        entry: {
+          date: { lte: data.date },
+          category: {
+            not: "CHECKPOINT",
+          },
+        },
+      },
+      include: { entry: true },
+    });
+
+    let currentBalance = linesBeforeCheckpoint.reduce(
+      (sum: number, line: any) => sum + line.amount,
+      0
+    );
+    currentBalance = Math.round(currentBalance * 100) / 100;
+    let adjustmentAmount =
+      Math.round((data.balance - currentBalance) * 100) / 100;
+
+    console.log("Checkpoint creation debug:", {
+      targetBalance: data.balance,
+      currentBalance,
+      adjustmentAmount,
+      accountId: data.accountId,
+      date: data.date,
+    });
+
+    const linesData = [];
+
+    // Always create journal lines for the checkpoint, even if adjustment is 0
+    // This ensures the checkpoint entry exists and can be properly identified
+    linesData.push({
+      entryId: journalEntry.id,
+      accountId: data.accountId,
+      amount: adjustmentAmount,
+      description: data.description || "Checkpoint adjustment",
+    });
+
+    // Add the balancing entry to the checkpoint account
+    linesData.push({
+      entryId: journalEntry.id,
+      accountId: checkpointAccount.id,
+      amount: -adjustmentAmount,
+      description: data.description || "Checkpoint adjustment",
+    });
+
+    // Create all lines
+    console.log("Creating journal lines:", linesData);
+    await trx.journalLine.createMany({
+      data: linesData,
+    });
+
+    return {
+      checkpoint,
+      journalEntry,
+      adjustmentAmount,
+    };
   }
 
   /**
@@ -691,41 +728,48 @@ class DatabaseService {
    */
   public async deleteCheckpoint(checkpointId: string) {
     return this.prisma.$transaction(async (tx) => {
-      // Find the checkpoint
-      const checkpoint = await tx.checkpoint.findUnique({
-        where: { id: checkpointId },
-        include: { account: true },
-      });
-
-      if (!checkpoint) {
-        throw new Error("Checkpoint not found");
-      }
-
-      // Find the associated journal entry
-      const journalEntry = await tx.journalEntry.findFirst({
-        where: {
-          category: "CHECKPOINT",
-          description: { contains: checkpoint.id },
-        },
-      });
-
-      // Delete the journal lines and entry if found
-      if (journalEntry) {
-        await tx.journalLine.deleteMany({
-          where: { entryId: journalEntry.id },
-        });
-        await tx.journalEntry.delete({
-          where: { id: journalEntry.id },
-        });
-      }
-
-      // Delete the checkpoint
-      const deletedCheckpoint = await tx.checkpoint.delete({
-        where: { id: checkpointId },
-      });
-
-      return deletedCheckpoint;
+      return this.deleteCheckpointInternal(checkpointId, tx);
     });
+  }
+
+  /**
+   * Internal method to delete a checkpoint within an existing transaction.
+   */
+  private async deleteCheckpointInternal(checkpointId: string, tx: any) {
+    // Find the checkpoint
+    const checkpoint = await tx.checkpoint.findUnique({
+      where: { id: checkpointId },
+      include: { account: true },
+    });
+
+    if (!checkpoint) {
+      throw new Error("Checkpoint not found");
+    }
+
+    // Find the associated journal entry
+    const journalEntry = await tx.journalEntry.findFirst({
+      where: {
+        category: "CHECKPOINT",
+        description: { contains: checkpoint.id },
+      },
+    });
+
+    // Delete the journal lines and entry if found
+    if (journalEntry) {
+      await tx.journalLine.deleteMany({
+        where: { entryId: journalEntry.id },
+      });
+      await tx.journalEntry.delete({
+        where: { id: journalEntry.id },
+      });
+    }
+
+    // Delete the checkpoint
+    const deletedCheckpoint = await tx.checkpoint.delete({
+      where: { id: checkpointId },
+    });
+
+    return deletedCheckpoint;
   }
 
   /**
@@ -806,43 +850,47 @@ class DatabaseService {
   }
 
   /**
-   * Reconcile a checkpoint: delete the old checkpoint and its journal entry, then create a new one at the same date with the current sum as the new balance.
+   * Reconcile a checkpoint: delete the old checkpoint and its journal entry, then create a new one at the same date with the original balance.
    */
   public async reconcileCheckpoint(checkpointId: string) {
-    return this.prisma.$transaction(async (tx) => {
-      // 1. Find the checkpoint
-      const checkpoint = await tx.checkpoint.findUnique({
-        where: { id: checkpointId },
-      });
-      if (!checkpoint) throw new Error("Checkpoint not found");
+    return this.prisma.$transaction(
+      async (tx) => {
+        console.log("Starting reconcileCheckpoint for", checkpointId);
+        const checkpoint = await tx.checkpoint.findUnique({
+          where: { id: checkpointId },
+        });
+        if (!checkpoint) throw new Error("Checkpoint not found");
+        console.log("Found checkpoint:", checkpoint);
 
-      // 2. Delete the old checkpoint and its journal entry
-      await this.deleteCheckpoint(checkpointId);
+        // Store the original balance before deleting
+        const originalBalance = checkpoint.balance;
+        const originalDescription = checkpoint.description;
 
-      // 3. Calculate the current balance up to the checkpoint date (excluding checkpoints)
-      const lines = await tx.journalLine.findMany({
-        where: {
-          accountId: checkpoint.accountId,
-          entry: {
-            date: { lte: checkpoint.date },
-            category: { not: "CHECKPOINT" },
-          },
-        },
-      });
-      let newBalance = lines.reduce(
-        (sum: number, line: any) => sum + line.amount,
-        0
-      );
-      newBalance = Math.round(newBalance * 100) / 100;
+        await this.deleteCheckpointInternal(checkpointId, tx);
+        console.log("Deleted old checkpoint");
 
-      // 4. Create a new checkpoint at the same date with the new balance
-      return this.createCheckpoint({
-        accountId: checkpoint.accountId,
-        date: checkpoint.date,
-        balance: newBalance,
-        description: checkpoint.description || "Reconciled again",
-      });
-    });
+        try {
+          const result = await this.createCheckpoint(
+            {
+              accountId: checkpoint.accountId,
+              date: checkpoint.date,
+              balance: originalBalance, // Use the original balance, not recalculated
+              description: originalDescription || "Reconciled again",
+            },
+            tx
+          );
+          console.log(
+            "Created new checkpoint with original balance:",
+            originalBalance
+          );
+          return result;
+        } catch (err) {
+          console.error("Error creating new checkpoint:", err);
+          throw err;
+        }
+      },
+      { timeout: 20000 }
+    );
   }
 }
 

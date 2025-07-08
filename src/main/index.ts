@@ -326,6 +326,7 @@ function setupIpcHandlers() {
       const result = await databaseService.reconcileCheckpoint(checkpointId);
       return { success: true, checkpoint: result };
     } catch (error) {
+      console.error("Error in reconcile-checkpoint:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
