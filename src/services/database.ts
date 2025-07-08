@@ -6,6 +6,9 @@ import {
   AccountSubtype,
 } from "../shared/accountTypes";
 
+// Type for transaction client
+type TransactionClient = Prisma.TransactionClient;
+
 class DatabaseService {
   private static instance: DatabaseService;
   private prisma: PrismaClient;
@@ -62,12 +65,16 @@ class DatabaseService {
   }
 
   // Account operations
-  public async createAccount(data: {
-    name: string;
-    type: AccountType | string;
-    currency?: string;
-  }) {
-    return this.prisma.account.create({
+  public async createAccount(
+    data: {
+      name: string;
+      type: AccountType | string;
+      currency?: string;
+    },
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    return prisma.account.create({
       data: {
         name: data.name,
         type: data.type as AccountType,
@@ -76,10 +83,14 @@ class DatabaseService {
     });
   }
 
-  public async getAccounts(includeArchived: boolean = false) {
+  public async getAccounts(
+    includeArchived: boolean = false,
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
     try {
       console.log("Fetching accounts from database...");
-      const accounts = await this.prisma.account.findMany({
+      const accounts = await prisma.account.findMany({
         where: includeArchived ? {} : { isArchived: false },
         orderBy: { createdAt: "asc" },
       });
@@ -96,8 +107,9 @@ class DatabaseService {
     }
   }
 
-  public async getAccount(id: string) {
-    const acc = await this.prisma.account.findUnique({
+  public async getAccount(id: string, tx?: TransactionClient) {
+    const prisma = tx || this.prisma;
+    const acc = await prisma.account.findUnique({
       where: { id },
       include: { lines: { include: { entry: true } } },
     });
@@ -109,8 +121,9 @@ class DatabaseService {
    * Check if an account can be safely deleted (no transactions).
    * Returns object with canDelete boolean and transaction count.
    */
-  public async canDeleteAccount(accountId: string) {
-    const account = await this.prisma.account.findUnique({
+  public async canDeleteAccount(accountId: string, tx?: TransactionClient) {
+    const prisma = tx || this.prisma;
+    const account = await prisma.account.findUnique({
       where: { id: accountId },
       include: { lines: true },
     });
@@ -132,8 +145,9 @@ class DatabaseService {
   /**
    * Archive an account (soft delete) by setting isArchived flag.
    */
-  public async archiveAccount(accountId: string) {
-    return this.prisma.account.update({
+  public async archiveAccount(accountId: string, tx?: TransactionClient) {
+    const prisma = tx || this.prisma;
+    return prisma.account.update({
       where: { id: accountId },
       data: {
         isArchived: true,
@@ -145,14 +159,15 @@ class DatabaseService {
   /**
    * Hard delete an account. Only call this after verifying no transactions exist.
    */
-  public async deleteAccount(accountId: string) {
+  public async deleteAccount(accountId: string, tx?: TransactionClient) {
+    const prisma = tx || this.prisma;
     // Double-check that no transactions exist
-    const canDelete = await this.canDeleteAccount(accountId);
+    const canDelete = await this.canDeleteAccount(accountId, prisma);
     if (!canDelete.canDelete) {
       throw new Error("Cannot delete account with existing transactions");
     }
 
-    return this.prisma.account.delete({
+    return prisma.account.delete({
       where: { id: accountId },
     });
   }
@@ -160,8 +175,9 @@ class DatabaseService {
   /**
    * Restore an archived account (un-archive).
    */
-  public async restoreAccount(accountId: string) {
-    return this.prisma.account.update({
+  public async restoreAccount(accountId: string, tx?: TransactionClient) {
+    const prisma = tx || this.prisma;
+    return prisma.account.update({
       where: { id: accountId },
       data: {
         isArchived: false,
@@ -177,17 +193,21 @@ class DatabaseService {
    * fromAccountId: The account to credit (e.g., cash/bank for expense, income for income)
    * toAccountId: The account to debit (e.g., expense for expense, cash/bank for income)
    */
-  public async createJournalEntry(data: {
-    date: string | Date;
-    amount: number;
-    category: string;
-    description?: string;
-    fromAccountId: string;
-    toAccountId: string;
-  }) {
+  public async createJournalEntry(
+    data: {
+      date: string | Date;
+      amount: number;
+      category: string;
+      description?: string;
+      fromAccountId: string;
+      toAccountId: string;
+    },
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
     // Always round the amount to two decimals
     const roundedAmount = Math.round(Math.abs(data.amount) * 100) / 100;
-    return this.prisma.journalEntry.create({
+    return prisma.journalEntry.create({
       data: {
         date: new Date(data.date),
         description: data.description,
@@ -215,8 +235,12 @@ class DatabaseService {
    * Get all journal entries (transactions) for an account.
    * Returns lines for the account, joined with their entry.
    */
-  public async getJournalEntriesForAccount(accountId: string) {
-    const lines = await this.prisma.journalLine.findMany({
+  public async getJournalEntriesForAccount(
+    accountId: string,
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    const lines = await prisma.journalLine.findMany({
       where: {
         accountId,
         entry: {
@@ -239,94 +263,101 @@ class DatabaseService {
 
   public async createOpeningBalanceEntry(
     balances: { accountId: string; balance: number }[],
-    entryDate: Date
-  ) {
+    entryDate: Date,
+    tx?: TransactionClient
+  ): Promise<any> {
+    const prisma = tx || this.prisma;
     const ASSET_TYPES = [AccountType.User];
     // Liabilities have a natural credit balance.
     // A positive balance means money you owe, which is a credit on your books.
     // So, the amount in the journal line will be negative.
     const LIABILITY_TYPES = [AccountType.System];
 
-    return this.prisma.$transaction(async (tx) => {
-      // 1. Get or create the 'Opening Balance Equity' account
-      let equityAccount = await tx.account.findFirst({
-        where: { name: "Opening Balance Equity" },
+    // If no transaction provided, create one
+    if (!tx) {
+      return this.prisma.$transaction(async (trx) => {
+        return this.createOpeningBalanceEntry(balances, entryDate, trx);
       });
+    }
 
-      if (!equityAccount) {
-        equityAccount = await tx.account.create({
-          data: {
-            name: "Opening Balance Equity",
-            type: AccountType.System,
-          },
-        });
-      }
+    // 1. Get or create the 'Opening Balance Equity' account
+    let equityAccount = await prisma.account.findFirst({
+      where: { name: "Opening Balance Equity" },
+    });
 
-      // 2. Create the Journal Entry
-      const journalEntry = await tx.journalEntry.create({
+    if (!equityAccount) {
+      equityAccount = await prisma.account.create({
         data: {
-          date: entryDate,
-          description: "Opening Balance",
-          category: "SYSTEM",
+          name: "Opening Balance Equity",
+          type: AccountType.System,
         },
       });
+    }
 
-      const accounts = await tx.account.findMany({
-        where: { id: { in: balances.map((b) => b.accountId) } },
-      });
-      const accountMap = new Map(accounts.map((a) => [a.id, a]));
+    // 2. Create the Journal Entry
+    const journalEntry = await prisma.journalEntry.create({
+      data: {
+        date: entryDate,
+        description: "Opening Balance",
+        category: "SYSTEM",
+      },
+    });
 
-      // 3. Create Journal Lines for each account
-      const linesData = [];
-      let total = 0;
+    const accounts = await prisma.account.findMany({
+      where: { id: { in: balances.map((b) => b.accountId) } },
+    });
+    const accountMap = new Map(accounts.map((a) => [a.id, a]));
 
-      for (const item of balances) {
-        const account = accountMap.get(item.accountId);
-        if (!account) {
-          // Or handle this error more gracefully
-          throw new Error(`Account with id ${item.accountId} not found.`);
-        }
+    // 3. Create Journal Lines for each account
+    const linesData = [];
+    let total = 0;
 
-        let amount = 0;
-        const accType = toAccountType(account.type);
-        if (ASSET_TYPES.includes(accType)) {
-          amount = item.balance; // Debits are positive
-        } else if (LIABILITY_TYPES.includes(accType)) {
-          amount = -item.balance; // Credits are negative
-        }
-        // Always round the amount
-        amount = Math.round(amount * 100) / 100;
-
-        if (amount !== 0) {
-          linesData.push({
-            entryId: journalEntry.id,
-            accountId: item.accountId,
-            amount,
-            description: "Opening Balance",
-          });
-          total += amount;
-        }
+    for (const item of balances) {
+      const account = accountMap.get(item.accountId);
+      if (!account) {
+        // Or handle this error more gracefully
+        throw new Error(`Account with id ${item.accountId} not found.`);
       }
 
-      // 4. Create the balancing line for the equity account
-      if (total !== 0) {
+      let amount = 0;
+      const accType = toAccountType(account.type);
+      if (ASSET_TYPES.includes(accType)) {
+        amount = item.balance; // Debits are positive
+      } else if (LIABILITY_TYPES.includes(accType)) {
+        amount = -item.balance; // Credits are negative
+      }
+      // Always round the amount
+      amount = Math.round(amount * 100) / 100;
+
+      if (amount !== 0) {
         linesData.push({
           entryId: journalEntry.id,
-          accountId: equityAccount.id,
-          amount: Math.round(-total * 100) / 100, // The balancing amount, rounded
+          accountId: item.accountId,
+          amount,
           description: "Opening Balance",
         });
+        total += amount;
       }
+    }
 
-      // 5. Create all lines in one go
-      if (linesData.length > 0) {
-        await tx.journalLine.createMany({
-          data: linesData,
-        });
-      }
+    // 4. Create the balancing line for the equity account
+    if (total !== 0) {
+      linesData.push({
+        entryId: journalEntry.id,
+        accountId: equityAccount.id,
+        amount: Math.round(-total * 100) / 100, // The balancing amount, rounded
+        description: "Opening Balance",
+      });
+    }
 
-      return journalEntry;
-    });
+    // 5. Create all lines in one go
+    if (linesData.length > 0) {
+      await prisma.journalLine.createMany({
+        data: linesData,
+      });
+    }
+
+    return journalEntry;
   }
 
   // --- Dashboard Data Methods ---
@@ -334,8 +365,9 @@ class DatabaseService {
   /**
    * Get net worth: sum of all user accounts (assets/liabilities) only.
    */
-  public async getNetWorth() {
-    const accounts = await this.prisma.account.findMany({
+  public async getNetWorth(tx?: TransactionClient) {
+    const prisma = tx || this.prisma;
+    const accounts = await prisma.account.findMany({
       include: { lines: true },
     });
 
@@ -366,7 +398,8 @@ class DatabaseService {
   /**
    * Get total income and expenses for the current month (category accounts only).
    */
-  public async getIncomeExpenseThisMonth() {
+  public async getIncomeExpenseThisMonth(tx?: TransactionClient) {
+    const prisma = tx || this.prisma;
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(
@@ -380,7 +413,7 @@ class DatabaseService {
     );
 
     // Get all journal entries for this month
-    const entries = await this.prisma.journalEntry.findMany({
+    const entries = await prisma.journalEntry.findMany({
       where: {
         date: {
           gte: startOfMonth,
@@ -419,8 +452,12 @@ class DatabaseService {
   /**
    * Get the most recent N transactions (journal entries), including their lines and accounts.
    */
-  public async getRecentTransactions(limit: number = 10) {
-    return this.prisma.journalEntry.findMany({
+  public async getRecentTransactions(
+    limit: number = 10,
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    return prisma.journalEntry.findMany({
       where: {
         category: {
           not: "CHECKPOINT",
@@ -440,27 +477,38 @@ class DatabaseService {
    * Delete a journal entry (transaction) and all its associated lines.
    * This maintains data integrity by deleting both the entry and lines in a transaction.
    */
-  public async deleteJournalEntry(entryId: string) {
-    return this.prisma.$transaction(async (tx) => {
-      // First, delete all journal lines associated with this entry
-      await tx.journalLine.deleteMany({
-        where: { entryId },
-      });
+  public async deleteJournalEntry(
+    entryId: string,
+    tx?: TransactionClient
+  ): Promise<any> {
+    const prisma = tx || this.prisma;
 
-      // Then delete the journal entry itself
-      const deletedEntry = await tx.journalEntry.delete({
-        where: { id: entryId },
+    // If no transaction provided, create one
+    if (!tx) {
+      return this.prisma.$transaction(async (trx) => {
+        return this.deleteJournalEntry(entryId, trx);
       });
+    }
 
-      return deletedEntry;
+    // First, delete all journal lines associated with this entry
+    await prisma.journalLine.deleteMany({
+      where: { entryId },
     });
+
+    // Then delete the journal entry itself
+    const deletedEntry = await prisma.journalEntry.delete({
+      where: { id: entryId },
+    });
+
+    return deletedEntry;
   }
 
   /**
    * Get a specific journal entry by ID with its lines and accounts.
    */
-  public async getJournalEntry(entryId: string) {
-    return this.prisma.journalEntry.findUnique({
+  public async getJournalEntry(entryId: string, tx?: TransactionClient) {
+    const prisma = tx || this.prisma;
+    return prisma.journalEntry.findUnique({
       where: { id: entryId },
       include: {
         lines: {
@@ -473,7 +521,8 @@ class DatabaseService {
   /**
    * Create a set of default accounts (user, system, category) if they do not exist.
    */
-  public async ensureDefaultAccounts() {
+  public async ensureDefaultAccounts(tx?: TransactionClient) {
+    const prisma = tx || this.prisma;
     const defaultAccounts = [
       // User accounts
       {
@@ -546,11 +595,11 @@ class DatabaseService {
       },
     ];
     for (const acc of defaultAccounts) {
-      const exists = await this.prisma.account.findFirst({
+      const exists = await prisma.account.findFirst({
         where: { name: acc.name, type: acc.type },
       });
       if (!exists) {
-        await this.prisma.account.create({ data: acc });
+        await prisma.account.create({ data: acc });
       }
     }
   }
@@ -568,41 +617,25 @@ class DatabaseService {
       balance: number;
       description?: string;
     },
-    tx?: any
-  ) {
-    if (tx) {
-      // If we have a transaction client, use the internal method
-      return this.createCheckpointInternal(data, tx);
-    } else {
-      // Otherwise, create a new transaction
+    tx?: TransactionClient
+  ): Promise<any> {
+    // If no transaction provided, create one
+    if (!tx) {
       return this.prisma.$transaction(
-        async (trx: Prisma.TransactionClient) => {
-          return this.createCheckpointInternal(data, trx);
+        async (trx) => {
+          return this.createCheckpoint(data, trx);
         },
         { timeout: 20000 }
       );
     }
-  }
 
-  /**
-   * Internal method to create a checkpoint within an existing transaction.
-   */
-  private async createCheckpointInternal(
-    data: {
-      accountId: string;
-      date: Date;
-      balance: number;
-      description?: string;
-    },
-    trx: any
-  ) {
     // 1. Get or create the 'Checkpoint Adjustment' system account
-    let checkpointAccount = await trx.account.findFirst({
+    let checkpointAccount = await tx.account.findFirst({
       where: { name: "Checkpoint Adjustment" },
     });
 
     if (!checkpointAccount) {
-      checkpointAccount = await trx.account.create({
+      checkpointAccount = await tx.account.create({
         data: {
           name: "Checkpoint Adjustment",
           type: AccountType.System,
@@ -612,7 +645,7 @@ class DatabaseService {
     }
 
     // 2. Create the checkpoint record
-    const checkpoint = await trx.checkpoint.create({
+    const checkpoint = await tx.checkpoint.create({
       data: {
         accountId: data.accountId,
         date: data.date,
@@ -622,7 +655,7 @@ class DatabaseService {
     });
 
     // 3. Create the journal entry for the checkpoint
-    const journalEntry = await trx.journalEntry.create({
+    const journalEntry = await tx.journalEntry.create({
       data: {
         date: data.date,
         description: data.description || `Checkpoint for ${checkpoint.id}`,
@@ -631,7 +664,7 @@ class DatabaseService {
     });
 
     // 4. Create journal lines to set the balance
-    const account = await trx.account.findUnique({
+    const account = await tx.account.findUnique({
       where: { id: data.accountId },
     });
 
@@ -640,7 +673,7 @@ class DatabaseService {
     }
 
     // Calculate the current balance BEFORE the checkpoint date (excluding checkpoint entries)
-    const linesBeforeCheckpoint = await trx.journalLine.findMany({
+    const linesBeforeCheckpoint = await tx.journalLine.findMany({
       where: {
         accountId: data.accountId,
         entry: {
@@ -690,7 +723,7 @@ class DatabaseService {
 
     // Create all lines
     console.log("Creating journal lines:", linesData);
-    await trx.journalLine.createMany({
+    await tx.journalLine.createMany({
       data: linesData,
     });
 
@@ -704,8 +737,12 @@ class DatabaseService {
   /**
    * Get all checkpoints for an account.
    */
-  public async getCheckpointsForAccount(accountId: string) {
-    return this.prisma.checkpoint.findMany({
+  public async getCheckpointsForAccount(
+    accountId: string,
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    return prisma.checkpoint.findMany({
       where: { accountId },
       orderBy: { date: "desc" },
       include: { account: true },
@@ -715,8 +752,12 @@ class DatabaseService {
   /**
    * Get the most recent checkpoint for an account.
    */
-  public async getLatestCheckpointForAccount(accountId: string) {
-    return this.prisma.checkpoint.findFirst({
+  public async getLatestCheckpointForAccount(
+    accountId: string,
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    return prisma.checkpoint.findFirst({
       where: { accountId },
       orderBy: { date: "desc" },
       include: { account: true },
@@ -726,16 +767,17 @@ class DatabaseService {
   /**
    * Delete a checkpoint and its associated journal entry.
    */
-  public async deleteCheckpoint(checkpointId: string) {
-    return this.prisma.$transaction(async (tx) => {
-      return this.deleteCheckpointInternal(checkpointId, tx);
-    });
-  }
+  public async deleteCheckpoint(
+    checkpointId: string,
+    tx?: TransactionClient
+  ): Promise<any> {
+    // If no transaction provided, create one
+    if (!tx) {
+      return this.prisma.$transaction(async (trx) => {
+        return this.deleteCheckpoint(checkpointId, trx);
+      });
+    }
 
-  /**
-   * Internal method to delete a checkpoint within an existing transaction.
-   */
-  private async deleteCheckpointInternal(checkpointId: string, tx: any) {
     // Find the checkpoint
     const checkpoint = await tx.checkpoint.findUnique({
       where: { id: checkpointId },
@@ -781,7 +823,7 @@ class DatabaseService {
   public async getAccountBalanceAtDate(
     accountId: string,
     date: Date,
-    tx?: any
+    tx?: TransactionClient
   ): Promise<number> {
     const prisma = tx || this.prisma;
 
@@ -845,52 +887,63 @@ class DatabaseService {
    * Get the effective balance for an account, considering checkpoints.
    * This is the main method to use for getting current account balances.
    */
-  public async getAccountBalance(accountId: string): Promise<number> {
-    return this.getAccountBalanceAtDate(accountId, new Date());
+  public async getAccountBalance(
+    accountId: string,
+    tx?: TransactionClient
+  ): Promise<number> {
+    return this.getAccountBalanceAtDate(accountId, new Date(), tx);
   }
 
   /**
    * Reconcile a checkpoint: delete the old checkpoint and its journal entry, then create a new one at the same date with the original balance.
    */
-  public async reconcileCheckpoint(checkpointId: string) {
-    return this.prisma.$transaction(
-      async (tx) => {
-        console.log("Starting reconcileCheckpoint for", checkpointId);
-        const checkpoint = await tx.checkpoint.findUnique({
-          where: { id: checkpointId },
-        });
-        if (!checkpoint) throw new Error("Checkpoint not found");
-        console.log("Found checkpoint:", checkpoint);
+  public async reconcileCheckpoint(
+    checkpointId: string,
+    tx?: TransactionClient
+  ): Promise<any> {
+    // If no transaction provided, create one
+    if (!tx) {
+      return this.prisma.$transaction(
+        async (trx) => {
+          return this.reconcileCheckpoint(checkpointId, trx);
+        },
+        { timeout: 20000 }
+      );
+    }
 
-        // Store the original balance before deleting
-        const originalBalance = checkpoint.balance;
-        const originalDescription = checkpoint.description;
+    console.log("Starting reconcileCheckpoint for", checkpointId);
+    const checkpoint = await tx.checkpoint.findUnique({
+      where: { id: checkpointId },
+    });
+    if (!checkpoint) throw new Error("Checkpoint not found");
+    console.log("Found checkpoint:", checkpoint);
 
-        await this.deleteCheckpointInternal(checkpointId, tx);
-        console.log("Deleted old checkpoint");
+    // Store the original balance before deleting
+    const originalBalance = checkpoint.balance;
+    const originalDescription = checkpoint.description;
 
-        try {
-          const result = await this.createCheckpoint(
-            {
-              accountId: checkpoint.accountId,
-              date: checkpoint.date,
-              balance: originalBalance, // Use the original balance, not recalculated
-              description: originalDescription || "Reconciled again",
-            },
-            tx
-          );
-          console.log(
-            "Created new checkpoint with original balance:",
-            originalBalance
-          );
-          return result;
-        } catch (err) {
-          console.error("Error creating new checkpoint:", err);
-          throw err;
-        }
-      },
-      { timeout: 20000 }
-    );
+    await this.deleteCheckpoint(checkpointId, tx);
+    console.log("Deleted old checkpoint");
+
+    try {
+      const result = await this.createCheckpoint(
+        {
+          accountId: checkpoint.accountId,
+          date: checkpoint.date,
+          balance: originalBalance, // Use the original balance, not recalculated
+          description: originalDescription || "Reconciled again",
+        },
+        tx
+      );
+      console.log(
+        "Created new checkpoint with original balance:",
+        originalBalance
+      );
+      return result;
+    } catch (err) {
+      console.error("Error creating new checkpoint:", err);
+      throw err;
+    }
   }
 }
 
