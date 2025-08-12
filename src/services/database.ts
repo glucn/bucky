@@ -189,15 +189,14 @@ class DatabaseService {
   // Double-entry transaction operations
   /**
    * Create a double-entry journal entry (transaction).
-   * @param data { date, amount, category, description, fromAccountId, toAccountId }
-   * fromAccountId: The account to credit (e.g., cash/bank for expense, income for income)
-   * toAccountId: The account to debit (e.g., expense for expense, cash/bank for income)
+   * @param data { date, amount, description, fromAccountId, toAccountId }
+   * fromAccountId: The account to credit
+   * toAccountId: The account to debit
    */
   public async createJournalEntry(
     data: {
       date: string | Date;
       amount: number;
-      category: string;
       description?: string;
       fromAccountId: string;
       toAccountId: string;
@@ -211,7 +210,6 @@ class DatabaseService {
       data: {
         date: new Date(data.date),
         description: data.description,
-        category: data.category,
         lines: {
           create: [
             {
@@ -244,9 +242,6 @@ class DatabaseService {
       where: {
         accountId,
         entry: {
-          category: {
-            not: "CHECKPOINT",
-          },
         },
       },
       include: { entry: true, account: true },
@@ -299,7 +294,6 @@ class DatabaseService {
       data: {
         date: entryDate,
         description: "Opening Balance",
-        category: "SYSTEM",
       },
     });
 
@@ -459,9 +453,6 @@ class DatabaseService {
     const prisma = tx || this.prisma;
     return prisma.journalEntry.findMany({
       where: {
-        category: {
-          not: "CHECKPOINT",
-        },
       },
       orderBy: { date: "desc" },
       take: limit,
@@ -659,7 +650,6 @@ class DatabaseService {
       data: {
         date: data.date,
         description: data.description || `Checkpoint for ${checkpoint.id}`,
-        category: "CHECKPOINT",
       },
     });
 
@@ -678,9 +668,6 @@ class DatabaseService {
         accountId: data.accountId,
         entry: {
           date: { lte: data.date },
-          category: {
-            not: "CHECKPOINT",
-          },
         },
       },
       include: { entry: true },
@@ -793,7 +780,6 @@ class DatabaseService {
     // or are checkpoint entries for this account on the same date
     const journalEntry = await tx.journalEntry.findFirst({
       where: {
-        category: "CHECKPOINT",
         OR: [
           { description: { contains: checkpoint.id } },
           {
@@ -868,9 +854,6 @@ class DatabaseService {
               gt: checkpoint.date,
               lte: date,
             },
-            category: {
-              not: "CHECKPOINT",
-            },
           },
         },
         include: { entry: true },
@@ -885,9 +868,6 @@ class DatabaseService {
           accountId,
           entry: {
             date: { lte: date },
-            category: {
-              not: "CHECKPOINT",
-            },
           },
         },
         include: { entry: true },

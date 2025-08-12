@@ -94,7 +94,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle("add-transaction", async (_, transaction) => {
     console.log("Handling add-transaction request:", transaction);
-    // transaction should include: date, amount, category, description, fromAccountId, toAccountId
+    // transaction should include: date, amount, description, fromAccountId, toAccountId
     return databaseService.createJournalEntry(transaction);
   });
 
@@ -153,7 +153,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle("import-transactions", async (_, { transactions }) => {
     console.log("Handling import-transactions request");
-    // Each transaction should have: date, amount, category, description, fromAccountId, toAccountId
+    // Each transaction should have: date, amount, description, fromAccountId, toAccountId
     try {
       const results = [];
       for (const tx of transactions) {
@@ -162,14 +162,12 @@ function setupIpcHandlers() {
           !tx.date ||
           !tx.amount ||
           !tx.fromAccountId ||
-          !tx.toAccountId ||
-          !tx.category
+          !tx.toAccountId
         )
           continue;
         const result = await databaseService.createJournalEntry({
           date: tx.date,
           amount: Number(tx.amount),
-          category: tx.category,
           description: tx.description,
           fromAccountId: tx.fromAccountId,
           toAccountId: tx.toAccountId,

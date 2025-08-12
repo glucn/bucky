@@ -13,7 +13,6 @@ interface JournalEntry {
   id: string;
   date: string;
   description?: string;
-  category: string;
   lines: JournalLine[];
 }
 
@@ -163,7 +162,7 @@ export const Dashboard: React.FC = () => {
               <div className="flex justify-between items-center">
                 <div>
                   <p className="text-sm font-medium text-gray-900">
-                    {entry.category}
+                    {entry.lines.find(line => line.amount > 0)?.account?.name || ""}
                   </p>
                   <p className="text-sm text-gray-500">
                     {new Date(entry.date).toLocaleDateString()}

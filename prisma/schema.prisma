@@ -40,7 +40,6 @@ model JournalEntry {
   id          String        @id @default(uuid())
   date        DateTime
   description String?
-  category    String
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   lines       JournalLine[]

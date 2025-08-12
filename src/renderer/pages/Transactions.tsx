@@ -12,7 +12,6 @@ interface JournalEntry {
   id: string;
   date: string;
   description?: string;
-  category: string;
   lines: JournalLine[];
 }
 
@@ -107,17 +106,10 @@ export const Transactions: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Get the selected category account name to use as category
-    const toAccount = accounts.find(
-      (acc) => acc.id === newTransaction.toAccountId
-    );
-    const category = toAccount?.name || "";
-
     const transaction = await window.electron.ipcRenderer.invoke(
       "add-transaction",
       {
         ...newTransaction,
-        category,
       }
     );
     setTransactions([...(transaction.lines || []), ...transactions]);
@@ -216,7 +208,7 @@ export const Transactions: React.FC = () => {
     const confirmMessage = `Are you sure you want to delete this transaction?
 
 Date: ${new Date(entry.date).toLocaleDateString()}
-Category: ${entry.category}
+Category: ${toAccount}
 Amount: $${amount.toFixed(2)}
 From: ${fromAccount}
 To: ${toAccount}
@@ -433,7 +425,7 @@ This action cannot be undone and will affect your account balances.`;
                       {new Date(line.entry.date).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {line.entry.category}
+                      {accounts.find(acc => acc.id === line.accountId)?.name || ""}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {line.amount.toFixed(2)}
