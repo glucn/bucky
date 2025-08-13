@@ -3,14 +3,32 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    @apply bg-gray-50;
+  html, body {
+    @apply h-full w-full bg-gray-50 text-gray-900;
     margin: 0;
+    padding: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
       "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
       "Helvetica Neue", sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    @apply min-h-screen flex flex-col;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold text-gray-900;
+    margin-top: 0;
+    margin-bottom: 0.5em;
+  }
+
+  a {
+    @apply text-primary-600 hover:text-primary-700 transition-colors;
+    text-decoration: none;
   }
 
   input[type="text"],
@@ -20,10 +38,12 @@
   select,
   textarea {
     @apply rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500;
+    @apply px-3 py-2;
   }
 
   button {
-    @apply transition-colors duration-200;
+    @apply transition-colors duration-200 px-4 py-2 rounded;
+    font-weight: 500;
   }
 }
 

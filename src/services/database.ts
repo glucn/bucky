@@ -106,6 +106,34 @@ class DatabaseService {
       throw error;
     }
   }
+  /**
+   * Get all accounts with their current balances.
+   * Returns: Array<{ ...account, balance: number }>
+   */
+  public async getAccountsWithBalances(includeArchived: boolean = false, tx?: TransactionClient) {
+    const prisma = tx || this.prisma;
+    try {
+      const accounts = await prisma.account.findMany({
+        where: includeArchived ? {} : { isArchived: false },
+        orderBy: { createdAt: "asc" },
+      });
+      // For each account, get its current balance
+      const results = await Promise.all(
+        accounts.map(async (acc) => {
+          const balance = await this.getAccountBalance(acc.id, prisma);
+          return {
+            ...acc,
+            type: toAccountType(acc.type),
+            balance,
+          };
+        })
+      );
+      return results;
+    } catch (error) {
+      console.error("Error fetching accounts with balances:", error);
+      throw error;
+    }
+  }
 
   public async getAccount(id: string, tx?: TransactionClient) {
     const prisma = tx || this.prisma;

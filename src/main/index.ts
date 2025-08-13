@@ -82,6 +82,13 @@ function setupIpcHandlers() {
     }
   );
 
+  ipcMain.handle(
+    "get-accounts-with-balances",
+    async (_, includeArchived: boolean = false) => {
+      return databaseService.getAccountsWithBalances(includeArchived);
+    }
+  );
+
   ipcMain.handle("get-transactions", async (_, accountId: string) => {
     console.log("Handling get-transactions request for account:", accountId);
     return databaseService.getJournalEntriesForAccount(accountId);

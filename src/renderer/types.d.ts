@@ -7,6 +7,7 @@ export type Account = {
   currency: string;
   isArchived: boolean;
   archivedAt?: string | null;
+  balance?: number; // Added for accounts-with-balances
 };
 
 interface IElectronAPI {

@@ -1,7 +1,2 @@
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
-    Arial, sans-serif;
-  margin: auto;
-  max-width: 38rem;
-  padding: 2rem;
-}
+/* Legacy global styles removed for new sidebar/navbar layout.
+   All global styles are now managed in src/renderer/index.css. */
