@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Account } from "../types";
-import { AccountType, toAccountType } from "../../shared/accountTypes";
+import { AccountModal } from "../components/AccountModal";
 
 export const Accounts: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -10,11 +10,7 @@ export const Accounts: React.FC = () => {
   const [accountBalances, setAccountBalances] = useState<
     Record<string, number>
   >({});
-  const [newAccount, setNewAccount] = useState({
-    name: "",
-    type: AccountType.User,
-    currency: "USD",
-  });
+  const [showAccountModal, setShowAccountModal] = useState(false);
   const [deletingAccountId, setDeletingAccountId] = useState<string | null>(
     null
   );
@@ -117,15 +113,7 @@ export const Accounts: React.FC = () => {
     }
   }, [accounts, archivedAccounts]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const account = await window.electron.ipcRenderer.invoke(
-      "add-account",
-      newAccount
-    );
-    fetchAccounts();
-    setNewAccount({ name: "", type: AccountType.User, currency: "USD" });
-  };
+  // Account creation now handled in AccountModal
 
   const handleDeleteOrArchive = async (account: Account) => {
     // Check if account can be deleted
@@ -194,97 +182,22 @@ export const Accounts: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">
-          Add New Account
-        </h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label
-              htmlFor="name"
-              className="block text-sm font-medium text-gray-700"
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-medium text-gray-900">Your Accounts</h2>
+            <button
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              onClick={() => setShowAccountModal(true)}
             >
-              Account Name
-            </label>
-            <input
-              type="text"
-              id="name"
-              value={newAccount.name}
-              onChange={(e) =>
-                setNewAccount({ ...newAccount, name: e.target.value })
-              }
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-              required
+              Add New Account
+            </button>
+            <AccountModal
+              isOpen={showAccountModal}
+              onClose={() => setShowAccountModal(false)}
+              onAccountCreated={fetchAccounts}
             />
           </div>
-
-          <div>
-            <label
-              htmlFor="type"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Account Type
-            </label>
-            <select
-              id="type"
-              value={newAccount.type}
-              onChange={(e) =>
-                setNewAccount({
-                  ...newAccount,
-                  type: toAccountType(e.target.value),
-                })
-              }
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            >
-              <option value="cash">Cash</option>
-              <option value="bank">Bank</option>
-              <option value="credit">Credit Card</option>
-              <option value="investment">Investment</option>
-            </select>
-          </div>
-
-          <div>
-            <label
-              htmlFor="currency"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Currency
-            </label>
-            <select
-              id="currency"
-              value={newAccount.currency}
-              onChange={(e) =>
-                setNewAccount({ ...newAccount, currency: e.target.value })
-              }
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            >
-              <option value="USD">USD</option>
-              <option value="CAD">CAD</option>
-              <option value="CNY">CNY</option>
-              <option value="EUR">EUR</option>
-              <option value="GBP">GBP</option>
-              <option value="JPY">JPY</option>
-            </select>
-          </div>
-
-          <button
-            type="submit"
-            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-          >
-            Add Account
-          </button>
-        </form>
-      </div>
-
-      <div className="bg-white shadow rounded-lg p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-medium text-gray-900">Your Accounts</h2>
           <div className="flex items-center gap-4">
-            <Link
-              to="/opening-balances"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-            >
-              Set Opening Balances
-            </Link>
             <label className="flex items-center text-sm">
               <input
                 type="checkbox"
