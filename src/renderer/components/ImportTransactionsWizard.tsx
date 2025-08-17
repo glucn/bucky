@@ -42,7 +42,7 @@ const systemFieldMeta: {
   },
 };
 
-type Step = 0 | 1 | 2 | 3; // 0: Upload, 1: Map Fields, 2: Preview, 3: Confirm
+type Step = 0 | 1 | 2; // 0: Upload, 1: Map Fields + Preview, 2: Confirm
 
 export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> = ({
   accountId,
@@ -51,6 +51,9 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
 }) => {
   const { refreshAccounts } = useAccounts();
   const [step, setStep] = useState<Step>(0);
+
+  // CSV header row option
+  const [csvHasHeaderRow, setCsvHasHeaderRow] = useState<boolean>(true);
 
   // Feedback and summary states
   const [error, setError] = useState<string | null>(null);
@@ -86,22 +89,27 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
   };
 
   // Handle CSV file upload
+  // Store the file and name, but do NOT parse or advance step yet
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+
   const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Reset all CSV-related state before loading new file
+    setCsvRows([]);
+    setCsvHeaders([]);
+    setCsvFileName("");
+    setCsvFile(null);
+    setFieldMap({});
+    setImportPreview([]);
+    setError(null);
+    setSuccess(null);
+    setImportSummary(null);
+    setUsedDefaultAccountDetails([]);
+
     const file = e.target.files?.[0];
     if (!file) return;
     setCsvFileName(file.name);
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const headers = results.meta.fields || [];
-        setCsvHeaders(headers);
-        setCsvRows(results.data as any[]);
-        const autoMap = autoMapFields(headers);
-        setFieldMap(autoMap);
-        setStep(1);
-      },
-    });
+    setCsvFile(file);
+    // Do NOT parse or advance step here. Wait for "Next" button.
   };
 
   // Handle field mapping change
@@ -194,6 +202,18 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
           <div>
             <h3 className="text-lg font-semibold mb-2">Upload CSV File</h3>
             <input type="file" accept=".csv" onChange={handleCsvUpload} />
+            <div className="flex items-center mt-4">
+              <input
+                id="csv-has-header-row"
+                type="checkbox"
+                checked={csvHasHeaderRow}
+                onChange={(e) => setCsvHasHeaderRow(e.target.checked)}
+                className="mr-2"
+              />
+              <label htmlFor="csv-has-header-row" className="text-sm select-none">
+                CSV has header row
+              </label>
+            </div>
             {csvFileName && (
               <div className="mt-2 text-sm text-gray-600">Selected: {csvFileName}</div>
             )}
@@ -216,14 +236,59 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
               <button
                 className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"
                 onClick={() => {
-                  if (!canProceedFromUpload) {
+                  if (!csvFile) {
                     setError("Please upload a valid CSV file.");
-                  } else {
-                    setError(null);
-                    setStep(1);
+                    return;
                   }
+                  setError(null);
+
+                  // Parse the file using the current csvHasHeaderRow value
+                  Papa.parse(csvFile, {
+                    header: csvHasHeaderRow,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                      if (csvHasHeaderRow) {
+                        // Standard: use first row as headers
+                        const headers = results.meta.fields || [];
+                        setCsvHeaders(headers);
+                        setCsvRows(results.data as any[]);
+                        const autoMap = autoMapFields(headers);
+                        setFieldMap(autoMap);
+                      } else {
+                        // No header: treat all rows as data, generate generic headers
+                        const data = results.data as any[];
+                        if (!Array.isArray(data) || data.length === 0) {
+                          setCsvHeaders([]);
+                          setCsvRows([]);
+                          setFieldMap({});
+                          setStep(1);
+                          return;
+                        }
+                        // Each row is an array, not an object
+                        const firstRow = data[0] as any[];
+                        const colCount = Array.isArray(firstRow) ? firstRow.length : 0;
+                        const headers = Array.from({ length: colCount }, (_, i) => `Column ${i + 1}`);
+                        // Convert each row array to object
+                        const rowObjects = data.map((row: any[]) => {
+                          const obj: { [key: string]: any } = {};
+                          headers.forEach((header, i) => {
+                            obj[header] = row[i] ?? "";
+                          });
+                          return obj;
+                        });
+                        setCsvHeaders(headers);
+                        setCsvRows(rowObjects);
+                        const autoMap = autoMapFields(headers);
+                        setFieldMap(autoMap);
+                      }
+                      setStep(1);
+                    },
+                    error: () => {
+                      setError("Failed to parse CSV file.");
+                    }
+                  });
                 }}
-                disabled={!canProceedFromUpload}
+                disabled={!csvFile}
               >
                 Next
               </button>
@@ -234,6 +299,11 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
         return (
           <div>
             <h3 className="text-lg font-semibold mb-2">Map CSV Columns to System Fields</h3>
+            {!csvHasHeaderRow && (
+              <div className="mb-3 p-2 bg-blue-50 border border-blue-300 text-blue-800 rounded text-sm">
+                This CSV file does not have a header row. Generic column names (<strong>Column 1</strong>, <strong>Column 2</strong>, etc.) have been generated. Please map each column to the correct field.
+              </div>
+            )}
             <div className="flex flex-col gap-4 mb-4">
               {systemFields.map((field) => (
                 <div
@@ -293,55 +363,8 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                 </div>
               ))}
             </div>
-            {!canProceedFromMap && (
-              <div
-                className="mb-2 text-sm text-red-600"
-                role="alert"
-                aria-live="assertive"
-              >
-                Please map all required fields before proceeding.
-              </div>
-            )}
-            {error && (
-              <div
-                className="mb-2 text-sm text-red-600"
-                role="alert"
-                aria-live="assertive"
-              >
-                {error}
-              </div>
-            )}
-            <div className="flex justify-between mt-6">
-              <button
-                className="px-4 py-2 bg-gray-200 rounded"
-                onClick={() => {
-                  setError(null);
-                  setStep(0);
-                }}
-              >
-                Back
-              </button>
-              <button
-                className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"
-                onClick={() => {
-                  if (!canProceedFromMap) {
-                    setError("Please map all required fields.");
-                  } else {
-                    setError(null);
-                    setStep(2);
-                  }
-                }}
-                disabled={!canProceedFromMap}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        );
-      case 2:
-        return (
-          <div>
-            <h3 className="text-lg font-semibold mb-2">Preview Transactions</h3>
+            {/* Preview Table */}
+            <h4 className="text-md font-semibold mb-2 mt-6">Preview Transactions</h4>
             <div className="overflow-x-auto max-h-64 border rounded mb-4">
               <table className="min-w-full text-xs">
                 <thead>
@@ -366,14 +389,30 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                 </tbody>
               </table>
             </div>
-            {!canProceedFromPreview && (
+            {!canProceedFromMap && (
               <div
                 className="mb-2 text-sm text-red-600"
                 role="alert"
                 aria-live="assertive"
               >
-                No transactions to preview. Please check your mapping and CSV data.
+                Please map all required fields before proceeding.
               </div>
+            )}
+            {/* Show instructional message instead of error if no mapping yet */}
+            {Object.values(fieldMap).filter(Boolean).length === 0 ? (
+              <div className="mb-2 text-sm text-gray-600" role="status" aria-live="polite">
+                Map the columns above to see a preview of your transactions.
+              </div>
+            ) : (
+              !canProceedFromPreview && (
+                <div
+                  className="mb-2 text-sm text-red-600"
+                  role="alert"
+                  aria-live="assertive"
+                >
+                  No transactions to preview. Please check your mapping and CSV data.
+                </div>
+              )
             )}
             {error && (
               <div
@@ -388,8 +427,17 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
               <button
                 className="px-4 py-2 bg-gray-200 rounded"
                 onClick={() => {
+                  // Reset all CSV-related state when going back to Upload
+                  setCsvRows([]);
+                  setCsvHeaders([]);
+                  setCsvFileName("");
+                  setFieldMap({});
+                  setImportPreview([]);
                   setError(null);
-                  setStep(1);
+                  setSuccess(null);
+                  setImportSummary(null);
+                  setUsedDefaultAccountDetails([]);
+                  setStep(0);
                 }}
               >
                 Back
@@ -397,21 +445,21 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
               <button
                 className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"
                 onClick={() => {
-                  if (!canProceedFromPreview) {
-                    setError("No transactions to preview. Please check your mapping and CSV data.");
+                  if (!canProceedFromMap || !canProceedFromPreview) {
+                    setError("Please map all required fields and ensure there are transactions to preview.");
                   } else {
                     setError(null);
-                    setStep(3);
+                    setStep(2);
                   }
                 }}
-                disabled={!canProceedFromPreview}
+                disabled={!canProceedFromMap || !canProceedFromPreview}
               >
                 Next
               </button>
             </div>
           </div>
         );
-      case 3:
+      case 2:
         return (
           <div>
             <h3 className="text-lg font-semibold mb-2">Confirm Import</h3>
@@ -528,14 +576,12 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                 </div>
               </div>
             )}
-            {/* Show skipped details if no transactions were imported */}
             {!success && importSummary && importSummary.imported === 0 && (
               <div className="mb-2 text-sm text-yellow-800 bg-yellow-50 border border-yellow-400 rounded p-3" role="alert" aria-live="assertive">
                 <strong>No transactions were imported.</strong>
                 <div>
                   All transactions were skipped. Please review your CSV data and the skipped details below.
                 </div>
-                {/* Optionally, show skippedDetails if available */}
               </div>
             )}
             <div className="flex justify-between mt-6">
@@ -543,7 +589,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                 className="px-4 py-2 bg-gray-200 rounded"
                 onClick={() => {
                   setError(null);
-                  setStep(2);
+                  setStep(1);
                 }}
                 disabled={isSubmitting}
               >
@@ -579,7 +625,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
         <h2 className="text-xl font-bold mb-4">Import Transactions from CSV</h2>
         {/* Stepper */}
         <div className="flex items-center justify-between mb-6">
-          {["Upload", "Map Fields", "Preview", "Confirm"].map((label, idx) => {
+          {["Upload", "Map & Preview", "Confirm"].map((label, idx) => {
             const isActive = step === idx;
             const isCompleted = step > idx;
             return (
@@ -608,7 +654,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                     {label}
                   </span>
                 </div>
-                {idx < 3 && (
+                {idx < 2 && (
                   <div
                     className={`flex-1 h-0.5 mx-1 ${
                       step > idx
