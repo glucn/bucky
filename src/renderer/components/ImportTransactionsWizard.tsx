@@ -11,6 +11,8 @@ interface ImportTransactionsWizardProps {
 const systemFields = [
   "date",
   "amount",
+  "credit",
+  "debit",
   "description",
   "toAccountId", // optional for mapping
 ];
@@ -30,7 +32,16 @@ const systemFieldMeta: {
   },
   amount: {
     label: "Amount",
-    help: "The transaction amount. Use negative for expenses, positive for income.",
+    help:
+      "The transaction amount. If both Credit and Debit columns are mapped, this will be calculated automatically.",
+  },
+  credit: {
+    label: "Credit",
+    help: "Column for credits (income, positive amounts).",
+  },
+  debit: {
+    label: "Debit",
+    help: "Column for debits (expenses, negative amounts).",
   },
   description: {
     label: "Description",
@@ -122,7 +133,10 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
     if (csvRows.length && Object.keys(fieldMap).length) {
       const preview = csvRows.map((row) => {
         const mapped: any = {};
+
+        // Map all fields except amount (we'll handle amount below)
         systemFields.forEach((field) => {
+          if (["amount"].includes(field)) return;
           if (fieldMap[field]) {
             mapped[field] = row[fieldMap[field]] || "";
           } else if (field === "toAccountId") {
@@ -131,6 +145,37 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
             mapped[field] = "";
           }
         });
+
+        // Calculate merged amount
+        let amount: number | string = "";
+        const creditField = fieldMap["credit"];
+        const debitField = fieldMap["debit"];
+        const amountField = fieldMap["amount"];
+
+        // Try to parse credit/debit if mapped
+        let creditVal: number | null = null;
+        let debitVal: number | null = null;
+        if (creditField && row[creditField] !== undefined && row[creditField] !== "") {
+          const v = parseFloat((row[creditField] + "").replace(/,/g, ""));
+          if (!isNaN(v)) creditVal = v;
+        }
+        if (debitField && row[debitField] !== undefined && row[debitField] !== "") {
+          const v = parseFloat((row[debitField] + "").replace(/,/g, ""));
+          if (!isNaN(v)) debitVal = v;
+        }
+
+        if (creditVal !== null || debitVal !== null) {
+          // If both present, subtract debit from credit
+          amount = (creditVal || 0) - (debitVal || 0);
+        } else if (amountField && row[amountField] !== undefined && row[amountField] !== "") {
+          // Fallback to single amount column
+          const v = parseFloat((row[amountField] + "").replace(/,/g, ""));
+          amount = !isNaN(v) ? v : row[amountField];
+        } else {
+          amount = "";
+        }
+
+        mapped["amount"] = amount;
         mapped["fromAccountId"] = accountId;
         return mapped;
       });
@@ -141,7 +186,15 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
   // Validation for navigation
   const canProceedFromUpload = csvRows.length > 0 && csvHeaders.length > 0;
   // Only require mapping for requiredFields, not toAccountId
-  const canProceedFromMap = requiredFields.every((field) => fieldMap[field]);
+  // For amount, allow either "amount" or ("credit" or "debit") to be mapped
+  const hasAmountMapping =
+    !!fieldMap["amount"] ||
+    !!fieldMap["credit"] ||
+    !!fieldMap["debit"];
+  const canProceedFromMap =
+    requiredFields.every((field) =>
+      field === "amount" ? hasAmountMapping : !!fieldMap[field]
+    );
   const canProceedFromPreview = importPreview.length > 0;
 
   // Import transactions
@@ -305,7 +358,8 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
               </div>
             )}
             <div className="flex flex-col gap-4 mb-4">
-              {systemFields.map((field) => (
+              {/* Only show mapping for amount, credit, debit, date, description, toAccountId */}
+              {["date", "amount", "credit", "debit", "description", "toAccountId"].map((field) => (
                 <div
                   key={field}
                   className="flex flex-col sm:flex-row sm:items-center gap-2 last:border-b-0 last:pb-0"
@@ -369,7 +423,8 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
               <table className="min-w-full text-xs">
                 <thead>
                   <tr>
-                    {systemFields.map((field) => (
+                    {/* Only show preview for date, amount, description, toAccountId */}
+                    {["date", "amount", "description", "toAccountId"].map((field) => (
                       <th key={field} className="px-2 py-1 border-b">
                         {systemFieldMeta[field]?.label || field}
                       </th>
@@ -379,7 +434,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                 <tbody>
                   {importPreview.map((row, i) => (
                     <tr key={i}>
-                      {systemFields.map((field) => (
+                      {["date", "amount", "description", "toAccountId"].map((field) => (
                         <td key={field} className="px-2 py-1 border-b">
                           {row[field]}
                         </td>
