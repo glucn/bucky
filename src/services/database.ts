@@ -221,6 +221,11 @@ class DatabaseService {
    * fromAccountId: The account to credit
    * toAccountId: The account to debit
    */
+  /**
+   * Create a double-entry journal entry (transaction) with deduplication.
+   * Returns { skipped: true, reason: "duplicate" } if a duplicate is found.
+   * Otherwise, returns { skipped: false, entry: createdEntry }.
+   */
   public async createJournalEntry(
     data: {
       date: string | Date;
@@ -230,13 +235,97 @@ class DatabaseService {
       toAccountId: string;
     },
     tx?: TransactionClient
-  ) {
+  ): Promise<{ skipped: boolean; reason?: string; entry?: any }> {
     const prisma = tx || this.prisma;
     // Always round the amount to two decimals
     const roundedAmount = Math.round(Math.abs(data.amount) * 100) / 100;
-    return prisma.journalEntry.create({
+
+    // Robust date parsing
+    let parsedDate: Date | null = null;
+    let dateStr = data.date instanceof Date ? data.date.toISOString() : String(data.date);
+    // Try ISO 8601 first
+    if (data.date instanceof Date && !isNaN(data.date.getTime())) {
+      parsedDate = data.date;
+    } else {
+      // Try ISO
+      let tryDate = new Date(dateStr);
+      if (!isNaN(tryDate.getTime())) {
+        parsedDate = tryDate;
+      } else {
+        // Try MM/DD/YYYY
+        const mmddyyyy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+        const match = dateStr.match(mmddyyyy);
+        if (match) {
+          const [_, mm, dd, yyyy] = match;
+          tryDate = new Date(`${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`);
+          if (!isNaN(tryDate.getTime())) {
+            parsedDate = tryDate;
+          }
+        }
+        // Try DD/MM/YYYY
+        const ddmmyyyy = /^(\d{1,2})\-(\d{1,2})\-(\d{4})$/;
+        const match2 = dateStr.match(ddmmyyyy);
+        if (!parsedDate && match2) {
+          const [_, dd, mm, yyyy] = match2;
+          tryDate = new Date(`${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`);
+          if (!isNaN(tryDate.getTime())) {
+            parsedDate = tryDate;
+          }
+        }
+      }
+      // Try YYYYMMDD (log attempt)
+      if (!parsedDate) {
+        const yyyymmdd = /^(\d{4})(\d{2})(\d{2})$/;
+        const match3 = dateStr.match(yyyymmdd);
+        console.log("[IMPORT][DATE] Trying YYYYMMDD for:", dateStr, "Match:", match3);
+        if (match3) {
+          const [_, yyyy, mm, dd] = match3;
+          const tryDate = new Date(`${yyyy}-${mm}-${dd}`);
+          console.log("[IMPORT][DATE] Parsed YYYYMMDD:", `${yyyy}-${mm}-${dd}`, "->", tryDate);
+          if (!isNaN(tryDate.getTime())) {
+            parsedDate = tryDate;
+          }
+        }
+      }
+    }
+    if (!parsedDate || isNaN(parsedDate.getTime())) {
+      console.error("[IMPORT][DATE] Could not parse date:", data.date, "(raw:", dateStr, ")");
+      return { skipped: true, reason: "Invalid date" };
+    }
+
+    // Deduplication: check for existing entry with same date, amount, description, fromAccountId, toAccountId
+    const existing = await prisma.journalEntry.findFirst({
+      where: {
+        date: parsedDate,
+        description: data.description,
+        lines: {
+          some: {
+            accountId: data.fromAccountId,
+            amount: -roundedAmount,
+          },
+        },
+        // Check for the matching debit line as well
+        AND: [
+          {
+            lines: {
+              some: {
+                accountId: data.toAccountId,
+                amount: roundedAmount,
+              },
+            },
+          },
+        ],
+      },
+      include: { lines: true },
+    });
+
+    if (existing) {
+      return { skipped: true, reason: "duplicate" };
+    }
+
+    const entry = await prisma.journalEntry.create({
       data: {
-        date: new Date(data.date),
+        date: parsedDate,
         description: data.description,
         lines: {
           create: [
@@ -255,6 +344,8 @@ class DatabaseService {
       },
       include: { lines: true },
     });
+
+    return { skipped: false, entry };
   }
 
   /**
@@ -272,15 +363,47 @@ class DatabaseService {
         entry: {
         },
       },
-      include: { entry: true, account: true },
+      include: {
+        entry: true, // Only include the entry id for now
+        account: true
+      },
       orderBy: { entry: { date: "desc" } },
     });
-    // Convert account.type to AccountType in each line
+
+    // Get all unique entryIds
+    const entryIds = Array.from(new Set(lines.map((line) => line.entryId)));
+
+    // Fetch all entries with their lines and accounts
+    const entries = await prisma.journalEntry.findMany({
+      where: { id: { in: entryIds } },
+      include: {
+        lines: { include: { account: true } },
+      },
+    });
+
+    // Map entryId to entry with lines and accounts
+    const entryMap = new Map(
+      entries.map((entry) => [
+        entry.id,
+        {
+          ...entry,
+          lines: entry.lines.map((l: any) => ({
+            ...l,
+            account: l.account
+              ? { ...l.account, type: toAccountType(l.account.type) }
+              : l.account,
+          })),
+        },
+      ])
+    );
+
+    // Convert account.type to AccountType in each line and attach full entry with lines
     return lines.map((line) => ({
       ...line,
       account: line.account
         ? { ...line.account, type: toAccountType(line.account.type) }
         : line.account,
+      entry: entryMap.get(line.entryId) || line.entry,
     }));
   }
 
@@ -570,6 +693,18 @@ class DatabaseService {
         currency: "USD",
       },
       // Category accounts
+      {
+        name: "Uncategorized Income",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+      },
+      {
+        name: "Uncategorized Expense",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+      },
       {
         name: "Salary",
         type: AccountType.Category,
@@ -968,6 +1103,98 @@ class DatabaseService {
       console.error("Error creating new checkpoint:", err);
       throw err;
     }
+  }
+  /**
+   * Update a journal entry (transaction) by lineId.
+   * Updates the entry's date/description and both lines' amounts/descriptions.
+   * @param data { lineId, fromAccountId, toAccountId, amount, date, description }
+   */
+  public async updateJournalEntryLine(
+    data: {
+      lineId: string;
+      fromAccountId: string;
+      toAccountId: string;
+      amount: number;
+      date: string;
+      description: string;
+    },
+    tx?: TransactionClient
+  ): Promise<any> {
+    const prisma = tx || this.prisma;
+    // Find the journal line and its entry
+    const line = await prisma.journalLine.findUnique({
+      where: { id: data.lineId },
+      include: { entry: { include: { lines: true } } },
+    });
+    if (!line) throw new Error("Journal line not found");
+    const entry = line.entry;
+    if (!entry) throw new Error("Journal entry not found");
+
+    // Find both lines in the entry
+    const lines = entry.lines;
+    if (lines.length !== 2) throw new Error("Expected double-entry transaction");
+
+    // Determine which is from and which is to
+    let fromLine = lines.find((l: any) => l.accountId === data.fromAccountId);
+    let toLine = lines.find((l: any) => l.accountId === data.toAccountId);
+
+    // If the toLine is not found (category/account changed), update the accountId of the "other" line
+    if (!fromLine) {
+      // This should not happen in normal double-entry, but fallback: pick the line that is not the new toAccountId
+      fromLine = lines.find((l: any) => l.accountId !== data.toAccountId);
+    }
+    if (!toLine) {
+      // Find the line that is not the fromAccountId
+      const otherLine = lines.find((l: any) => l.accountId !== data.fromAccountId);
+      if (!otherLine) throw new Error("Could not find the other side of transaction");
+      // Update its accountId to the new toAccountId
+      await prisma.journalLine.update({
+        where: { id: otherLine.id },
+        data: { accountId: data.toAccountId },
+      });
+      // Re-fetch lines after update
+      const updatedEntry = await prisma.journalEntry.findUnique({
+        where: { id: entry.id },
+        include: { lines: true },
+      });
+      toLine = updatedEntry?.lines.find((l: any) => l.accountId === data.toAccountId);
+      fromLine = updatedEntry?.lines.find((l: any) => l.accountId === data.fromAccountId);
+    }
+
+    if (!fromLine || !toLine) throw new Error("Could not find both sides of transaction");
+
+    const roundedAmount = Math.round(Math.abs(data.amount) * 100) / 100;
+
+    // Update the entry (date, description)
+    await prisma.journalEntry.update({
+      where: { id: entry.id },
+      data: {
+        date: new Date(data.date),
+        description: data.description,
+      },
+    });
+
+    // Update both lines
+    await prisma.journalLine.update({
+      where: { id: fromLine.id },
+      data: {
+        amount: -roundedAmount,
+        description: data.description,
+      },
+    });
+    await prisma.journalLine.update({
+      where: { id: toLine.id },
+      data: {
+        amount: roundedAmount,
+        description: data.description,
+      },
+    });
+
+    // Return updated entry with lines
+    return prisma.journalEntry.findUnique({
+      where: { id: entry.id },
+      include: { lines: true },
+    });
   }
 }
 

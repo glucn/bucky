@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { TransactionModal } from "../components/TransactionModal";
+import { ManualTransactionModal } from "../components/ManualTransactionModal";
+import { ImportTransactionsWizard } from "../components/ImportTransactionsWizard";
 
 // Modal for setting opening balance for the current account
 const SetOpeningBalanceModal: React.FC<{
@@ -315,14 +316,14 @@ const CreateCheckpointModal: React.FC<{
   );
 };
 
-interface JournalEntry {
+export interface JournalEntry {
   id: string;
   date: string;
   description?: string;
   lines: JournalLine[];
 }
 
-interface JournalLine {
+export interface JournalLine {
   id: string;
   entryId: string;
   accountId: string;
@@ -336,9 +337,11 @@ export const AccountTransactionsPage: React.FC = () => {
   const { accountId } = useParams<{ accountId: string }>();
   const [transactions, setTransactions] = useState<JournalLine[]>([]);
   const [account, setAccount] = useState<Account | null>(null);
-  const [showModal, setShowModal] = useState(false);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [showOpenBalanceModal, setShowOpenBalanceModal] = useState(false);
   const [showCheckpointModal, setShowCheckpointModal] = useState(false);
+  const [editTransaction, setEditTransaction] = useState<JournalLine | null>(null);
 
   const fetchTransactions = async () => {
     if (!accountId) return;
@@ -412,10 +415,17 @@ export const AccountTransactionsPage: React.FC = () => {
           {/* Primary action button */}
           <button
             className="px-4 py-2 bg-primary-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-            onClick={() => setShowModal(true)}
+            onClick={() => setShowManualModal(true)}
             type="button"
           >
-            Add / Import Transactions
+            Add Transaction
+          </button>
+          <button
+            className="px-4 py-2 bg-primary-500 text-white rounded-md shadow-sm text-sm font-medium hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            onClick={() => setShowImportModal(true)}
+            type="button"
+          >
+            Import Transactions
           </button>
         </div>
       </div>
@@ -433,37 +443,88 @@ export const AccountTransactionsPage: React.FC = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Description
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Category
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white">
               {transactions.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="text-center py-4 text-gray-500">
+                  <td colSpan={5} className="text-center py-4 text-gray-500">
                     No transactions found.
                   </td>
                 </tr>
               )}
-              {transactions.map((line) => (
-                <tr key={line.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(line.entry.date).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {line.amount.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {line.description || line.entry.description}
-                  </td>
-                </tr>
-              ))}
+              {transactions.map((line) => {
+                // Find the "other" line in the same entry (the other side of the double-entry)
+                const otherLine = line.entry?.lines?.find(
+                  (l: any) => l.accountId !== line.accountId
+                );
+                const categoryName = otherLine?.account?.name || "—";
+                return (
+                  <tr
+                    key={line.id}
+                    className={
+                      (categoryName === "Uncategorized Income" || categoryName === "Uncategorized Expense")
+                        ? "bg-yellow-50 border-l-4 border-yellow-400"
+                        : "border-b border-gray-200"
+                    }
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(line.entry.date).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {line.amount.toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {line.description || line.entry.description}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {categoryName}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <button
+                        className="text-primary-600 hover:underline"
+                        onClick={() => setEditTransaction(line)}
+                        type="button"
+                        aria-label="Edit transaction"
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
-      {showModal && (
-        <TransactionModal
+      {showManualModal && (
+        <ManualTransactionModal
           accountId={accountId!}
-          onClose={() => setShowModal(false)}
+          onClose={() => setShowManualModal(false)}
+          onSuccess={fetchTransactions}
+        />
+      )}
+      {editTransaction && (
+        <ManualTransactionModal
+          accountId={accountId!}
+          transaction={editTransaction}
+          onClose={() => setEditTransaction(null)}
+          onSuccess={() => {
+            setEditTransaction(null);
+            fetchTransactions();
+          }}
+        />
+      )}
+      {showImportModal && (
+        <ImportTransactionsWizard
+          accountId={accountId!}
+          onClose={() => setShowImportModal(false)}
           onSuccess={fetchTransactions}
         />
       )}

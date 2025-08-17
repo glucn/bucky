@@ -120,6 +120,20 @@ function setupIpcHandlers() {
     }
   });
 
+  ipcMain.handle("update-transaction", async (_, data) => {
+    console.log("Handling update-transaction request:", data);
+    try {
+      const result = await databaseService.updateJournalEntryLine(data);
+      return { success: true, updatedEntry: result };
+    } catch (error) {
+      console.error("Error updating transaction:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  });
+
   ipcMain.handle(
     "create-opening-balance-entry",
     async (
@@ -161,32 +175,237 @@ function setupIpcHandlers() {
   ipcMain.handle("import-transactions", async (_, { transactions }) => {
     console.log("Handling import-transactions request");
     // Each transaction should have: date, amount, description, fromAccountId, toAccountId
+    // Declare summary variables outside try for error reporting
+    let importedCount = 0;
+    let skippedCount = 0;
+    const skippedDetails = [];
+    const usedDefaultAccountDetails = [];
     try {
-      const results = [];
+
+      // Ensure default accounts exist
+      await databaseService.ensureDefaultAccounts();
+
+      // Fetch all category accounts for quick lookup
+      const allAccounts = await databaseService.getAccounts(true);
+      const uncategorizedIncome = allAccounts.find(
+        (acc) => acc.name === "Uncategorized Income" && acc.type === "category"
+      );
+      const uncategorizedExpense = allAccounts.find(
+        (acc) => acc.name === "Uncategorized Expense" && acc.type === "category"
+      );
+
       for (const tx of transactions) {
-        // Basic validation: skip if required fields are missing
+        console.log("[IMPORT] Processing transaction:", JSON.stringify(tx));
+        // Basic validation: skip if required fields are missing (except toAccountId)
         if (
           !tx.date ||
           !tx.amount ||
-          !tx.fromAccountId ||
-          !tx.toAccountId
-        )
+          !tx.fromAccountId
+        ) {
+          console.log("[IMPORT] Skipping transaction due to missing required fields:", tx);
           continue;
-        const result = await databaseService.createJournalEntry({
-          date: tx.date,
-          amount: Number(tx.amount),
-          description: tx.description,
-          fromAccountId: tx.fromAccountId,
-          toAccountId: tx.toAccountId,
-        });
-        results.push(result);
+        }
+
+        // Find the user's account and its subtype
+        const userAccount = allAccounts.find(acc => acc.id === tx.fromAccountId);
+        if (!userAccount) {
+          skippedCount++;
+          skippedDetails.push({
+            date: tx.date,
+            amount: tx.amount,
+            description: tx.description,
+            fromAccountId: tx.fromAccountId,
+            toAccountId: tx.toAccountId,
+            reason: "User account not found",
+          });
+          continue;
+        }
+
+        let fromAccountId = tx.fromAccountId;
+        let toAccountId = tx.toAccountId;
+        let usedDefault = false;
+        let defaultAccountName = null;
+        const amount = Number(tx.amount);
+
+        // Determine direction based on subtype and sign
+        if (userAccount.subtype === "asset") {
+          if (amount > 0) {
+            // Increase asset: user's account is TO
+            fromAccountId = toAccountId || (uncategorizedIncome ? uncategorizedIncome.id : null);
+            toAccountId = tx.fromAccountId;
+            if (!fromAccountId) {
+              skippedCount++;
+              skippedDetails.push({
+                date: tx.date,
+                amount: tx.amount,
+                description: tx.description,
+                fromAccountId: tx.fromAccountId,
+                toAccountId: tx.toAccountId,
+                reason: "Missing source account for asset increase",
+              });
+              continue;
+            }
+            if (!tx.toAccountId && uncategorizedIncome) {
+              usedDefault = true;
+              defaultAccountName = "Uncategorized Income";
+            }
+          } else {
+            // Decrease asset: user's account is FROM
+            toAccountId = toAccountId || (uncategorizedExpense ? uncategorizedExpense.id : null);
+            if (!toAccountId) {
+              skippedCount++;
+              skippedDetails.push({
+                date: tx.date,
+                amount: tx.amount,
+                description: tx.description,
+                fromAccountId: tx.fromAccountId,
+                toAccountId: tx.toAccountId,
+                reason: "Missing destination account for asset decrease",
+              });
+              continue;
+            }
+            if (!tx.toAccountId && uncategorizedExpense) {
+              usedDefault = true;
+              defaultAccountName = "Uncategorized Expense";
+            }
+          }
+        } else if (userAccount.subtype === "liability") {
+          if (amount > 0) {
+            // Increase liability: user's account is FROM
+            toAccountId = toAccountId || (uncategorizedExpense ? uncategorizedExpense.id : null);
+            if (!toAccountId) {
+              skippedCount++;
+              skippedDetails.push({
+                date: tx.date,
+                amount: tx.amount,
+                description: tx.description,
+                fromAccountId: tx.fromAccountId,
+                toAccountId: tx.toAccountId,
+                reason: "Missing destination account for liability increase",
+              });
+              continue;
+            }
+            if (!tx.toAccountId && uncategorizedExpense) {
+              usedDefault = true;
+              defaultAccountName = "Uncategorized Expense";
+            }
+          } else {
+            // Decrease liability: user's account is TO
+            fromAccountId = toAccountId || (uncategorizedIncome ? uncategorizedIncome.id : null);
+            toAccountId = tx.fromAccountId;
+            if (!fromAccountId) {
+              skippedCount++;
+              skippedDetails.push({
+                date: tx.date,
+                amount: tx.amount,
+                description: tx.description,
+                fromAccountId: tx.fromAccountId,
+                toAccountId: tx.toAccountId,
+                reason: "Missing source account for liability decrease",
+              });
+              continue;
+            }
+            if (!tx.toAccountId && uncategorizedIncome) {
+              usedDefault = true;
+              defaultAccountName = "Uncategorized Income";
+            }
+          }
+        } else {
+          // Unknown subtype, fallback to original logic
+          if (!toAccountId) {
+            if (amount > 0 && uncategorizedIncome) {
+              toAccountId = uncategorizedIncome.id;
+              usedDefault = true;
+              defaultAccountName = "Uncategorized Income";
+            } else if (amount < 0 && uncategorizedExpense) {
+              toAccountId = uncategorizedExpense.id;
+              usedDefault = true;
+              defaultAccountName = "Uncategorized Expense";
+            } else {
+              skippedCount++;
+              skippedDetails.push({
+                date: tx.date,
+                amount: tx.amount,
+                description: tx.description,
+                fromAccountId: tx.fromAccountId,
+                toAccountId: tx.toAccountId,
+                reason: "Missing toAccountId and no default account found",
+              });
+              continue;
+            }
+          }
+        }
+
+        try {
+          const result = await databaseService.createJournalEntry({
+            date: tx.date,
+            amount: Math.abs(amount),
+            description: tx.description,
+            fromAccountId,
+            toAccountId,
+          });
+
+          if (result.skipped) {
+            skippedCount++;
+            skippedDetails.push({
+              date: tx.date,
+              amount: tx.amount,
+              description: tx.description,
+              fromAccountId,
+              toAccountId,
+              reason: result.reason,
+            });
+            console.log("[IMPORT] Skipped transaction (reason):", result.reason, tx);
+          } else {
+            importedCount++;
+            if (usedDefault) {
+              usedDefaultAccountDetails.push({
+                date: tx.date,
+                amount: tx.amount,
+                description: tx.description,
+                fromAccountId,
+                toAccountId,
+                defaultAccountName,
+              });
+            }
+            console.log("[IMPORT] Imported transaction:", tx);
+          }
+        } catch (err) {
+          skippedCount++;
+          skippedDetails.push({
+            date: tx.date,
+            amount: tx.amount,
+            description: tx.description,
+            fromAccountId,
+            toAccountId,
+            reason: err instanceof Error ? err.message : "Unknown error",
+          });
+          console.error("[IMPORT] Error importing transaction:", err, tx);
+        }
       }
-      return { success: true, count: results.length };
+      console.log("[IMPORT] Import summary:", {
+        importedCount,
+        skippedCount,
+        skippedDetails,
+        usedDefaultAccountDetails,
+      });
+      return {
+        success: true,
+        imported: importedCount,
+        skipped: skippedCount,
+        skippedDetails,
+        usedDefaultAccountDetails,
+      };
     } catch (err) {
       console.error("Failed to import transactions", err);
       let message = "Unknown error";
       if (err instanceof Error) message = err.message;
-      return { success: false, error: message };
+      // Always return usedDefaultAccountDetails if available
+      return {
+        success: false,
+        error: message,
+        usedDefaultAccountDetails: typeof usedDefaultAccountDetails !== "undefined" ? usedDefaultAccountDetails : [],
+      };
     }
   });
 
