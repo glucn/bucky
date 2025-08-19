@@ -559,6 +559,20 @@ function setupIpcHandlers() {
   });
 
   console.log("All IPC handlers registered");
+  // DEV ONLY: Reset all data to initial state
+  ipcMain.handle("reset-all-data", async () => {
+    try {
+      await databaseService.resetAllData();
+      return { success: true };
+    } catch (error) {
+      console.error("Error resetting all data:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  });
+
 }
 
 // Create the browser window

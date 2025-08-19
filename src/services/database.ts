@@ -13,6 +13,29 @@ class DatabaseService {
   private static instance: DatabaseService;
   private prisma: PrismaClient;
 
+  /**
+   * Reset all data in the database to the initial state.
+   * Deletes all accounts, journal entries, journal lines, and checkpoints,
+   * then re-creates the default accounts.
+   * For development/testing use only!
+   */
+  public async resetAllData() {
+    const prisma = this.prisma;
+    await prisma.$transaction(async (tx) => {
+      // Delete all journal lines
+      await tx.journalLine.deleteMany({});
+      // Delete all journal entries
+      await tx.journalEntry.deleteMany({});
+      // Delete all checkpoints
+      await tx.checkpoint.deleteMany({});
+      // Delete all accounts
+      await tx.account.deleteMany({});
+      // Re-create default accounts
+      await this.ensureDefaultAccounts(tx);
+    });
+    console.log("[DEV] All data reset to initial state.");
+  }
+
   private constructor() {
     const isDev = process.env.NODE_ENV === "development";
     const queryEnginePath = isDev
