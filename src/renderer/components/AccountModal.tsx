@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AccountType, toAccountType } from "../../shared/accountTypes";
+import { AccountType, toAccountType, AccountSubtype } from "../../shared/accountTypes";
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -16,6 +16,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
     name: "",
     type: AccountType.User,
     currency: "USD",
+    subtype: AccountSubtype.Asset,
   });
   const [loading, setLoading] = useState(false);
 
@@ -24,7 +25,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
     setLoading(true);
     await window.electron.ipcRenderer.invoke("add-account", newAccount);
     setLoading(false);
-    setNewAccount({ name: "", type: AccountType.User, currency: "USD" });
+    setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
     onAccountCreated();
     onClose();
   };
@@ -85,6 +86,28 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               <option value="bank">Bank</option>
               <option value="credit">Credit Card</option>
               <option value="investment">Investment</option>
+            </select>
+          </div>
+          <div>
+            <label
+              htmlFor="subtype"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Account Subtype
+            </label>
+            <select
+              id="subtype"
+              value={newAccount.subtype}
+              onChange={(e) =>
+                setNewAccount({
+                  ...newAccount,
+                  subtype: e.target.value as AccountSubtype,
+                })
+              }
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+            >
+              <option value={AccountSubtype.Asset}>Asset</option>
+              <option value={AccountSubtype.Liability}>Liability</option>
             </select>
           </div>
           <div>

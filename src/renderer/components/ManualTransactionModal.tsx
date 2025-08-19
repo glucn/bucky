@@ -16,12 +16,15 @@ interface NewTransaction {
   description: string;
 }
 
+import { useAccounts } from "../context/AccountsContext";
+
 export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
   accountId,
   onClose,
   onSuccess,
   transaction,
 }) => {
+  const { refreshAccounts } = useAccounts();
   const isEdit = !!transaction;
   const [newTransaction, setNewTransaction] = useState<NewTransaction>({
     toAccountId: isEdit
@@ -83,6 +86,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
         });
       }
       setIsSubmitting(false);
+      await refreshAccounts();
       onSuccess();
       onClose();
     } catch (err) {

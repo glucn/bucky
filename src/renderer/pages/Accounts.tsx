@@ -2,9 +2,10 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Account } from "../types";
 import { AccountModal } from "../components/AccountModal";
+import { useAccounts } from "../context/AccountsContext";
 
 export const Accounts: React.FC = () => {
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const { accounts, refreshAccounts } = useAccounts();
   const [archivedAccounts, setArchivedAccounts] = useState<Account[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [accountBalances, setAccountBalances] = useState<
@@ -25,8 +26,16 @@ export const Accounts: React.FC = () => {
   >({});
 
   useEffect(() => {
-    fetchAccounts();
-  }, []);
+    // Only set archived accounts, as active accounts come from context
+    const fetchArchived = async () => {
+      const allAccounts = await window.electron.ipcRenderer.invoke(
+        "get-accounts",
+        true // include archived
+      );
+      setArchivedAccounts(allAccounts.filter((a: Account) => a.isArchived));
+    };
+    fetchArchived();
+  }, [accounts]);
 
   // Fetch checkpoint information for all accounts
   useEffect(() => {
@@ -66,14 +75,7 @@ export const Accounts: React.FC = () => {
     }
   }, [accounts, archivedAccounts]);
 
-  const fetchAccounts = async () => {
-    const allAccounts = await window.electron.ipcRenderer.invoke(
-      "get-accounts",
-      true // include archived
-    );
-    setAccounts(allAccounts.filter((a: Account) => !a.isArchived));
-    setArchivedAccounts(allAccounts.filter((a: Account) => a.isArchived));
-  };
+  // fetchAccounts removed; use refreshAccounts and fetchArchived instead
 
   // Compute balances for all accounts (using checkpoint-aware balance calculation)
   useEffect(() => {
@@ -136,7 +138,7 @@ export const Accounts: React.FC = () => {
         setDeletingAccountId(null);
         if (delResult.success) {
           alert("Account deleted successfully");
-          fetchAccounts();
+          await refreshAccounts();
         } else {
           alert(`Failed to delete account: ${delResult.error}`);
         }
@@ -156,7 +158,7 @@ export const Accounts: React.FC = () => {
         setArchivingAccountId(null);
         if (archResult.success) {
           alert("Account archived successfully");
-          fetchAccounts();
+          await refreshAccounts();
         } else {
           alert(`Failed to archive account: ${archResult.error}`);
         }
@@ -173,7 +175,7 @@ export const Accounts: React.FC = () => {
     setRestoringAccountId(null);
     if (result.success) {
       alert("Account restored successfully");
-      fetchAccounts();
+      await refreshAccounts();
     } else {
       alert(`Failed to restore account: ${result.error}`);
     }
@@ -194,7 +196,7 @@ export const Accounts: React.FC = () => {
             <AccountModal
               isOpen={showAccountModal}
               onClose={() => setShowAccountModal(false)}
-              onAccountCreated={fetchAccounts}
+              onAccountCreated={refreshAccounts}
             />
           </div>
           <div className="flex items-center gap-4">

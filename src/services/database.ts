@@ -70,6 +70,7 @@ class DatabaseService {
       name: string;
       type: AccountType | string;
       currency?: string;
+      subtype?: AccountSubtype | string;
     },
     tx?: TransactionClient
   ) {
@@ -79,6 +80,7 @@ class DatabaseService {
         name: data.name,
         type: data.type as AccountType,
         currency: data.currency || "USD",
+        subtype: (data.subtype as AccountSubtype) || AccountSubtype.Asset,
       },
     });
   }
