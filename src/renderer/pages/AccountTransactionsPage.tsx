@@ -438,7 +438,7 @@ export const AccountTransactionsPage: React.FC = () => {
                   Date
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount
+                  Amount / Exchange Rate
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Description
@@ -478,7 +478,50 @@ export const AccountTransactionsPage: React.FC = () => {
                       {new Date(line.entry.date).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {line.amount.toFixed(2)}
+                      {/* Multi-currency transfer display */}
+                      {(() => {
+                        const otherLine = line.entry?.lines?.find(
+                          (l: any) => l.accountId !== line.accountId
+                        );
+                        const isUser = (acc: any) => acc?.type === "user" || acc?.type === "User";
+                        const isTransfer =
+                          otherLine &&
+                          isUser(line.account) &&
+                          isUser(otherLine.account) &&
+                          line.account.currency !== otherLine.account.currency;
+                        if (isTransfer) {
+                          // Show both sides and exchange rate
+                          const thisAmt = line.amount;
+                          const otherAmt = otherLine.amount;
+                          const thisCur = line.account.currency;
+                          const otherCur = otherLine.account.currency;
+                          // Avoid division by zero
+                          const rate =
+                            Math.abs(thisAmt) > 0
+                              ? Math.abs(otherAmt / thisAmt)
+                              : 1;
+                          return (
+                            <div>
+                              <div>
+                                {thisAmt.toFixed(2)} {thisCur}
+                              </div>
+                              <div>
+                                {otherAmt.toFixed(2)} {otherCur}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Exchange Rate: {rate.toFixed(6)} ({thisCur} → {otherCur})
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          // Regular transaction
+                          return (
+                            <span>
+                              {line.amount.toFixed(2)} {line.account.currency}
+                            </span>
+                          );
+                        }
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {line.description || line.entry.description}

@@ -133,13 +133,22 @@ class DatabaseService {
   }
   /**
    * Get all accounts with their current balances.
-   * Returns: Array<{ ...account, balance: number }>
+   * Optionally filter by currency, or aggregate by currency if no filter is provided.
+   * Returns: Array<{ ...account, balance: number }> or { [currency: string]: number }
    */
-  public async getAccountsWithBalances(includeArchived: boolean = false, tx?: TransactionClient) {
+  public async getAccountsWithBalances(
+    includeArchived: boolean = false,
+    tx?: TransactionClient,
+    currency?: string // NEW: optional currency filter
+  ) {
     const prisma = tx || this.prisma;
     try {
+      const where: any = includeArchived ? {} : { isArchived: false };
+      if (currency) {
+        where.currency = currency;
+      }
       const accounts = await prisma.account.findMany({
-        where: includeArchived ? {} : { isArchived: false },
+        where,
         orderBy: { createdAt: "asc" },
       });
       // For each account, get its current balance
@@ -153,7 +162,22 @@ class DatabaseService {
           };
         })
       );
-      return results;
+      if (currency) {
+        // If filtering, just return the filtered list
+        return results;
+      } else {
+        // Aggregate by currency
+        const grouped: Record<string, number> = {};
+        for (const acc of results) {
+          if (!grouped[acc.currency]) grouped[acc.currency] = 0;
+          grouped[acc.currency] += acc.balance;
+        }
+        // Round to 2 decimals
+        for (const cur in grouped) {
+          grouped[cur] = Math.round(grouped[cur] * 100) / 100;
+        }
+        return grouped;
+      }
     } catch (error) {
       console.error("Error fetching accounts with balances:", error);
       throw error;
@@ -241,136 +265,263 @@ class DatabaseService {
 
   // Double-entry transaction operations
   /**
-   * Create a double-entry journal entry (transaction).
-   * @param data { date, amount, description, fromAccountId, toAccountId }
-   * fromAccountId: The account to credit
-   * toAccountId: The account to debit
-   */
-  /**
-   * Create a double-entry journal entry (transaction) with deduplication.
-   * Returns { skipped: true, reason: "duplicate" } if a duplicate is found.
-   * Otherwise, returns { skipped: false, entry: createdEntry }.
+   * Create a double-entry journal entry (transaction) with multi-currency support.
+   * @param data
+   *   For regular transactions:
+   *     {
+   *       date, description, fromAccountId, toAccountId, amount
+   *     }
+   *   For currency-transfer transactions:
+   *     {
+   *       date, description, fromAccountId, toAccountId,
+   *       amountFrom, amountTo, exchangeRate, type: 'currency_transfer'
+   *     }
+   *   At least two of (amountFrom, amountTo, exchangeRate) must be provided for currency-transfer.
    */
   public async createJournalEntry(
     data: {
       date: string | Date;
-      amount: number;
       description?: string;
       fromAccountId: string;
       toAccountId: string;
+      // For regular: amount (single-currency)
+      amount?: number;
+      // For currency-transfer: both amounts and exchange rate
+      amountFrom?: number;
+      amountTo?: number;
+      exchangeRate?: number;
+      type?: string; // 'regular' | 'currency_transfer'
     },
     tx?: TransactionClient
   ): Promise<{ skipped: boolean; reason?: string; entry?: any }> {
     const prisma = tx || this.prisma;
-    // Always round the amount to two decimals
-    const roundedAmount = Math.round(Math.abs(data.amount) * 100) / 100;
 
-    // Robust date parsing
+    // Parse date (same as before)
     let parsedDate: Date | null = null;
     let dateStr = data.date instanceof Date ? data.date.toISOString() : String(data.date);
-    // Try ISO 8601 first
     if (data.date instanceof Date && !isNaN(data.date.getTime())) {
       parsedDate = data.date;
     } else {
-      // Try ISO
       let tryDate = new Date(dateStr);
       if (!isNaN(tryDate.getTime())) {
         parsedDate = tryDate;
       } else {
-        // Try MM/DD/YYYY
         const mmddyyyy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
         const match = dateStr.match(mmddyyyy);
         if (match) {
           const [_, mm, dd, yyyy] = match;
           tryDate = new Date(`${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`);
-          if (!isNaN(tryDate.getTime())) {
-            parsedDate = tryDate;
-          }
+          if (!isNaN(tryDate.getTime())) parsedDate = tryDate;
         }
-        // Try DD/MM/YYYY
         const ddmmyyyy = /^(\d{1,2})\-(\d{1,2})\-(\d{4})$/;
         const match2 = dateStr.match(ddmmyyyy);
         if (!parsedDate && match2) {
           const [_, dd, mm, yyyy] = match2;
           tryDate = new Date(`${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`);
-          if (!isNaN(tryDate.getTime())) {
-            parsedDate = tryDate;
-          }
+          if (!isNaN(tryDate.getTime())) parsedDate = tryDate;
         }
       }
-      // Try YYYYMMDD (log attempt)
       if (!parsedDate) {
         const yyyymmdd = /^(\d{4})(\d{2})(\d{2})$/;
         const match3 = dateStr.match(yyyymmdd);
-        console.log("[IMPORT][DATE] Trying YYYYMMDD for:", dateStr, "Match:", match3);
         if (match3) {
           const [_, yyyy, mm, dd] = match3;
           const tryDate = new Date(`${yyyy}-${mm}-${dd}`);
-          console.log("[IMPORT][DATE] Parsed YYYYMMDD:", `${yyyy}-${mm}-${dd}`, "->", tryDate);
-          if (!isNaN(tryDate.getTime())) {
-            parsedDate = tryDate;
-          }
+          if (!isNaN(tryDate.getTime())) parsedDate = tryDate;
         }
       }
     }
     if (!parsedDate || isNaN(parsedDate.getTime())) {
-      console.error("[IMPORT][DATE] Could not parse date:", data.date, "(raw:", dateStr, ")");
       return { skipped: true, reason: "Invalid date" };
     }
 
-    // Deduplication: check for existing entry with same date, amount, description, fromAccountId, toAccountId
-    const existing = await prisma.journalEntry.findFirst({
-      where: {
-        date: parsedDate,
-        description: data.description,
-        lines: {
-          some: {
-            accountId: data.fromAccountId,
-            amount: -roundedAmount,
-          },
-        },
-        // Check for the matching debit line as well
-        AND: [
-          {
-            lines: {
-              some: {
-                accountId: data.toAccountId,
-                amount: roundedAmount,
-              },
-            },
-          },
-        ],
-      },
-      include: { lines: true },
-    });
-
-    if (existing) {
-      return { skipped: true, reason: "duplicate" };
+    // Fetch both accounts to get their currencies
+    const [fromAccount, toAccount] = await Promise.all([
+      prisma.account.findUnique({ where: { id: data.fromAccountId } }),
+      prisma.account.findUnique({ where: { id: data.toAccountId } }),
+    ]);
+    if (!fromAccount || !toAccount) {
+      return { skipped: true, reason: "Account not found" };
     }
 
-    const entry = await prisma.journalEntry.create({
-      data: {
-        date: parsedDate,
-        description: data.description,
-        lines: {
-          create: [
-            {
+    // Determine transaction type
+    const isCurrencyTransfer = data.type === "currency_transfer";
+
+    if (!isCurrencyTransfer) {
+      // Regular transaction (single currency)
+      const currency = fromAccount.currency;
+      if (currency !== toAccount.currency) {
+        return { skipped: true, reason: "Both accounts must use the same currency for regular transactions" };
+      }
+      if (typeof data.amount !== "number" || isNaN(data.amount)) {
+        return { skipped: true, reason: "Amount is required for regular transactions" };
+      }
+      const roundedAmount = Math.round(Math.abs(data.amount) * 100) / 100;
+
+      // Deduplication (same as before, but with currency)
+      const existing = await prisma.journalEntry.findFirst({
+        where: {
+          date: parsedDate,
+          description: data.description,
+          type: null,
+          lines: {
+            some: {
               accountId: data.fromAccountId,
-              amount: -roundedAmount, // Credit
-              description: data.description,
+              amount: -roundedAmount,
+              currency,
             },
+          },
+          AND: [
             {
-              accountId: data.toAccountId,
-              amount: roundedAmount, // Debit
-              description: data.description,
+              lines: {
+                some: {
+                  accountId: data.toAccountId,
+                  amount: roundedAmount,
+                  currency,
+                },
+              },
             },
           ],
         },
-      },
-      include: { lines: true },
-    });
+        include: { lines: true },
+      });
+      if (existing) {
+        return { skipped: true, reason: "duplicate" };
+      }
 
-    return { skipped: false, entry };
+      // Create entry and lines
+      const entry = await prisma.journalEntry.create({
+        data: {
+          date: parsedDate,
+          description: data.description,
+          type: null,
+          lines: {
+            create: [
+              {
+                accountId: data.fromAccountId,
+                amount: -roundedAmount,
+                currency,
+                description: data.description,
+              },
+              {
+                accountId: data.toAccountId,
+                amount: roundedAmount,
+                currency,
+                description: data.description,
+              },
+            ],
+          },
+        },
+        include: { lines: true },
+      });
+      return { skipped: false, entry };
+    } else {
+      // Currency-transfer transaction
+      const currencyFrom = fromAccount.currency;
+      const currencyTo = toAccount.currency;
+
+      // At least two of the three: amountFrom, amountTo, exchangeRate
+      const hasAmountFrom = typeof data.amountFrom === "number" && !isNaN(data.amountFrom);
+      const hasAmountTo = typeof data.amountTo === "number" && !isNaN(data.amountTo);
+      const hasExchangeRate = typeof data.exchangeRate === "number" && !isNaN(data.exchangeRate);
+
+      if (
+        [hasAmountFrom, hasAmountTo, hasExchangeRate].filter(Boolean).length < 2
+      ) {
+        return { skipped: true, reason: "At least two of amountFrom, amountTo, exchangeRate are required for currency-transfer" };
+      }
+
+      // Calculate the missing value if needed
+      let amountFrom = hasAmountFrom ? Math.round(Math.abs(data.amountFrom!) * 100) / 100 : undefined;
+      let amountTo = hasAmountTo ? Math.round(Math.abs(data.amountTo!) * 100) / 100 : undefined;
+      let exchangeRate = hasExchangeRate ? data.exchangeRate! : undefined;
+
+      if (!hasAmountFrom) {
+        // amountFrom = amountTo / exchangeRate
+        if (!hasAmountTo || !hasExchangeRate || exchangeRate === 0) {
+          return { skipped: true, reason: "Cannot calculate amountFrom" };
+        }
+        amountFrom = Math.round((amountTo! / exchangeRate!) * 100) / 100;
+      } else if (!hasAmountTo) {
+        // amountTo = amountFrom * exchangeRate
+        if (!hasAmountFrom || !hasExchangeRate) {
+          return { skipped: true, reason: "Cannot calculate amountTo" };
+        }
+        amountTo = Math.round((amountFrom! * exchangeRate!) * 100) / 100;
+      } else if (!hasExchangeRate) {
+        // exchangeRate = amountTo / amountFrom
+        if (!hasAmountFrom || !hasAmountTo || amountFrom === 0) {
+          return { skipped: true, reason: "Cannot calculate exchangeRate" };
+        }
+        exchangeRate = amountTo! / amountFrom!;
+      }
+
+      // Validate consistency (within tolerance)
+      const tolerance = 0.01;
+      if (Math.abs(amountTo! - amountFrom! * exchangeRate!) > tolerance) {
+        return { skipped: true, reason: "Amounts and exchange rate are inconsistent" };
+      }
+
+      // Deduplication: check for existing currency-transfer entry
+      const existing = await prisma.journalEntry.findFirst({
+        where: {
+          date: parsedDate,
+          description: data.description,
+          type: "currency_transfer",
+          lines: {
+            some: {
+              accountId: data.fromAccountId,
+              amount: -(amountFrom!),
+              currency: currencyFrom,
+            },
+          },
+          AND: [
+            {
+              lines: {
+                some: {
+                  accountId: data.toAccountId,
+                  amount: amountTo,
+                  currency: currencyTo,
+                },
+              },
+            },
+          ],
+        },
+        include: { lines: true },
+      });
+      if (existing) {
+        return { skipped: true, reason: "duplicate" };
+      }
+
+      // Create entry and lines, store exchangeRate on both lines
+      const entry = await prisma.journalEntry.create({
+        data: {
+          date: parsedDate,
+          description: data.description,
+          type: "currency_transfer",
+          lines: {
+            create: [
+              {
+                accountId: data.fromAccountId,
+                amount: -(amountFrom!),
+                currency: currencyFrom,
+                exchangeRate,
+                description: data.description,
+              },
+              {
+                accountId: data.toAccountId,
+                amount: amountTo!,
+                currency: currencyTo,
+                exchangeRate,
+                description: data.description,
+              },
+            ],
+          },
+        },
+        include: { lines: true },
+      });
+      return { skipped: false, entry };
+    }
   }
 
   /**
@@ -423,13 +574,57 @@ class DatabaseService {
     );
 
     // Convert account.type to AccountType in each line and attach full entry with lines
-    return lines.map((line) => ({
-      ...line,
-      account: line.account
-        ? { ...line.account, type: toAccountType(line.account.type) }
-        : line.account,
-      entry: entryMap.get(line.entryId) || line.entry,
-    }));
+    return lines.map((line) => {
+      const entry: any = entryMap.get(line.entryId) || line.entry;
+      // Only use entry.lines if it exists and is an array
+      const entryLines: any[] = Array.isArray(entry?.lines) ? entry.lines : [];
+      // Find the "other" line in the same entry
+      const otherLine = entryLines.find((l: any) => l.id !== line.id);
+      let isCurrencyTransfer = false;
+      let exchangeRate: number | undefined = undefined;
+      // Only check type if entry.type exists
+      if (
+        entry &&
+        typeof entry.type === "string" &&
+        entry.type === "currency_transfer" &&
+        otherLine &&
+        line.account?.currency &&
+        otherLine.account?.currency &&
+        line.account.currency !== otherLine.account.currency
+      ) {
+        isCurrencyTransfer = true;
+        // Prefer explicit exchangeRate field, else calculate
+        const lineExchangeRate = (line as any)["exchangeRate"];
+        const otherLineExchangeRate = (otherLine as any)?.["exchangeRate"];
+        if (typeof lineExchangeRate === "number") {
+          exchangeRate = lineExchangeRate;
+        } else if (typeof otherLineExchangeRate === "number") {
+          exchangeRate = otherLineExchangeRate;
+        } else if (Math.abs(otherLine.amount) > 0) {
+          exchangeRate = Math.abs(line.amount / otherLine.amount);
+        }
+      }
+      return {
+        ...line,
+        account: line.account
+          ? { ...line.account, type: toAccountType(line.account.type) }
+          : line.account,
+        entry,
+        isCurrencyTransfer,
+        exchangeRate,
+        otherLine: otherLine
+          ? {
+              id: otherLine.id,
+              accountId: otherLine.accountId,
+              amount: otherLine.amount,
+              currency: otherLine.account?.currency,
+              account: otherLine.account
+                ? { ...otherLine.account, type: toAccountType(otherLine.account.type) }
+                : otherLine.account,
+            }
+          : undefined,
+      };
+    });
   }
 
   public async createOpeningBalanceEntry(
@@ -504,6 +699,7 @@ class DatabaseService {
           entryId: journalEntry.id,
           accountId: item.accountId,
           amount,
+          currency: account.currency, // Add currency from the account
           description: "Opening Balance",
         });
         total += amount;
@@ -516,6 +712,7 @@ class DatabaseService {
         entryId: journalEntry.id,
         accountId: equityAccount.id,
         amount: Math.round(-total * 100) / 100, // The balancing amount, rounded
+        currency: equityAccount.currency || "USD", // Add currency for equity account
         description: "Opening Balance",
       });
     }
@@ -535,40 +732,70 @@ class DatabaseService {
   /**
    * Get net worth: sum of all user accounts (assets/liabilities) only.
    */
-  public async getNetWorth(tx?: TransactionClient) {
+  /**
+   * Get net worth: sum of all user accounts (assets/liabilities) grouped by currency.
+   * Optionally filter by currency.
+   */
+  public async getNetWorth(tx?: TransactionClient, currency?: string) {
     const prisma = tx || this.prisma;
+    const where: any = {};
+    if (currency) where.currency = currency;
     const accounts = await prisma.account.findMany({
+      where,
       include: { lines: true },
     });
 
-    let assets = 0;
-    let liabilities = 0;
+    // Group assets and liabilities by currency
+    const assets: Record<string, number> = {};
+    const liabilities: Record<string, number> = {};
 
     for (const acc of accounts) {
       if (acc.type === AccountType.User) {
         let balance = acc.lines.reduce((sum, line) => sum + line.amount, 0);
         balance = Math.round(balance * 100) / 100;
         const subtype = (acc as any).subtype;
+        const cur = acc.currency;
         if (subtype === "asset") {
-          assets += balance;
+          assets[cur] = (assets[cur] || 0) + balance;
         } else if (subtype === "liability") {
-          liabilities += balance;
+          liabilities[cur] = (liabilities[cur] || 0) + balance;
         }
       }
     }
-    assets = Math.round(assets * 100) / 100;
-    liabilities = Math.round(liabilities * 100) / 100;
-    return {
-      netWorth: Math.round((assets - liabilities) * 100) / 100,
-      assets,
-      liabilities,
-    };
+    // Round
+    for (const cur in assets) assets[cur] = Math.round(assets[cur] * 100) / 100;
+    for (const cur in liabilities) liabilities[cur] = Math.round(liabilities[cur] * 100) / 100;
+
+    // Compute net worth per currency
+    const netWorth: Record<string, number> = {};
+    const allCurrencies = new Set([...Object.keys(assets), ...Object.keys(liabilities)]);
+    for (const cur of allCurrencies) {
+      netWorth[cur] = Math.round(((assets[cur] || 0) - (liabilities[cur] || 0)) * 100) / 100;
+    }
+
+    if (currency) {
+      return {
+        netWorth: netWorth[currency] || 0,
+        assets: assets[currency] || 0,
+        liabilities: liabilities[currency] || 0,
+      };
+    } else {
+      return {
+        netWorth,
+        assets,
+        liabilities,
+      };
+    }
   }
 
   /**
    * Get total income and expenses for the current month (category accounts only).
    */
-  public async getIncomeExpenseThisMonth(tx?: TransactionClient) {
+  /**
+   * Get total income and expenses for the current month (category accounts only), grouped by currency.
+   * Optionally filter by currency.
+   */
+  public async getIncomeExpenseThisMonth(tx?: TransactionClient, currency?: string) {
     const prisma = tx || this.prisma;
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -597,39 +824,60 @@ class DatabaseService {
       },
     });
 
-    let income = 0;
-    let expenses = 0;
+    // Group by currency
+    const income: Record<string, number> = {};
+    const expenses: Record<string, number> = {};
     for (const entry of entries) {
       for (const line of entry.lines) {
         if (line.account.type === AccountType.Category) {
-          // You may want to further distinguish income vs. expense by account name or add a sub-type
+          const cur = line.account.currency;
           if (line.account.name.toLowerCase().includes("income")) {
-            income += line.amount;
+            income[cur] = (income[cur] || 0) + line.amount;
           } else {
-            expenses += line.amount;
+            expenses[cur] = (expenses[cur] || 0) + line.amount;
           }
         }
       }
     }
-    income = Math.round(Math.abs(income) * 100) / 100;
-    expenses = Math.round(Math.abs(expenses) * 100) / 100;
-    return {
-      income,
-      expenses,
-    };
+    // Round and abs
+    for (const cur in income) income[cur] = Math.round(Math.abs(income[cur]) * 100) / 100;
+    for (const cur in expenses) expenses[cur] = Math.round(Math.abs(expenses[cur]) * 100) / 100;
+
+    if (currency) {
+      // DEBUG: Log income and expenses before returning
+console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
+
+      return {
+        
+        income: income[currency] || 0,
+        expenses: expenses[currency] || 0,
+      };
+    } else {
+      // DEBUG: Log income and expenses before returning
+console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
+
+      return {
+        income,
+        expenses,
+      };
+    }
   }
 
   /**
    * Get the most recent N transactions (journal entries), including their lines and accounts.
    */
+  /**
+   * Get the most recent N transactions (journal entries), including their lines and accounts.
+   * Optionally filter by currency, or group by currency.
+   */
   public async getRecentTransactions(
     limit: number = 10,
-    tx?: TransactionClient
+    tx?: TransactionClient,
+    currency?: string
   ) {
     const prisma = tx || this.prisma;
-    return prisma.journalEntry.findMany({
-      where: {
-      },
+    // If currency is provided, filter lines by currency
+    const entries = await prisma.journalEntry.findMany({
       orderBy: { date: "desc" },
       take: limit,
       include: {
@@ -638,6 +886,27 @@ class DatabaseService {
         },
       },
     });
+    if (currency) {
+      // Only include lines with the given currency
+      return entries.map(entry => ({
+        ...entry,
+        lines: entry.lines.filter(line => line.account.currency === currency),
+      }));
+    } else {
+      // Group transactions by currency (all lines for each currency)
+      const grouped: Record<string, any[]> = {};
+      for (const entry of entries) {
+        for (const line of entry.lines) {
+          const cur = line.account.currency;
+          if (!grouped[cur]) grouped[cur] = [];
+          grouped[cur].push({
+            ...entry,
+            lines: [line],
+          });
+        }
+      }
+      return grouped;
+    }
   }
 
   /**
@@ -885,6 +1154,7 @@ class DatabaseService {
       entryId: journalEntry.id,
       accountId: data.accountId,
       amount: adjustmentAmount,
+      currency: account?.currency || "USD", // Add currency from the account
       description: data.description || "Checkpoint adjustment",
     });
 
@@ -893,6 +1163,7 @@ class DatabaseService {
       entryId: journalEntry.id,
       accountId: checkpointAccount.id,
       amount: -adjustmentAmount,
+      currency: checkpointAccount.currency || "USD", // Add currency for checkpoint account
       description: data.description || "Checkpoint adjustment",
     });
 
@@ -1101,6 +1372,58 @@ class DatabaseService {
     });
     if (!checkpoint) throw new Error("Checkpoint not found");
     console.log("Found checkpoint:", checkpoint);
+
+    // --- Multi-currency reconciliation validation ---
+    // Find all journal lines for this account up to the checkpoint date
+    const lines = await tx.journalLine.findMany({
+      where: {
+        accountId: checkpoint.accountId,
+        entry: {
+          date: { lte: checkpoint.date },
+        },
+      },
+      include: {
+        entry: {
+          include: { lines: true },
+        },
+      },
+    });
+
+    // For each currency-transfer transaction, validate value equivalence
+    const tolerance = 0.01;
+    for (const line of lines) {
+      const entry = (line as any).entry;
+      if (
+        entry &&
+        typeof entry.type === "string" &&
+        entry.type === "currency_transfer" &&
+        Array.isArray(entry.lines) &&
+        entry.lines.length === 2
+      ) {
+        const [lineA, lineB] = entry.lines;
+        // Identify which is this account
+        const thisLine = lineA.accountId === checkpoint.accountId ? lineA : lineB;
+        const otherLine = lineA.accountId === checkpoint.accountId ? lineB : lineA;
+        // Use exchangeRate if present, else calculate
+        const exchangeRate =
+          typeof (thisLine as any)["exchangeRate"] === "number"
+            ? (thisLine as any)["exchangeRate"]
+            : typeof (otherLine as any)["exchangeRate"] === "number"
+            ? (otherLine as any)["exchangeRate"]
+            : Math.abs(otherLine.amount / thisLine.amount);
+        // Validate equivalence
+        if (
+          Math.abs(Math.abs(otherLine.amount) - Math.abs(thisLine.amount) * exchangeRate) > tolerance
+        ) {
+          throw new Error(
+            `Currency transfer inconsistency detected in entry ${entry.id}: ` +
+              `amounts ${thisLine.amount} (${thisLine.accountId}) and ${otherLine.amount} (${otherLine.accountId}) ` +
+              `with exchange rate ${exchangeRate} are not equivalent within tolerance ${tolerance}`
+          );
+        }
+      }
+    }
+    // --- End multi-currency validation ---
 
     // Store the original balance before deleting
     const originalBalance = checkpoint.balance;

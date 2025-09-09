@@ -31,15 +31,21 @@ export const Dashboard: React.FC = () => {
   const [accountBalances, setAccountBalances] = useState<
     Record<string, number>
   >({});
-  const [netWorth, setNetWorth] = useState<{
+  type NetWorthState = {
     assets: number;
     liabilities: number;
     netWorth: number;
-  } | null>(null);
-  const [incomeExpense, setIncomeExpense] = useState<{
+    currency?: string;
+    all?: any;
+  } | null;
+  const [netWorth, setNetWorth] = useState<NetWorthState>(null);
+  type IncomeExpenseState = {
     income: number;
     expenses: number;
-  } | null>(null);
+    currency?: string;
+    all?: any;
+  } | null;
+  const [incomeExpense, setIncomeExpense] = useState<IncomeExpenseState>(null);
   const [recentTransactions, setRecentTransactions] = useState<JournalEntry[]>(
     []
   );
@@ -72,7 +78,25 @@ export const Dashboard: React.FC = () => {
     // Fetch net worth
     const fetchNetWorth = async () => {
       const nw = await window.electron.ipcRenderer.invoke("get-net-worth");
-      setNetWorth(nw);
+      // If nw.netWorth is an object (per-currency), pick the first currency or show all
+      if (nw && typeof nw.netWorth === "object" && nw.netWorth !== null) {
+        // Pick the first currency for display, or aggregate if needed
+        const currencies = Object.keys(nw.netWorth);
+        if (currencies.length > 0) {
+          const cur = currencies[0];
+          setNetWorth({
+            netWorth: nw.netWorth[cur],
+            assets: nw.assets[cur],
+            liabilities: nw.liabilities[cur],
+            currency: cur,
+            all: nw, // keep all for possible future use
+          });
+        } else {
+          setNetWorth(null);
+        }
+      } else {
+        setNetWorth(nw);
+      }
     };
     fetchNetWorth();
   }, []);
@@ -83,7 +107,27 @@ export const Dashboard: React.FC = () => {
       const ie = await window.electron.ipcRenderer.invoke(
         "get-income-expense-this-month"
       );
-      setIncomeExpense(ie);
+      // If income/expenses are objects (per-currency), pick the first available currency from either
+      if (
+        ie &&
+        typeof ie.income === "object" &&
+        ie.income !== null &&
+        typeof ie.expenses === "object" &&
+        ie.expenses !== null
+      ) {
+        const incomeCurrencies = Object.keys(ie.income);
+        const expenseCurrencies = Object.keys(ie.expenses);
+        const allCurrencies = Array.from(new Set([...incomeCurrencies, ...expenseCurrencies]));
+        const cur = allCurrencies[0] || "USD";
+        setIncomeExpense({
+          income: ie.income[cur] ?? 0,
+          expenses: ie.expenses[cur] ?? 0,
+          currency: cur,
+          all: ie,
+        });
+      } else {
+        setIncomeExpense(ie);
+      }
     };
     fetchIncomeExpense();
   }, []);
@@ -95,7 +139,14 @@ export const Dashboard: React.FC = () => {
         "get-recent-transactions",
         5
       );
-      setRecentTransactions(txs);
+      // Normalize: if txs is an object (grouped by currency), flatten to array
+      let txArray: any[] = [];
+      if (Array.isArray(txs)) {
+        txArray = txs;
+      } else if (txs && typeof txs === "object") {
+        txArray = Object.values(txs).flat();
+      }
+      setRecentTransactions(txArray);
     };
     fetchRecent();
   }, []);
@@ -115,14 +166,24 @@ export const Dashboard: React.FC = () => {
         {netWorth ? (
           <>
             <p className="mt-2 text-3xl font-bold text-primary-600">
-              {formatCurrency(netWorth.netWorth)}
+              {formatCurrency(
+                netWorth.netWorth,
+                "currency" in netWorth && netWorth.currency ? netWorth.currency : "USD"
+              )}
+              {"currency" in netWorth && netWorth.currency ? ` (${netWorth.currency})` : ""}
             </p>
             <div className="flex space-x-8 mt-2">
               <span className="text-green-700">
-                Assets: {formatCurrency(netWorth.assets)}
+                Assets: {formatCurrency(
+                  netWorth.assets,
+                  "currency" in netWorth && netWorth.currency ? netWorth.currency : "USD"
+                )}
               </span>
               <span className="text-red-700">
-                Liabilities: {formatCurrency(netWorth.liabilities)}
+                Liabilities: {formatCurrency(
+                  netWorth.liabilities,
+                  "currency" in netWorth && netWorth.currency ? netWorth.currency : "USD"
+                )}
               </span>
             </div>
           </>
@@ -139,10 +200,26 @@ export const Dashboard: React.FC = () => {
         {incomeExpense ? (
           <div className="flex space-x-8 mt-2">
             <span className="text-green-700">
-              Income: {formatCurrency(incomeExpense.income)}
+              Income: {formatCurrency(
+                incomeExpense.income,
+                "currency" in incomeExpense && incomeExpense.currency
+                  ? incomeExpense.currency
+                  : "USD"
+              )}
+              {"currency" in incomeExpense && incomeExpense.currency
+                ? ` (${incomeExpense.currency})`
+                : ""}
             </span>
             <span className="text-red-700">
-              Expenses: {formatCurrency(incomeExpense.expenses)}
+              Expenses: {formatCurrency(
+                incomeExpense.expenses,
+                "currency" in incomeExpense && incomeExpense.currency
+                  ? incomeExpense.currency
+                  : "USD"
+              )}
+              {"currency" in incomeExpense && incomeExpense.currency
+                ? ` (${incomeExpense.currency})`
+                : ""}
             </span>
           </div>
         ) : (
@@ -157,7 +234,10 @@ export const Dashboard: React.FC = () => {
         </h2>
         <div className="mt-4">
           {recentTransactions.length === 0 && <p>No recent transactions.</p>}
-          {recentTransactions.map((entry) => (
+          {/* Filter out duplicate entries by id */}
+          {Array.from(
+            new Map(recentTransactions.map(entry => [entry.id, entry])).values()
+          ).map((entry) => (
             <div key={entry.id} className="mb-4 pb-4 border-b last:border-b-0">
               <div className="flex justify-between items-center">
                 <div>
@@ -180,7 +260,10 @@ export const Dashboard: React.FC = () => {
               </div>
               {/* Show accounts involved */}
               <div className="mt-2 text-xs text-gray-500">
-                {entry.lines.map((line) => (
+                {/* Filter out duplicate lines by id */}
+                {Array.from(
+                  new Map(entry.lines.map(line => [line.id, line])).values()
+                ).map((line) => (
                   <div key={line.id}>
                     {line.account?.name}: {line.amount > 0 ? "+" : "-"}
                     {formatCurrency(
