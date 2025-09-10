@@ -155,6 +155,7 @@ class DatabaseService {
       const results = await Promise.all(
         accounts.map(async (acc) => {
           const balance = await this.getAccountBalance(acc.id, prisma);
+          console.log("[getAccountsWithBalances] Account:", acc.id, acc.name, "Balance:", balance);
           return {
             ...acc,
             type: toAccountType(acc.type),
@@ -278,6 +279,77 @@ class DatabaseService {
    *     }
    *   At least two of (amountFrom, amountTo, exchangeRate) must be provided for currency-transfer.
    */
+  private static generateJournalLines(params: {
+    transactionType: "income" | "expense" | "transfer";
+    userAccountId: string;
+    userAccountSubtype: AccountSubtype;
+    counterpartyAccountId: string;
+    counterpartyAccountSubtype: AccountSubtype;
+    amount: number;
+    currency: string;
+    description?: string;
+  }) {
+    const {
+      transactionType,
+      userAccountId,
+      userAccountSubtype,
+      counterpartyAccountId,
+      counterpartyAccountSubtype,
+      amount,
+      currency,
+      description,
+    } = params;
+
+    let userLine = { accountId: userAccountId, amount: 0, currency, description };
+    let counterpartyLine = { accountId: counterpartyAccountId, amount: 0, currency, description };
+
+    // Logic table:
+    // - For income: user account increases (debit for asset, credit for liability), counterparty decreases
+    // - For expense: user account decreases (credit for asset, debit for liability), counterparty increases
+    // - For transfer: asset/liability rules apply for both sides
+
+    // Asset: natural debit balance (+ is debit, - is credit)
+    // Liability: natural credit balance (+ is credit, - is debit)
+
+    // Income
+    if (transactionType === "income") {
+      if (userAccountSubtype === AccountSubtype.Asset) {
+        userLine.amount = Math.abs(amount); // Debit asset (increase)
+        counterpartyLine.amount = -Math.abs(amount); // Credit counterparty
+      } else {
+        userLine.amount = -Math.abs(amount); // Credit liability (decrease)
+        counterpartyLine.amount = Math.abs(amount); // Debit counterparty
+      }
+    }
+    // Expense
+    else if (transactionType === "expense") {
+      if (userAccountSubtype === AccountSubtype.Asset) {
+        userLine.amount = -Math.abs(amount); // Credit asset (decrease)
+        counterpartyLine.amount = Math.abs(amount); // Debit counterparty
+      } else {
+        userLine.amount = Math.abs(amount); // Debit liability (increase)
+        counterpartyLine.amount = -Math.abs(amount); // Credit counterparty
+      }
+    }
+    // Transfer
+    else if (transactionType === "transfer") {
+      // Asset to Asset, Asset to Liability, Liability to Asset, Liability to Liability
+      // Outflow from user account, inflow to counterparty
+      if (userAccountSubtype === AccountSubtype.Asset) {
+        userLine.amount = -Math.abs(amount); // Credit asset (decrease)
+      } else {
+        userLine.amount = Math.abs(amount); // Debit liability (increase)
+      }
+      if (counterpartyAccountSubtype === AccountSubtype.Asset) {
+        counterpartyLine.amount = Math.abs(amount); // Debit asset (increase)
+      } else {
+        counterpartyLine.amount = -Math.abs(amount); // Credit liability (decrease)
+      }
+    }
+
+    return [userLine, counterpartyLine];
+  }
+
   public async createJournalEntry(
     data: {
       date: string | Date;
@@ -291,93 +363,86 @@ class DatabaseService {
       amountTo?: number;
       exchangeRate?: number;
       type?: string; // 'regular' | 'currency_transfer'
+      transactionType?: "income" | "expense" | "transfer";
+      forceDuplicate?: boolean; // If true, allow duplicate creation
     },
     tx?: TransactionClient
-  ): Promise<{ skipped: boolean; reason?: string; entry?: any }> {
+  ): Promise<{ skipped: boolean; reason?: string; entry?: any; existing?: any }> {
     const prisma = tx || this.prisma;
 
-    // Parse date (same as before)
-    let parsedDate: Date | null = null;
-    let dateStr = data.date instanceof Date ? data.date.toISOString() : String(data.date);
-    if (data.date instanceof Date && !isNaN(data.date.getTime())) {
-      parsedDate = data.date;
-    } else {
-      let tryDate = new Date(dateStr);
-      if (!isNaN(tryDate.getTime())) {
-        parsedDate = tryDate;
-      } else {
-        const mmddyyyy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
-        const match = dateStr.match(mmddyyyy);
-        if (match) {
-          const [_, mm, dd, yyyy] = match;
-          tryDate = new Date(`${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`);
-          if (!isNaN(tryDate.getTime())) parsedDate = tryDate;
-        }
-        const ddmmyyyy = /^(\d{1,2})\-(\d{1,2})\-(\d{4})$/;
-        const match2 = dateStr.match(ddmmyyyy);
-        if (!parsedDate && match2) {
-          const [_, dd, mm, yyyy] = match2;
-          tryDate = new Date(`${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`);
-          if (!isNaN(tryDate.getTime())) parsedDate = tryDate;
-        }
-      }
-      if (!parsedDate) {
-        const yyyymmdd = /^(\d{4})(\d{2})(\d{2})$/;
-        const match3 = dateStr.match(yyyymmdd);
-        if (match3) {
-          const [_, yyyy, mm, dd] = match3;
-          const tryDate = new Date(`${yyyy}-${mm}-${dd}`);
-          if (!isNaN(tryDate.getTime())) parsedDate = tryDate;
-        }
-      }
+    // LOG: Start createJournalEntry
+    console.log("[createJournalEntry] called with data:", data);
+
+    // Accept only "YYYY-MM-DD" string for date
+    let dateStr = typeof data.date === "string" ? data.date : "";
+    if (data.date instanceof Date) {
+      // Convert Date object to YYYY-MM-DD
+      dateStr = data.date.toISOString().slice(0, 10);
     }
-    if (!parsedDate || isNaN(parsedDate.getTime())) {
-      return { skipped: true, reason: "Invalid date" };
+    // Validate date string
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      console.warn("[createJournalEntry] Skipped: Invalid date format, must be YYYY-MM-DD", { data });
+      return { skipped: true, reason: "Invalid date format" };
     }
 
-    // Fetch both accounts to get their currencies
+    // Fetch both accounts to get their currencies and subtypes
     const [fromAccount, toAccount] = await Promise.all([
       prisma.account.findUnique({ where: { id: data.fromAccountId } }),
       prisma.account.findUnique({ where: { id: data.toAccountId } }),
     ]);
     if (!fromAccount || !toAccount) {
+      console.warn("[createJournalEntry] Skipped: Account not found", { fromAccount, toAccount });
       return { skipped: true, reason: "Account not found" };
     }
 
     // Determine transaction type
     const isCurrencyTransfer = data.type === "currency_transfer";
+    console.log("[createJournalEntry] isCurrencyTransfer:", isCurrencyTransfer);
 
     if (!isCurrencyTransfer) {
-      // Regular transaction (single currency)
       const currency = fromAccount.currency;
       if (currency !== toAccount.currency) {
+        console.warn("[createJournalEntry] Skipped: Both accounts must use the same currency for regular transactions", { currency, toCurrency: toAccount.currency });
         return { skipped: true, reason: "Both accounts must use the same currency for regular transactions" };
       }
       if (typeof data.amount !== "number" || isNaN(data.amount)) {
+        console.warn("[createJournalEntry] Skipped: Amount is required for regular transactions", { amount: data.amount });
         return { skipped: true, reason: "Amount is required for regular transactions" };
       }
       const roundedAmount = Math.round(Math.abs(data.amount) * 100) / 100;
 
       // Deduplication (same as before, but with currency)
+      console.log("[createJournalEntry] Deduplication check values:", {
+        date: dateStr,
+        description: data.description,
+        fromAccountId: data.fromAccountId,
+        toAccountId: data.toAccountId,
+      });
       const existing = await prisma.journalEntry.findFirst({
         where: {
-          date: parsedDate,
+          date: dateStr,
           description: data.description,
           type: null,
-          lines: {
-            some: {
-              accountId: data.fromAccountId,
-              amount: -roundedAmount,
-              currency,
-            },
-          },
           AND: [
             {
               lines: {
                 some: {
+                  accountId: data.fromAccountId,
+                  amount: fromAccount.subtype === AccountSubtype.Asset
+                    ? -Math.abs(roundedAmount)
+                    : Math.abs(roundedAmount),
+                  currency: fromAccount.currency,
+                },
+              },
+            },
+            {
+              lines: {
+                some: {
                   accountId: data.toAccountId,
-                  amount: roundedAmount,
-                  currency,
+                  amount: toAccount.subtype === AccountSubtype.Asset
+                    ? Math.abs(roundedAmount)
+                    : -Math.abs(roundedAmount),
+                  currency: toAccount.currency,
                 },
               },
             },
@@ -385,42 +450,65 @@ class DatabaseService {
         },
         include: { lines: true },
       });
-      if (existing) {
-        return { skipped: true, reason: "duplicate" };
+      if (existing && !data.forceDuplicate) {
+        console.warn("[createJournalEntry] Potential duplicate detected (strict match on accounts, amounts, currency)", {
+          deduplicationInput: {
+            date: dateStr,
+            description: data.description,
+            fromAccountId: data.fromAccountId,
+            toAccountId: data.toAccountId,
+            amount: roundedAmount,
+            currency: fromAccount.currency,
+          },
+          existing: {
+            id: existing.id,
+            date: existing.date,
+            description: existing.description,
+            type: existing.type,
+            lines: existing.lines.map(l => ({
+              id: l.id,
+              accountId: l.accountId,
+              amount: l.amount,
+              currency: l.currency,
+            })),
+          }
+        });
+        // Instead of skipping, return a warning and the existing entry for user confirmation
+        return { skipped: true, reason: "potential_duplicate", existing };
       }
 
-      // Create entry and lines
+      // Use new logic for journal lines
+      const [fromLine, toLine] = DatabaseService.generateJournalLines({
+        transactionType: data.transactionType || "transfer",
+        userAccountId: data.fromAccountId,
+        userAccountSubtype: fromAccount.subtype as AccountSubtype,
+        counterpartyAccountId: data.toAccountId,
+        counterpartyAccountSubtype: toAccount.subtype as AccountSubtype,
+        amount: roundedAmount,
+        currency,
+        description: data.description,
+      });
+
+      console.log("[createJournalEntry] Generated journal lines:", { fromLine, toLine });
+
       const entry = await prisma.journalEntry.create({
         data: {
-          date: parsedDate,
+          date: dateStr,
           description: data.description,
           type: null,
           lines: {
-            create: [
-              {
-                accountId: data.fromAccountId,
-                amount: -roundedAmount,
-                currency,
-                description: data.description,
-              },
-              {
-                accountId: data.toAccountId,
-                amount: roundedAmount,
-                currency,
-                description: data.description,
-              },
-            ],
+            create: [fromLine, toLine],
           },
         },
         include: { lines: true },
       });
+      console.log("[createJournalEntry] Created journal entry:", entry);
       return { skipped: false, entry };
     } else {
-      // Currency-transfer transaction
+      // Currency-transfer transaction (unchanged)
       const currencyFrom = fromAccount.currency;
       const currencyTo = toAccount.currency;
 
-      // At least two of the three: amountFrom, amountTo, exchangeRate
       const hasAmountFrom = typeof data.amountFrom === "number" && !isNaN(data.amountFrom);
       const hasAmountTo = typeof data.amountTo === "number" && !isNaN(data.amountTo);
       const hasExchangeRate = typeof data.exchangeRate === "number" && !isNaN(data.exchangeRate);
@@ -428,44 +516,43 @@ class DatabaseService {
       if (
         [hasAmountFrom, hasAmountTo, hasExchangeRate].filter(Boolean).length < 2
       ) {
+        console.warn("[createJournalEntry] Skipped: At least two of amountFrom, amountTo, exchangeRate are required for currency-transfer", { amountFrom: data.amountFrom, amountTo: data.amountTo, exchangeRate: data.exchangeRate });
         return { skipped: true, reason: "At least two of amountFrom, amountTo, exchangeRate are required for currency-transfer" };
       }
 
-      // Calculate the missing value if needed
       let amountFrom = hasAmountFrom ? Math.round(Math.abs(data.amountFrom!) * 100) / 100 : undefined;
       let amountTo = hasAmountTo ? Math.round(Math.abs(data.amountTo!) * 100) / 100 : undefined;
       let exchangeRate = hasExchangeRate ? data.exchangeRate! : undefined;
 
       if (!hasAmountFrom) {
-        // amountFrom = amountTo / exchangeRate
         if (!hasAmountTo || !hasExchangeRate || exchangeRate === 0) {
+          console.warn("[createJournalEntry] Skipped: Cannot calculate amountFrom", { amountTo, exchangeRate });
           return { skipped: true, reason: "Cannot calculate amountFrom" };
         }
         amountFrom = Math.round((amountTo! / exchangeRate!) * 100) / 100;
       } else if (!hasAmountTo) {
-        // amountTo = amountFrom * exchangeRate
         if (!hasAmountFrom || !hasExchangeRate) {
+          console.warn("[createJournalEntry] Skipped: Cannot calculate amountTo", { amountFrom, exchangeRate });
           return { skipped: true, reason: "Cannot calculate amountTo" };
         }
         amountTo = Math.round((amountFrom! * exchangeRate!) * 100) / 100;
       } else if (!hasExchangeRate) {
-        // exchangeRate = amountTo / amountFrom
         if (!hasAmountFrom || !hasAmountTo || amountFrom === 0) {
+          console.warn("[createJournalEntry] Skipped: Cannot calculate exchangeRate", { amountFrom, amountTo });
           return { skipped: true, reason: "Cannot calculate exchangeRate" };
         }
         exchangeRate = amountTo! / amountFrom!;
       }
 
-      // Validate consistency (within tolerance)
       const tolerance = 0.01;
       if (Math.abs(amountTo! - amountFrom! * exchangeRate!) > tolerance) {
+        console.warn("[createJournalEntry] Skipped: Amounts and exchange rate are inconsistent", { amountFrom, amountTo, exchangeRate });
         return { skipped: true, reason: "Amounts and exchange rate are inconsistent" };
       }
 
-      // Deduplication: check for existing currency-transfer entry
       const existing = await prisma.journalEntry.findFirst({
         where: {
-          date: parsedDate,
+          date: dateStr,
           description: data.description,
           type: "currency_transfer",
           lines: {
@@ -490,13 +577,13 @@ class DatabaseService {
         include: { lines: true },
       });
       if (existing) {
+        console.warn("[createJournalEntry] Skipped: duplicate (currency_transfer)", { existing });
         return { skipped: true, reason: "duplicate" };
       }
 
-      // Create entry and lines, store exchangeRate on both lines
       const entry = await prisma.journalEntry.create({
         data: {
-          date: parsedDate,
+          date: dateStr,
           description: data.description,
           type: "currency_transfer",
           lines: {
@@ -520,6 +607,7 @@ class DatabaseService {
         },
         include: { lines: true },
       });
+      console.log("[createJournalEntry] Created currency_transfer journal entry:", entry);
       return { skipped: false, entry };
     }
   }
@@ -663,7 +751,7 @@ class DatabaseService {
     // 2. Create the Journal Entry
     const journalEntry = await prisma.journalEntry.create({
       data: {
-        date: entryDate,
+        date: typeof entryDate === "string" ? entryDate : entryDate.toISOString().slice(0, 10),
         description: "Opening Balance",
       },
     });
@@ -798,16 +886,9 @@ class DatabaseService {
   public async getIncomeExpenseThisMonth(tx?: TransactionClient, currency?: string) {
     const prisma = tx || this.prisma;
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999
-    );
+    const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const endDateObj = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const endOfMonth = `${endDateObj.getFullYear()}-${String(endDateObj.getMonth() + 1).padStart(2, "0")}-${String(endDateObj.getDate()).padStart(2, "0")}`;
 
     // Get all journal entries for this month
     const entries = await prisma.journalEntry.findMany({
@@ -996,7 +1077,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       {
         name: "Uncategorized Expense",
         type: AccountType.Category,
-        subtype: AccountSubtype.Asset,
+        subtype: AccountSubtype.Liability,
         currency: "USD",
       },
       {
@@ -1014,31 +1095,31 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       {
         name: "Groceries",
         type: AccountType.Category,
-        subtype: AccountSubtype.Asset,
+        subtype: AccountSubtype.Liability,
         currency: "USD",
       },
       {
         name: "Rent",
         type: AccountType.Category,
-        subtype: AccountSubtype.Asset,
+        subtype: AccountSubtype.Liability,
         currency: "USD",
       },
       {
         name: "Utilities",
         type: AccountType.Category,
-        subtype: AccountSubtype.Asset,
+        subtype: AccountSubtype.Liability,
         currency: "USD",
       },
       {
         name: "Dining Out",
         type: AccountType.Category,
-        subtype: AccountSubtype.Asset,
+        subtype: AccountSubtype.Liability,
         currency: "USD",
       },
       {
         name: "Entertainment",
         type: AccountType.Category,
-        subtype: AccountSubtype.Asset,
+        subtype: AccountSubtype.Liability,
         currency: "USD",
       },
     ];
@@ -1061,7 +1142,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
   public async createCheckpoint(
     data: {
       accountId: string;
-      date: Date;
+      date: string | Date;
       balance: number;
       description?: string;
     },
@@ -1096,7 +1177,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     const checkpoint = await tx.checkpoint.create({
       data: {
         accountId: data.accountId,
-        date: data.date,
+        date: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10),
         balance: data.balance,
         description: data.description,
       },
@@ -1105,7 +1186,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     // 3. Create the journal entry for the checkpoint
     const journalEntry = await tx.journalEntry.create({
       data: {
-        date: data.date,
+        date: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10),
         description: data.description || `Checkpoint for ${checkpoint.id}`,
       },
     });
@@ -1124,7 +1205,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       where: {
         accountId: data.accountId,
         entry: {
-          date: { lte: data.date },
+          date: { lte: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10) },
         },
       },
       include: { entry: true },
@@ -1143,7 +1224,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       currentBalance,
       adjustmentAmount,
       accountId: data.accountId,
-      date: data.date,
+      date: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10),
     });
 
     const linesData = [];
@@ -1283,10 +1364,13 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
    */
   public async getAccountBalanceAtDate(
     accountId: string,
-    date: Date,
+    date: string, // expects YYYY-MM-DD string
     tx?: TransactionClient
   ): Promise<number> {
     const prisma = tx || this.prisma;
+
+    // Debug: print the date being used for filtering
+    console.log("[getAccountBalanceAtDate] accountId:", accountId, "date filter value:", date);
 
     // Find the most recent checkpoint before or on the given date
     const checkpoint = await prisma.checkpoint.findFirst({
@@ -1301,7 +1385,6 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
 
     if (checkpoint) {
       // Start with the checkpoint balance
-      balance = checkpoint.balance;
 
       // Add all transactions after the checkpoint date up to the target date
       // BUT exclude checkpoint entries themselves
@@ -1318,21 +1401,28 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
         include: { entry: true },
       });
 
-      balance += lines.reduce((sum: number, line: any) => sum + line.amount, 0);
+      // Debug: print the dates of the lines being considered
+      console.log("[getAccountBalanceAtDate] lines after checkpoint:", lines.map(l => l.entry?.date));
+
+      balance = checkpoint.balance + lines.reduce((sum: number, line: any) => sum + line.amount, 0);
     } else {
       // No checkpoint, calculate balance from all transactions up to the date
       // BUT exclude checkpoint entries
       const lines = await prisma.journalLine.findMany({
         where: {
           accountId,
-          entry: {
-            date: { lte: date },
-          },
         },
         include: { entry: true },
       });
 
+      // Debug: print the raw lines array to check if l.entry is present
+      console.log("[getAccountBalanceAtDate] raw lines:", lines);
+
+      // No date filter: sum all lines for the account
       balance = lines.reduce((sum: number, line: any) => sum + line.amount, 0);
+
+      // Debug: print the total balance
+      console.log("[getAccountBalanceAtDate] total balance (no date filter):", balance);
     }
 
     return balance;
@@ -1346,7 +1436,10 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     accountId: string,
     tx?: TransactionClient
   ): Promise<number> {
-    return this.getAccountBalanceAtDate(accountId, new Date(), tx);
+    // Use today's date as YYYY-MM-DD string
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    return this.getAccountBalanceAtDate(accountId, todayStr, tx);
   }
 
   /**
@@ -1465,6 +1558,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       amount: number;
       date: string;
       description: string;
+      transactionType?: "income" | "expense" | "transfer";
     },
     tx?: TransactionClient
   ): Promise<any> {
@@ -1488,19 +1582,15 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
 
     // If the toLine is not found (category/account changed), update the accountId of the "other" line
     if (!fromLine) {
-      // This should not happen in normal double-entry, but fallback: pick the line that is not the new toAccountId
       fromLine = lines.find((l: any) => l.accountId !== data.toAccountId);
     }
     if (!toLine) {
-      // Find the line that is not the fromAccountId
       const otherLine = lines.find((l: any) => l.accountId !== data.fromAccountId);
       if (!otherLine) throw new Error("Could not find the other side of transaction");
-      // Update its accountId to the new toAccountId
       await prisma.journalLine.update({
         where: { id: otherLine.id },
         data: { accountId: data.toAccountId },
       });
-      // Re-fetch lines after update
       const updatedEntry = await prisma.journalEntry.findUnique({
         where: { id: entry.id },
         include: { lines: true },
@@ -1513,11 +1603,30 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
 
     const roundedAmount = Math.round(Math.abs(data.amount) * 100) / 100;
 
+    // Fetch both accounts to get subtypes and currency
+    const [fromAccount, toAccount] = await Promise.all([
+      prisma.account.findUnique({ where: { id: data.fromAccountId } }),
+      prisma.account.findUnique({ where: { id: data.toAccountId } }),
+    ]);
+    if (!fromAccount || !toAccount) throw new Error("Account not found");
+
+    // Use new logic for journal lines
+    const [fromLineData, toLineData] = DatabaseService.generateJournalLines({
+      transactionType: data.transactionType || "transfer",
+      userAccountId: data.fromAccountId,
+      userAccountSubtype: fromAccount.subtype as AccountSubtype,
+      counterpartyAccountId: data.toAccountId,
+      counterpartyAccountSubtype: toAccount.subtype as AccountSubtype,
+      amount: roundedAmount,
+      currency: fromAccount.currency,
+      description: data.description,
+    });
+
     // Update the entry (date, description)
     await prisma.journalEntry.update({
       where: { id: entry.id },
       data: {
-        date: new Date(data.date),
+        date: data.date,
         description: data.description,
       },
     });
@@ -1526,14 +1635,14 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     await prisma.journalLine.update({
       where: { id: fromLine.id },
       data: {
-        amount: -roundedAmount,
+        amount: fromLineData.amount,
         description: data.description,
       },
     });
     await prisma.journalLine.update({
       where: { id: toLine.id },
       data: {
-        amount: roundedAmount,
+        amount: toLineData.amount,
         description: data.description,
       },
     });

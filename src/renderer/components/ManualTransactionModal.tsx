@@ -40,7 +40,13 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
     amount: isEdit ? Math.abs(transaction?.amount ?? 0) : 0,
     date: isEdit
       ? new Date(transaction?.entry?.date ?? "").toISOString().split("T")[0]
-      : new Date().toISOString().split("T")[0],
+      : (() => {
+          const now = new Date();
+          const yyyy = now.getFullYear();
+          const mm = String(now.getMonth() + 1).padStart(2, "0");
+          const dd = String(now.getDate()).padStart(2, "0");
+          return `${yyyy}-${mm}-${dd}`;
+        })(),
     description: isEdit
       ? transaction?.description || transaction?.entry?.description || ""
       : "",
@@ -112,11 +118,55 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
           ...newTransaction,
         });
       } else {
-        // Add transaction
-        await window.electron.ipcRenderer.invoke("add-transaction", {
+        // Add transaction, handle potential duplicate
+        // Determine transactionType
+        let transactionType: "income" | "expense" | "transfer" = "transfer";
+        if (fromAccount && toAccount) {
+          if (fromAccount.type === AccountType.User && toAccount.type === AccountType.Category) {
+            if (toAccount.subtype === "asset") {
+              transactionType = "income";
+            } else if (toAccount.subtype === "liability") {
+              transactionType = "expense";
+            } else {
+              transactionType = "expense";
+            }
+          } else if (fromAccount.type === AccountType.Category && toAccount.type === AccountType.User) {
+            if (fromAccount.subtype === "asset") {
+              transactionType = "expense";
+            } else if (fromAccount.subtype === "liability") {
+              transactionType = "income";
+            } else {
+              transactionType = "expense";
+            }
+          } else {
+            transactionType = "transfer";
+          }
+        }
+        let result = await window.electron.ipcRenderer.invoke("add-transaction", {
           fromAccountId: accountId,
           ...newTransaction,
+          transactionType,
         });
+        if (result && result.skipped && result.reason === "potential_duplicate") {
+          // Show warning and ask for confirmation
+          const confirmMsg =
+            "A transaction with the same date, accounts, amount, and description already exists.\n\n" +
+            "Existing transaction:\n" +
+            JSON.stringify(result.existing, null, 2) +
+            "\n\nDo you want to add this transaction anyway?";
+          if (window.confirm(confirmMsg)) {
+            // Retry with forceDuplicate
+            result = await window.electron.ipcRenderer.invoke("add-transaction", {
+              fromAccountId: accountId,
+              ...newTransaction,
+              forceDuplicate: true,
+              transactionType,
+            });
+          } else {
+            setIsSubmitting(false);
+            return;
+          }
+        }
       }
       setIsSubmitting(false);
       await refreshAccounts();

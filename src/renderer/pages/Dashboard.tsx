@@ -245,7 +245,8 @@ export const Dashboard: React.FC = () => {
                     {entry.lines.find(line => line.amount > 0)?.account?.name || ""}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {new Date(entry.date).toLocaleDateString()}
+                    {/* Display date string as-is to avoid timezone shift */}
+                    {typeof entry.date === "string" ? entry.date : ""}
                   </p>
                   {entry.description && (
                     <p className="text-sm text-gray-500">{entry.description}</p>

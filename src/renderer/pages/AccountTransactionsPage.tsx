@@ -475,7 +475,8 @@ export const AccountTransactionsPage: React.FC = () => {
                     }
                   >
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(line.entry.date).toLocaleDateString()}
+                      {/* Display date string as-is to avoid timezone shift */}
+                      {typeof line.entry.date === "string" ? line.entry.date : ""}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {/* Multi-currency transfer display */}

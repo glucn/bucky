@@ -5,6 +5,7 @@ export type Account = {
   name: string;
   type: AccountType;
   currency: string;
+  subtype: string;
   isArchived: boolean;
   archivedAt?: string | null;
   balance?: number; // Added for accounts-with-balances

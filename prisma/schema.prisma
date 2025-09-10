@@ -38,7 +38,7 @@ model Account {
 
 model JournalEntry {
   id          String        @id @default(uuid())
-  date        DateTime
+  date        String
   description String?
   type        String?       // e.g., 'regular', 'currency_transfer'
   createdAt   DateTime      @default(now())
@@ -61,7 +61,7 @@ model JournalLine {
 model Checkpoint {
   id            String   @id @default(uuid())
   accountId     String
-  date          DateTime
+  date          String
   balance       Float    // The target balance for the account
   description   String?
   createdAt     DateTime @default(now())
