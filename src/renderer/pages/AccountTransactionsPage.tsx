@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ManualTransactionModal } from "../components/ManualTransactionModal";
 import { ImportTransactionsWizard } from "../components/ImportTransactionsWizard";
+import { TransferModal } from "../components/TransferModal";
 
 // Modal for setting opening balance for the current account
 const SetOpeningBalanceModal: React.FC<{
@@ -9,7 +10,9 @@ const SetOpeningBalanceModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ accountId, onClose, onSuccess }) => {
-  const [currentBalance, setCurrentBalance] = React.useState<number | null>(null);
+  const [currentBalance, setCurrentBalance] = React.useState<number | null>(
+    null
+  );
   const [desiredBalance, setDesiredBalance] = React.useState<string>("");
   const [entryDate, setEntryDate] = React.useState(
     new Date().toISOString().split("T")[0]
@@ -124,8 +127,7 @@ const SetOpeningBalanceModal: React.FC<{
                   onChange={(e) => {
                     let val = e.target.value;
                     if (val !== "") {
-                      const rounded =
-                        Math.round(parseFloat(val) * 100) / 100;
+                      const rounded = Math.round(parseFloat(val) * 100) / 100;
                       val = rounded.toString();
                     }
                     setDesiredBalance(val);
@@ -185,8 +187,7 @@ const CreateCheckpointModal: React.FC<{
 
     setIsSubmitting(true);
     try {
-      const roundedBalance =
-        Math.round(parseFloat(form.balance) * 100) / 100;
+      const roundedBalance = Math.round(parseFloat(form.balance) * 100) / 100;
       const result = await window.electron.ipcRenderer.invoke(
         "create-checkpoint",
         {
@@ -262,8 +263,7 @@ const CreateCheckpointModal: React.FC<{
                 onChange={(e) => {
                   let val = e.target.value;
                   if (val !== "") {
-                    const rounded =
-                      Math.round(parseFloat(val) * 100) / 100;
+                    const rounded = Math.round(parseFloat(val) * 100) / 100;
                     val = rounded.toString();
                   }
                   setForm({
@@ -341,7 +341,10 @@ export const AccountTransactionsPage: React.FC = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showOpenBalanceModal, setShowOpenBalanceModal] = useState(false);
   const [showCheckpointModal, setShowCheckpointModal] = useState(false);
-  const [editTransaction, setEditTransaction] = useState<JournalLine | null>(null);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [editTransaction, setEditTransaction] = useState<JournalLine | null>(
+    null
+  );
 
   const fetchTransactions = async () => {
     if (!accountId) return;
@@ -389,8 +392,18 @@ export const AccountTransactionsPage: React.FC = () => {
               aria-expanded="false"
             >
               More Actions
-              <svg className="ml-2 h-4 w-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 20 20">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7 7l3-3 3 3m0 6l-3 3-3-3" />
+              <svg
+                className="ml-2 h-4 w-4 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M7 7l3-3 3 3m0 6l-3 3-3-3"
+                />
               </svg>
             </button>
             <div className="absolute right-0 z-10 mt-2 w-48 origin-top-right bg-white border border-gray-200 rounded-md shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto transition-opacity duration-150">
@@ -412,7 +425,7 @@ export const AccountTransactionsPage: React.FC = () => {
               </div>
             </div>
           </div>
-          {/* Primary action button */}
+          {/* Primary action buttons */}
           <button
             className="px-4 py-2 bg-primary-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
             onClick={() => setShowManualModal(true)}
@@ -421,7 +434,14 @@ export const AccountTransactionsPage: React.FC = () => {
             Add Transaction
           </button>
           <button
-            className="px-4 py-2 bg-primary-500 text-white rounded-md shadow-sm text-sm font-medium hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            className="px-4 py-2 bg-primary-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            onClick={() => setShowTransferModal(true)}
+            type="button"
+          >
+            Transfer Money
+          </button>
+          <button
+            className="px-4 py-2 bg-primary-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
             onClick={() => setShowImportModal(true)}
             type="button"
           >
@@ -469,14 +489,17 @@ export const AccountTransactionsPage: React.FC = () => {
                   <tr
                     key={line.id}
                     className={
-                      (categoryName === "Uncategorized Income" || categoryName === "Uncategorized Expense")
+                      categoryName === "Uncategorized Income" ||
+                      categoryName === "Uncategorized Expense"
                         ? "bg-yellow-50 border-l-4 border-yellow-400"
                         : "border-b border-gray-200"
                     }
                   >
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {/* Display date string as-is to avoid timezone shift */}
-                      {typeof line.entry.date === "string" ? line.entry.date : ""}
+                      {typeof line.entry.date === "string"
+                        ? line.entry.date
+                        : ""}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {/* Multi-currency transfer display */}
@@ -484,7 +507,8 @@ export const AccountTransactionsPage: React.FC = () => {
                         const otherLine = line.entry?.lines?.find(
                           (l: any) => l.accountId !== line.accountId
                         );
-                        const isUser = (acc: any) => acc?.type === "user" || acc?.type === "User";
+                        const isUser = (acc: any) =>
+                          acc?.type === "user" || acc?.type === "User";
                         const isTransfer =
                           otherLine &&
                           isUser(line.account) &&
@@ -510,7 +534,8 @@ export const AccountTransactionsPage: React.FC = () => {
                                 {otherAmt.toFixed(2)} {otherCur}
                               </div>
                               <div className="text-xs text-gray-500">
-                                Exchange Rate: {rate.toFixed(6)} ({thisCur} → {otherCur})
+                                Exchange Rate: {rate.toFixed(6)} ({thisCur} →{" "}
+                                {otherCur})
                               </div>
                             </div>
                           );
@@ -583,6 +608,16 @@ export const AccountTransactionsPage: React.FC = () => {
         <CreateCheckpointModal
           accountId={accountId}
           onClose={() => setShowCheckpointModal(false)}
+        />
+      )}
+      {showTransferModal && accountId && (
+        <TransferModal
+          fromAccountId={accountId}
+          onClose={() => setShowTransferModal(false)}
+          onSuccess={() => {
+            fetchTransactions();
+            fetchAccount();
+          }}
         />
       )}
     </div>
