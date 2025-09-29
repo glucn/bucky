@@ -818,9 +818,6 @@ class DatabaseService {
   // --- Dashboard Data Methods ---
 
   /**
-   * Get net worth: sum of all user accounts (assets/liabilities) only.
-   */
-  /**
    * Get net worth: sum of all user accounts (assets/liabilities) grouped by currency.
    * Optionally filter by currency.
    */
@@ -876,9 +873,6 @@ class DatabaseService {
     }
   }
 
-  /**
-   * Get total income and expenses for the current month (category accounts only).
-   */
   /**
    * Get total income and expenses for the current month (category accounts only), grouped by currency.
    * Optionally filter by currency.
@@ -944,9 +938,6 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     }
   }
 
-  /**
-   * Get the most recent N transactions (journal entries), including their lines and accounts.
-   */
   /**
    * Get the most recent N transactions (journal entries), including their lines and accounts.
    * Optionally filter by currency, or group by currency.
@@ -1219,14 +1210,6 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     let adjustmentAmount =
       Math.round((data.balance - currentBalance) * 100) / 100;
 
-    console.log("Checkpoint creation debug:", {
-      targetBalance: data.balance,
-      currentBalance,
-      adjustmentAmount,
-      accountId: data.accountId,
-      date: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10),
-    });
-
     const linesData = [];
 
     // Always create journal lines for the checkpoint, even if adjustment is 0
@@ -1368,9 +1351,6 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     tx?: TransactionClient
   ): Promise<number> {
     const prisma = tx || this.prisma;
-
-    // Debug: print the date being used for filtering
-    console.log("[getAccountBalanceAtDate] accountId:", accountId, "date filter value:", date);
 
     // Find the most recent checkpoint before or on the given date
     const checkpoint = await prisma.checkpoint.findFirst({

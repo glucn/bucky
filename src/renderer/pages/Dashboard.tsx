@@ -1,3 +1,4 @@
+import { AccountType } from "../../shared/accountTypes";
 import React, { useEffect, useState } from "react";
 
 interface Account {
@@ -46,9 +47,6 @@ export const Dashboard: React.FC = () => {
     all?: any;
   } | null;
   const [incomeExpense, setIncomeExpense] = useState<IncomeExpenseState>(null);
-  const [recentTransactions, setRecentTransactions] = useState<JournalEntry[]>(
-    []
-  );
 
   useEffect(() => {
     // Fetch accounts and their balances
@@ -117,7 +115,9 @@ export const Dashboard: React.FC = () => {
       ) {
         const incomeCurrencies = Object.keys(ie.income);
         const expenseCurrencies = Object.keys(ie.expenses);
-        const allCurrencies = Array.from(new Set([...incomeCurrencies, ...expenseCurrencies]));
+        const allCurrencies = Array.from(
+          new Set([...incomeCurrencies, ...expenseCurrencies])
+        );
         const cur = allCurrencies[0] || "USD";
         setIncomeExpense({
           income: ie.income[cur] ?? 0,
@@ -130,25 +130,6 @@ export const Dashboard: React.FC = () => {
       }
     };
     fetchIncomeExpense();
-  }, []);
-
-  useEffect(() => {
-    // Fetch recent transactions (latest 5)
-    const fetchRecent = async () => {
-      const txs = await window.electron.ipcRenderer.invoke(
-        "get-recent-transactions",
-        5
-      );
-      // Normalize: if txs is an object (grouped by currency), flatten to array
-      let txArray: any[] = [];
-      if (Array.isArray(txs)) {
-        txArray = txs;
-      } else if (txs && typeof txs === "object") {
-        txArray = Object.values(txs).flat();
-      }
-      setRecentTransactions(txArray);
-    };
-    fetchRecent();
   }, []);
 
   const formatCurrency = (amount: number, currency: string = "USD") => {
@@ -168,21 +149,31 @@ export const Dashboard: React.FC = () => {
             <p className="mt-2 text-3xl font-bold text-primary-600">
               {formatCurrency(
                 netWorth.netWorth,
-                "currency" in netWorth && netWorth.currency ? netWorth.currency : "USD"
+                "currency" in netWorth && netWorth.currency
+                  ? netWorth.currency
+                  : "USD"
               )}
-              {"currency" in netWorth && netWorth.currency ? ` (${netWorth.currency})` : ""}
+              {"currency" in netWorth && netWorth.currency
+                ? ` (${netWorth.currency})`
+                : ""}
             </p>
             <div className="flex space-x-8 mt-2">
               <span className="text-green-700">
-                Assets: {formatCurrency(
+                Assets:{" "}
+                {formatCurrency(
                   netWorth.assets,
-                  "currency" in netWorth && netWorth.currency ? netWorth.currency : "USD"
+                  "currency" in netWorth && netWorth.currency
+                    ? netWorth.currency
+                    : "USD"
                 )}
               </span>
               <span className="text-red-700">
-                Liabilities: {formatCurrency(
+                Liabilities:{" "}
+                {formatCurrency(
                   netWorth.liabilities,
-                  "currency" in netWorth && netWorth.currency ? netWorth.currency : "USD"
+                  "currency" in netWorth && netWorth.currency
+                    ? netWorth.currency
+                    : "USD"
                 )}
               </span>
             </div>
@@ -200,7 +191,8 @@ export const Dashboard: React.FC = () => {
         {incomeExpense ? (
           <div className="flex space-x-8 mt-2">
             <span className="text-green-700">
-              Income: {formatCurrency(
+              Income:{" "}
+              {formatCurrency(
                 incomeExpense.income,
                 "currency" in incomeExpense && incomeExpense.currency
                   ? incomeExpense.currency
@@ -211,7 +203,8 @@ export const Dashboard: React.FC = () => {
                 : ""}
             </span>
             <span className="text-red-700">
-              Expenses: {formatCurrency(
+              Expenses:{" "}
+              {formatCurrency(
                 incomeExpense.expenses,
                 "currency" in incomeExpense && incomeExpense.currency
                   ? incomeExpense.currency
@@ -227,84 +220,35 @@ export const Dashboard: React.FC = () => {
         )}
       </div>
 
-      {/* Recent Transactions Section */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-medium text-gray-900">
-          Recent Transactions
-        </h2>
-        <div className="mt-4">
-          {recentTransactions.length === 0 && <p>No recent transactions.</p>}
-          {/* Filter out duplicate entries by id */}
-          {Array.from(
-            new Map(recentTransactions.map(entry => [entry.id, entry])).values()
-          ).map((entry) => (
-            <div key={entry.id} className="mb-4 pb-4 border-b last:border-b-0">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {entry.lines.find(line => line.amount > 0)?.account?.name || ""}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {/* Display date string as-is to avoid timezone shift */}
-                    {typeof entry.date === "string" ? entry.date : ""}
-                  </p>
-                  {entry.description && (
-                    <p className="text-sm text-gray-500">{entry.description}</p>
-                  )}
-                </div>
-                {/* Show total amount for the entry (sum of all lines) */}
-                <p className="text-sm font-bold text-gray-900">
-                  {formatCurrency(
-                    entry.lines.reduce((sum, l) => sum + l.amount, 0)
-                  )}
-                </p>
-              </div>
-              {/* Show accounts involved */}
-              <div className="mt-2 text-xs text-gray-500">
-                {/* Filter out duplicate lines by id */}
-                {Array.from(
-                  new Map(entry.lines.map(line => [line.id, line])).values()
-                ).map((line) => (
-                  <div key={line.id}>
-                    {line.account?.name}: {line.amount > 0 ? "+" : "-"}
-                    {formatCurrency(
-                      Math.abs(line.amount),
-                      line.account?.currency || "USD"
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Account Balances Section */}
       <div className="bg-white shadow rounded-lg p-6">
         <h2 className="text-lg font-medium text-gray-900">Accounts</h2>
         <div className="mt-4">
-          {accounts.map((account) => (
-            <div
-              key={account.id}
-              className="flex items-center justify-between py-3 border-b last:border-b-0"
-            >
-              <div>
+          {accounts
+            .filter((account) => account.type === AccountType.User)
+            .map((account) => (
+              <div
+                key={account.id}
+                className="flex items-center justify-between py-3 border-b last:border-b-0"
+              >
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    {account.name}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {account.type.charAt(0).toUpperCase() +
+                      account.type.slice(1)}{" "}
+                    • {account.currency}
+                  </p>
+                </div>
                 <p className="text-sm font-medium text-gray-900">
-                  {account.name}
-                </p>
-                <p className="text-sm text-gray-500">
-                  {account.type.charAt(0).toUpperCase() + account.type.slice(1)}{" "}
-                  • {account.currency}
+                  {formatCurrency(
+                    accountBalances[account.id] ?? 0,
+                    account.currency
+                  )}
                 </p>
               </div>
-              <p className="text-sm font-medium text-gray-900">
-                {formatCurrency(
-                  accountBalances[account.id] ?? 0,
-                  account.currency
-                )}
-              </p>
-            </div>
-          ))}
+            ))}
         </div>
       </div>
     </div>
