@@ -34,6 +34,7 @@ model Account {
   updatedAt DateTime   @updatedAt
   lines     JournalLine[]
   checkpoints Checkpoint[]
+  creditCardProperties CreditCardProperties[]
 }
 
 model JournalEntry {
@@ -41,6 +42,7 @@ model JournalEntry {
   date        String
   description String?
   type        String?       // e.g., 'regular', 'currency_transfer'
+  postingDate String?       // Date posted to account (YYYY-MM-DD)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   lines       JournalLine[]
@@ -67,4 +69,31 @@ model Checkpoint {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   account       Account  @relation(fields: [accountId], references: [id])
-} 
+}
+
+model CreditCardProperties {
+  id                    String   @id @default(uuid())
+  accountId             String   
+  creditLimit           Float    // Credit limit amount
+  interestRate          Float    // Annual percentage rate (as decimal, e.g., 0.1899 for 18.99%)
+  statementClosingDay   Int      // Day of month statement closes (1-31)
+  paymentDueDay         Int      // Day of month payment is due (1-31)
+  minimumPaymentPercent Float    // Minimum payment as percentage (e.g., 0.02 for 2%)
+  
+  // Versioning fields
+  effectiveDate         String   // Date these properties became effective (YYYY-MM-DD)
+  endDate               String?  // Date these properties ended (YYYY-MM-DD), null for current
+  isActive              Boolean  @default(true) // Whether this is the current active version
+  
+  // Statement tracking (separate from properties versioning)
+  lastStatementBalance  Float?   // Balance from last reconciled statement
+  lastStatementDate     String?  // Date of last reconciled statement (YYYY-MM-DD)
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([accountId, effectiveDate])
+  @@index([accountId, isActive])
+}

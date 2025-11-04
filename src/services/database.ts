@@ -365,6 +365,7 @@ class DatabaseService {
       type?: string; // 'regular' | 'currency_transfer'
       transactionType?: "income" | "expense" | "transfer";
       forceDuplicate?: boolean; // If true, allow duplicate creation
+      postingDate?: string | Date; // Date posted to account (YYYY-MM-DD)
     },
     tx?: TransactionClient
   ): Promise<{ skipped: boolean; reason?: string; entry?: any; existing?: any }> {
@@ -383,6 +384,26 @@ class DatabaseService {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       console.warn("[createJournalEntry] Skipped: Invalid date format, must be YYYY-MM-DD", { data });
       return { skipped: true, reason: "Invalid date format" };
+    }
+
+    // Handle postingDate - default to transaction date if not provided
+    let postingDateStr = dateStr; // Default to transaction date
+    if (data.postingDate) {
+      if (typeof data.postingDate === "string") {
+        postingDateStr = data.postingDate;
+      } else if (data.postingDate instanceof Date) {
+        postingDateStr = data.postingDate.toISOString().slice(0, 10);
+      }
+      // Validate posting date format
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(postingDateStr)) {
+        console.warn("[createJournalEntry] Skipped: Invalid posting date format, must be YYYY-MM-DD", { data });
+        return { skipped: true, reason: "Invalid posting date format" };
+      }
+      // Validate that posting date is not before transaction date
+      if (postingDateStr < dateStr) {
+        console.warn("[createJournalEntry] Skipped: Posting date cannot be before transaction date", { data });
+        return { skipped: true, reason: "Posting date cannot be before transaction date" };
+      }
     }
 
     // Fetch both accounts to get their currencies and subtypes
@@ -496,6 +517,7 @@ class DatabaseService {
           date: dateStr,
           description: data.description,
           type: null,
+          postingDate: postingDateStr,
           lines: {
             create: [fromLine, toLine],
           },
@@ -586,6 +608,7 @@ class DatabaseService {
           date: dateStr,
           description: data.description,
           type: "currency_transfer",
+          postingDate: postingDateStr,
           lines: {
             create: [
               {

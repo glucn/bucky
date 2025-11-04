@@ -1,23 +1,23 @@
 # Implementation Plan
 
-- [ ] 1. Database Schema Updates
+- [x] 1. Database Schema Updates
   - Update Prisma schema to add postingDate field to JournalEntry model
   - Create CreditCardProperties model with versioning support
   - Generate and run database migrations
   - _Requirements: 1.1, 4.1, 4.2_
 
-- [ ] 1.1 Update JournalEntry model in Prisma schema
+- [x] 1.1 Update JournalEntry model in Prisma schema
   - Add postingDate field as optional String to JournalEntry model
   - Update database service to handle postingDate in transaction creation
   - _Requirements: 4.1, 4.2_
 
-- [ ] 1.2 Create CreditCardProperties model
+- [x] 1.2 Create CreditCardProperties model
   - Define CreditCardProperties model with versioning fields (effectiveDate, endDate, isActive)
   - Add relationship to Account model
   - Create database indexes for efficient querying
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ] 1.3 Generate and apply database migrations
+- [x] 1.3 Generate and apply database migrations
   - Run Prisma generate to update client
   - Create and apply migration for schema changes
   - Update existing JournalEntry records to set postingDate equal to date
