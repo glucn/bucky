@@ -13,6 +13,7 @@ interface NewTransaction {
   toAccountId: string;
   amount: number;
   date: string;
+  postingDate: string;
   description: string;
 }
 
@@ -40,6 +41,15 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
     amount: isEdit ? Math.abs(transaction?.amount ?? 0) : 0,
     date: isEdit
       ? new Date(transaction?.entry?.date ?? "").toISOString().split("T")[0]
+      : (() => {
+          const now = new Date();
+          const yyyy = now.getFullYear();
+          const mm = String(now.getMonth() + 1).padStart(2, "0");
+          const dd = String(now.getDate()).padStart(2, "0");
+          return `${yyyy}-${mm}-${dd}`;
+        })(),
+    postingDate: isEdit
+      ? (transaction?.entry?.postingDate || new Date(transaction?.entry?.date ?? "").toISOString().split("T")[0])
       : (() => {
           const now = new Date();
           const yyyy = now.getFullYear();
@@ -106,8 +116,26 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
     // eslint-disable-next-line
   }, [newTransaction.toAccountId, isMultiCurrency]);
 
+  // When transaction date changes, update posting date to match if posting date is not manually set
+  React.useEffect(() => {
+    if (newTransaction.postingDate < newTransaction.date) {
+      setNewTransaction((prev) => ({
+        ...prev,
+        postingDate: newTransaction.date,
+      }));
+    }
+    // eslint-disable-next-line
+  }, [newTransaction.date]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate posting date is not before transaction date
+    if (newTransaction.postingDate < newTransaction.date) {
+      alert("Posting date cannot be before transaction date");
+      return;
+    }
+    
     setIsSubmitting(true);
     try {
       if (isEdit && transaction) {
@@ -328,7 +356,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
               htmlFor="date"
               className="block text-sm font-medium text-gray-700"
             >
-              Date
+              Transaction Date
             </label>
             <input
               id="date"
@@ -343,6 +371,33 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
               required
             />
+          </div>
+          <div>
+            <label
+              htmlFor="postingDate"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Posting Date
+            </label>
+            <input
+              id="postingDate"
+              type="date"
+              value={newTransaction.postingDate}
+              onChange={(e) =>
+                setNewTransaction((prev) => ({
+                  ...prev,
+                  postingDate: e.target.value,
+                }))
+              }
+              min={newTransaction.date}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              required
+            />
+            {newTransaction.postingDate < newTransaction.date && (
+              <p className="mt-1 text-sm text-red-600">
+                Posting date cannot be before transaction date
+              </p>
+            )}
           </div>
           <div>
             <label

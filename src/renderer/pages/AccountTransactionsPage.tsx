@@ -319,6 +319,7 @@ const CreateCheckpointModal: React.FC<{
 export interface JournalEntry {
   id: string;
   date: string;
+  postingDate?: string;
   description?: string;
   lines: JournalLine[];
 }
@@ -345,6 +346,13 @@ export const AccountTransactionsPage: React.FC = () => {
   const [editTransaction, setEditTransaction] = useState<JournalLine | null>(
     null
   );
+  
+  // Date filtering state
+  const [transactionDateFrom, setTransactionDateFrom] = useState<string>("");
+  const [transactionDateTo, setTransactionDateTo] = useState<string>("");
+  const [postingDateFrom, setPostingDateFrom] = useState<string>("");
+  const [postingDateTo, setPostingDateTo] = useState<string>("");
+  const [showFilters, setShowFilters] = useState(false);
 
   const fetchTransactions = async () => {
     if (!accountId) return;
@@ -358,6 +366,32 @@ export const AccountTransactionsPage: React.FC = () => {
       console.error("Failed to fetch transactions", err);
     }
   };
+
+  // Filter transactions based on date filters
+  const filteredTransactions = React.useMemo(() => {
+    return transactions.filter((line) => {
+      const transactionDate = line.entry.date;
+      const postingDate = line.entry.postingDate || line.entry.date;
+
+      // Filter by transaction date range
+      if (transactionDateFrom && transactionDate < transactionDateFrom) {
+        return false;
+      }
+      if (transactionDateTo && transactionDate > transactionDateTo) {
+        return false;
+      }
+
+      // Filter by posting date range
+      if (postingDateFrom && postingDate < postingDateFrom) {
+        return false;
+      }
+      if (postingDateTo && postingDate > postingDateTo) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [transactions, transactionDateFrom, transactionDateTo, postingDateFrom, postingDateTo]);
 
   const fetchAccount = async () => {
     try {
@@ -450,12 +484,95 @@ export const AccountTransactionsPage: React.FC = () => {
         </div>
       </div>
       <div className="bg-white shadow rounded-lg p-6">
+        {/* Date Filters */}
+        <div className="mb-4">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+            type="button"
+          >
+            <svg
+              className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-90' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            {showFilters ? 'Hide Filters' : 'Show Filters'}
+          </button>
+          
+          {showFilters && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Transaction Date Range</h3>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="date"
+                    value={transactionDateFrom}
+                    onChange={(e) => setTransactionDateFrom(e.target.value)}
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    placeholder="From"
+                  />
+                  <span className="text-gray-500">to</span>
+                  <input
+                    type="date"
+                    value={transactionDateTo}
+                    onChange={(e) => setTransactionDateTo(e.target.value)}
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    placeholder="To"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Posting Date Range</h3>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="date"
+                    value={postingDateFrom}
+                    onChange={(e) => setPostingDateFrom(e.target.value)}
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    placeholder="From"
+                  />
+                  <span className="text-gray-500">to</span>
+                  <input
+                    type="date"
+                    value={postingDateTo}
+                    onChange={(e) => setPostingDateTo(e.target.value)}
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    placeholder="To"
+                  />
+                </div>
+              </div>
+              
+              <div className="md:col-span-2 flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setTransactionDateFrom("");
+                    setTransactionDateTo("");
+                    setPostingDateFrom("");
+                    setPostingDateTo("");
+                  }}
+                  className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                  type="button"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date
+                  Transaction Date
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Posting Date
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Amount / Exchange Rate
@@ -472,14 +589,14 @@ export const AccountTransactionsPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white">
-              {transactions.length === 0 && (
+              {filteredTransactions.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="text-center py-4 text-gray-500">
-                    No transactions found.
+                  <td colSpan={6} className="text-center py-4 text-gray-500">
+                    {transactions.length === 0 ? "No transactions found." : "No transactions match the current filters."}
                   </td>
                 </tr>
               )}
-              {transactions.map((line) => {
+              {filteredTransactions.map((line) => {
                 // Find the "other" line in the same entry (the other side of the double-entry)
                 const otherLine = line.entry?.lines?.find(
                   (l: any) => l.accountId !== line.accountId
@@ -496,10 +613,18 @@ export const AccountTransactionsPage: React.FC = () => {
                     }
                   >
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {/* Display date string as-is to avoid timezone shift */}
+                      {/* Display transaction date string as-is to avoid timezone shift */}
                       {typeof line.entry.date === "string"
                         ? line.entry.date
                         : ""}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {/* Display posting date, show only if different from transaction date */}
+                      {line.entry.postingDate && line.entry.postingDate !== line.entry.date ? (
+                        <span className="text-blue-600">{line.entry.postingDate}</span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {/* Multi-currency transfer display */}

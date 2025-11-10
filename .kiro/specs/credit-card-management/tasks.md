@@ -23,49 +23,49 @@
   - Update existing JournalEntry records to set postingDate equal to date
   - _Requirements: 4.1, 4.2_
 
-- [ ] 2. Core Credit Card Service Implementation
+- [x] 2. Core Credit Card Service Implementation
   - Implement CreditCardService with property management
   - Add credit limit and utilization calculations
   - Integrate with existing database service
   - _Requirements: 1.1, 1.4, 1.5, 2.1_
 
-- [ ] 2.1 Implement CreditCardService class
+- [x] 2.1 Implement CreditCardService class
   - Create setupCreditCard method for initial credit card configuration
   - Implement updateCreditCardProperties with versioning logic
   - Add getCurrentCreditCardProperties and getCreditCardPropertiesHistory methods
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ] 2.2 Implement credit calculations
+- [x] 2.2 Implement credit calculations
   - Add getAvailableCredit method using current balance and credit limit
   - Implement getCreditUtilization percentage calculation
   - Create getMinimumPayment calculation based on balance and minimum percentage
   - _Requirements: 1.4, 1.5_
 
-- [ ] 2.3 Integrate with existing DatabaseService
+- [x] 2.3 Integrate with existing DatabaseService
   - Update createJournalEntry to handle postingDate parameter
   - Modify transaction creation to support both transaction date and posting date
   - Ensure backward compatibility with existing transaction creation
   - _Requirements: 4.1, 4.2, 4.3_
 
-- [ ] 3. Enhanced Transaction Management
+- [x] 3. Enhanced Transaction Management
   - Update transaction creation UI to support posting dates
   - Modify transaction display to show both dates
   - Add filtering and sorting by posting date
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
 
-- [ ] 3.1 Update ManualTransactionModal component
+- [x] 3.1 Update ManualTransactionModal component
   - Add postingDate input field to transaction creation form
   - Implement date validation (posting date >= transaction date)
   - Default posting date to transaction date when not specified
   - _Requirements: 4.1, 4.2, 4.5_
 
-- [ ] 3.2 Enhance transaction display components
+- [x] 3.2 Enhance transaction display components
   - Update AccountTransactionsPage to show both transaction and posting dates
   - Modify transaction list to display posting date when different from transaction date
   - Add column headers and sorting options for both date types
   - _Requirements: 4.3, 4.4_
 
-- [ ] 3.3 Add date filtering capabilities
+- [x] 3.3 Add date filtering capabilities
   - Implement filtering by transaction date range
   - Add filtering by posting date range for statement period analysis
   - Create date range picker components for filtering

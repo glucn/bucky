@@ -1551,7 +1551,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
   /**
    * Update a journal entry (transaction) by lineId.
    * Updates the entry's date/description and both lines' amounts/descriptions.
-   * @param data { lineId, fromAccountId, toAccountId, amount, date, description }
+   * @param data { lineId, fromAccountId, toAccountId, amount, date, description, postingDate }
    */
   public async updateJournalEntryLine(
     data: {
@@ -1560,6 +1560,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       toAccountId: string;
       amount: number;
       date: string;
+      postingDate?: string;
       description: string;
       transactionType?: "income" | "expense" | "transfer";
     },
@@ -1625,12 +1626,13 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       description: data.description,
     });
 
-    // Update the entry (date, description)
+    // Update the entry (date, description, postingDate)
     await prisma.journalEntry.update({
       where: { id: entry.id },
       data: {
         date: data.date,
         description: data.description,
+        postingDate: data.postingDate || data.date,
       },
     });
 
