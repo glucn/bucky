@@ -71,25 +71,25 @@
   - Create date range picker components for filtering
   - _Requirements: 4.4, 5.2_
 
-- [ ] 4. Credit Card Account Setup and Management
+- [x] 4. Credit Card Account Setup and Management
   - Create credit card setup modal/wizard
   - Add credit card properties management interface
   - Display credit card metrics on account pages
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
 
-- [ ] 4.1 Create CreditCardSetupModal component
+- [x] 4.1 Create CreditCardSetupModal component
   - Design form for credit card properties (limit, APR, statement dates)
   - Implement validation for credit card configuration
   - Add effective date selection for property changes
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ] 4.2 Enhance AccountModal for credit card accounts
+- [x] 4.2 Enhance AccountModal for credit card accounts
   - Add credit card type detection and conditional property fields
   - Integrate CreditCardSetupModal into account creation flow
   - Handle credit card property updates for existing accounts
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ] 4.3 Update account display with credit card metrics
+- [x] 4.3 Update account display with credit card metrics
   - Show available credit and utilization on account pages
   - Display credit limit and current balance prominently
   - Add visual indicators for credit utilization levels

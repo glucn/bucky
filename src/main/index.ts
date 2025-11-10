@@ -6,6 +6,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import * as path from "path";
 import * as isDev from "electron-is-dev";
 import { databaseService } from "../services/database";
+import { creditCardService } from "../services/creditCardService";
 
 // Add this at the top of the file for type safety with the injected variable
 // eslint-disable-next-line no-var
@@ -96,7 +97,8 @@ function setupIpcHandlers() {
 
   ipcMain.handle("add-account", async (_, account) => {
     console.log("Handling add-account request:", account);
-    return databaseService.createAccount(account);
+    const createdAccount = await databaseService.createAccount(account);
+    return { success: true, account: createdAccount };
   });
 
   ipcMain.handle("add-transaction", async (_, transaction) => {
@@ -557,6 +559,96 @@ function setupIpcHandlers() {
       };
     }
   });
+
+  // Credit Card handlers
+  ipcMain.handle(
+    "setup-credit-card",
+    async (_, { accountId, properties }) => {
+      console.log("Handling setup-credit-card request:", { accountId, properties });
+      try {
+        const result = await creditCardService.setupCreditCard(accountId, properties);
+        return { success: true, properties: result };
+      } catch (error) {
+        console.error("Error setting up credit card:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "update-credit-card-properties",
+    async (_, { accountId, properties }) => {
+      console.log("Handling update-credit-card-properties request:", { accountId, properties });
+      try {
+        const result = await creditCardService.updateCreditCardProperties(accountId, properties);
+        return { success: true, properties: result };
+      } catch (error) {
+        console.error("Error updating credit card properties:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-credit-card-properties",
+    async (_, accountId: string) => {
+      console.log("Handling get-credit-card-properties request for:", accountId);
+      try {
+        const properties = await creditCardService.getCurrentCreditCardProperties(accountId);
+        return { success: true, properties };
+      } catch (error) {
+        console.error("Error getting credit card properties:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-credit-card-metrics",
+    async (_, accountId: string) => {
+      console.log("Handling get-credit-card-metrics request for:", accountId);
+      try {
+        const properties = await creditCardService.getCurrentCreditCardProperties(accountId);
+        if (!properties) {
+          return { success: false, error: "No credit card properties found" };
+        }
+
+        const [availableCredit, utilization, minimumPayment, balance] = await Promise.all([
+          creditCardService.getAvailableCredit(accountId),
+          creditCardService.getCreditUtilization(accountId),
+          creditCardService.getMinimumPayment(accountId),
+          databaseService.getAccountBalance(accountId),
+        ]);
+
+        return {
+          success: true,
+          metrics: {
+            accountId,
+            currentBalance: balance,
+            availableCredit,
+            creditUtilization: utilization,
+            minimumPayment,
+            creditLimit: properties.creditLimit,
+          },
+        };
+      } catch (error) {
+        console.error("Error getting credit card metrics:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
 
   console.log("All IPC handlers registered");
   // DEV ONLY: Reset all data to initial state

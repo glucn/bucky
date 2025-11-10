@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { AccountType, toAccountType, AccountSubtype } from "../../shared/accountTypes";
+import { CreditCardSetupModal } from "./CreditCardSetupModal";
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -19,13 +20,52 @@ export const AccountModal: React.FC<AccountModalProps> = ({
     subtype: AccountSubtype.Asset,
   });
   const [loading, setLoading] = useState(false);
+  const [showCreditCardSetup, setShowCreditCardSetup] = useState(false);
+  const [createdAccountId, setCreatedAccountId] = useState<string | null>(null);
+  const [selectedTypeValue, setSelectedTypeValue] = useState<string>("cash"); // Track raw dropdown value
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await window.electron.ipcRenderer.invoke("add-account", newAccount);
-    setLoading(false);
+    
+    try {
+      const result = await window.electron.ipcRenderer.invoke("add-account", newAccount);
+      
+      // Check if this is a credit card account using the tracked dropdown value
+      const isCreditCard = selectedTypeValue === "credit" && newAccount.subtype === AccountSubtype.Liability;
+      
+      if (isCreditCard && result?.account?.id) {
+        // Store the created account ID and show credit card setup modal
+        setCreatedAccountId(result.account.id);
+        setShowCreditCardSetup(true);
+      } else {
+        // For non-credit card accounts, close immediately
+        setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
+        setSelectedTypeValue("cash");
+        onAccountCreated();
+        onClose();
+      }
+    } catch (error) {
+      console.error("Error creating account:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreditCardSetupComplete = () => {
+    setShowCreditCardSetup(false);
+    setCreatedAccountId(null);
     setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
+    setSelectedTypeValue("cash");
+    onAccountCreated();
+    onClose();
+  };
+
+  const handleCreditCardSetupSkip = () => {
+    setShowCreditCardSetup(false);
+    setCreatedAccountId(null);
+    setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
+    setSelectedTypeValue("cash");
     onAccountCreated();
     onClose();
   };
@@ -73,13 +113,18 @@ export const AccountModal: React.FC<AccountModalProps> = ({
             </label>
             <select
               id="type"
-              value={newAccount.type}
-              onChange={(e) =>
+              value={selectedTypeValue}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSelectedTypeValue(value);
+                // Automatically set subtype to Liability for credit cards
+                const subtype = value === "credit" ? AccountSubtype.Liability : newAccount.subtype;
                 setNewAccount({
                   ...newAccount,
-                  type: toAccountType(e.target.value),
-                })
-              }
+                  type: toAccountType(value),
+                  subtype,
+                });
+              }}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
             >
               <option value="cash">Cash</option>
@@ -142,6 +187,16 @@ export const AccountModal: React.FC<AccountModalProps> = ({
           </button>
         </form>
       </div>
+      
+      {/* Credit Card Setup Modal */}
+      {showCreditCardSetup && createdAccountId && (
+        <CreditCardSetupModal
+          accountId={createdAccountId}
+          isOpen={showCreditCardSetup}
+          onClose={handleCreditCardSetupSkip}
+          onSuccess={handleCreditCardSetupComplete}
+        />
+      )}
     </div>
   );
 };

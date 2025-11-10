@@ -334,6 +334,15 @@ export interface JournalLine {
   account: Account;
 }
 
+interface CreditCardMetrics {
+  accountId: string;
+  currentBalance: number;
+  availableCredit: number;
+  creditUtilization: number;
+  minimumPayment: number;
+  creditLimit: number;
+}
+
 export const AccountTransactionsPage: React.FC = () => {
   const { accountId } = useParams<{ accountId: string }>();
   const [transactions, setTransactions] = useState<JournalLine[]>([]);
@@ -346,6 +355,10 @@ export const AccountTransactionsPage: React.FC = () => {
   const [editTransaction, setEditTransaction] = useState<JournalLine | null>(
     null
   );
+  
+  // Credit card state
+  const [creditCardMetrics, setCreditCardMetrics] = useState<CreditCardMetrics | null>(null);
+  const [isCreditCard, setIsCreditCard] = useState(false);
   
   // Date filtering state
   const [transactionDateFrom, setTransactionDateFrom] = useState<string>("");
@@ -398,9 +411,55 @@ export const AccountTransactionsPage: React.FC = () => {
       const accounts: Account[] = await window.electron.ipcRenderer.invoke(
         "get-accounts"
       );
-      setAccount(accounts.find((a) => a.id === accountId) || null);
+      const foundAccount = accounts.find((a) => a.id === accountId) || null;
+      setAccount(foundAccount);
+      
+      // Check if this account has credit card properties
+      if (foundAccount) {
+        checkIfCreditCard();
+      } else {
+        setIsCreditCard(false);
+        setCreditCardMetrics(null);
+      }
     } catch (err) {
       setAccount(null);
+      setIsCreditCard(false);
+      setCreditCardMetrics(null);
+    }
+  };
+
+  const checkIfCreditCard = async () => {
+    if (!accountId) return;
+    try {
+      const result = await window.electron.ipcRenderer.invoke(
+        "get-credit-card-properties",
+        accountId
+      );
+      if (result.success && result.properties) {
+        setIsCreditCard(true);
+        fetchCreditCardMetrics();
+      } else {
+        setIsCreditCard(false);
+        setCreditCardMetrics(null);
+      }
+    } catch (err) {
+      setIsCreditCard(false);
+      setCreditCardMetrics(null);
+    }
+  };
+
+  const fetchCreditCardMetrics = async () => {
+    if (!accountId) return;
+    try {
+      const result = await window.electron.ipcRenderer.invoke(
+        "get-credit-card-metrics",
+        accountId
+      );
+      if (result.success) {
+        setCreditCardMetrics(result.metrics);
+      }
+    } catch (err) {
+      console.error("Failed to fetch credit card metrics", err);
     }
   };
 
@@ -409,6 +468,18 @@ export const AccountTransactionsPage: React.FC = () => {
     fetchTransactions();
     // eslint-disable-next-line
   }, [accountId]);
+
+  const getUtilizationColor = (utilization: number) => {
+    if (utilization >= 90) return "text-red-600";
+    if (utilization >= 70) return "text-yellow-600";
+    return "text-green-600";
+  };
+
+  const getUtilizationBgColor = (utilization: number) => {
+    if (utilization >= 90) return "bg-red-100";
+    if (utilization >= 70) return "bg-yellow-100";
+    return "bg-green-100";
+  };
 
   return (
     <div className="space-y-6">
@@ -483,6 +554,67 @@ export const AccountTransactionsPage: React.FC = () => {
           </button>
         </div>
       </div>
+      
+      {/* Credit Card Metrics Section */}
+      {isCreditCard && creditCardMetrics && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Credit Card Overview</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Current Balance */}
+            <div className="bg-gray-50 rounded-lg p-4">
+              <div className="text-sm font-medium text-gray-500 mb-1">Current Balance</div>
+              <div className="text-2xl font-bold text-gray-900">
+                ${Math.abs(creditCardMetrics.currentBalance).toFixed(2)}
+              </div>
+            </div>
+            
+            {/* Credit Limit */}
+            <div className="bg-gray-50 rounded-lg p-4">
+              <div className="text-sm font-medium text-gray-500 mb-1">Credit Limit</div>
+              <div className="text-2xl font-bold text-gray-900">
+                ${creditCardMetrics.creditLimit.toFixed(2)}
+              </div>
+            </div>
+            
+            {/* Available Credit */}
+            <div className="bg-blue-50 rounded-lg p-4">
+              <div className="text-sm font-medium text-blue-700 mb-1">Available Credit</div>
+              <div className="text-2xl font-bold text-blue-900">
+                ${creditCardMetrics.availableCredit.toFixed(2)}
+              </div>
+            </div>
+            
+            {/* Credit Utilization */}
+            <div className={`${getUtilizationBgColor(creditCardMetrics.creditUtilization)} rounded-lg p-4`}>
+              <div className="text-sm font-medium text-gray-700 mb-1">Credit Utilization</div>
+              <div className={`text-2xl font-bold ${getUtilizationColor(creditCardMetrics.creditUtilization)}`}>
+                {creditCardMetrics.creditUtilization.toFixed(1)}%
+              </div>
+              {creditCardMetrics.creditUtilization >= 70 && (
+                <div className="text-xs text-gray-600 mt-1">
+                  {creditCardMetrics.creditUtilization >= 90 ? "⚠️ Very High" : "⚠️ High"}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Minimum Payment */}
+          {creditCardMetrics.minimumPayment > 0 && (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-yellow-800">Minimum Payment Due</div>
+                  <div className="text-xs text-yellow-700 mt-1">Based on current balance</div>
+                </div>
+                <div className="text-xl font-bold text-yellow-900">
+                  ${creditCardMetrics.minimumPayment.toFixed(2)}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      
       <div className="bg-white shadow rounded-lg p-6">
         {/* Date Filters */}
         <div className="mb-4">
