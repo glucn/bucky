@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { ManualTransactionModal } from "../components/ManualTransactionModal";
 import { ImportTransactionsWizard } from "../components/ImportTransactionsWizard";
 import { TransferModal } from "../components/TransferModal";
+import { useAccounts } from "../context/AccountsContext";
 
 // Modal for setting opening balance for the current account
 const SetOpeningBalanceModal: React.FC<{
@@ -345,6 +346,7 @@ interface CreditCardMetrics {
 
 export const AccountTransactionsPage: React.FC = () => {
   const { accountId } = useParams<{ accountId: string }>();
+  const { refreshAccounts } = useAccounts();
   const [transactions, setTransactions] = useState<JournalLine[]>([]);
   const [account, setAccount] = useState<Account | null>(null);
   const [showManualModal, setShowManualModal] = useState(false);
@@ -833,7 +835,10 @@ export const AccountTransactionsPage: React.FC = () => {
         <ManualTransactionModal
           accountId={accountId!}
           onClose={() => setShowManualModal(false)}
-          onSuccess={fetchTransactions}
+          onSuccess={async () => {
+            await fetchTransactions();
+            await refreshAccounts();
+          }}
         />
       )}
       {editTransaction && (
@@ -841,9 +846,10 @@ export const AccountTransactionsPage: React.FC = () => {
           accountId={accountId!}
           transaction={editTransaction}
           onClose={() => setEditTransaction(null)}
-          onSuccess={() => {
+          onSuccess={async () => {
             setEditTransaction(null);
-            fetchTransactions();
+            await fetchTransactions();
+            await refreshAccounts();
           }}
         />
       )}
@@ -851,14 +857,20 @@ export const AccountTransactionsPage: React.FC = () => {
         <ImportTransactionsWizard
           accountId={accountId!}
           onClose={() => setShowImportModal(false)}
-          onSuccess={fetchTransactions}
+          onSuccess={async () => {
+            await fetchTransactions();
+            await refreshAccounts();
+          }}
         />
       )}
-      {showOpenBalanceModal && accountId && (
+    {showOpenBalanceModal && accountId && (
         <SetOpeningBalanceModal
           accountId={accountId}
           onClose={() => setShowOpenBalanceModal(false)}
-          onSuccess={fetchTransactions}
+          onSuccess={async () => {
+            await fetchTransactions();
+            await refreshAccounts();
+          }}
         />
       )}
       {showCheckpointModal && accountId && (
@@ -871,9 +883,10 @@ export const AccountTransactionsPage: React.FC = () => {
         <TransferModal
           fromAccountId={accountId}
           onClose={() => setShowTransferModal(false)}
-          onSuccess={() => {
-            fetchTransactions();
-            fetchAccount();
+          onSuccess={async () => {
+            await fetchTransactions();
+            await fetchAccount();
+            await refreshAccounts();
           }}
         />
       )}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Account } from "../types";
+import { useAccounts } from "../context/AccountsContext";
 
 interface Checkpoint {
   id: string;
@@ -14,6 +15,7 @@ interface Checkpoint {
 }
 
 export const Checkpoints: React.FC = () => {
+  const { refreshAccounts } = useAccounts();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
@@ -117,6 +119,7 @@ export const Checkpoints: React.FC = () => {
           description: "",
         });
         await fetchCheckpoints();
+        await refreshAccounts();
         alert("Checkpoint created successfully!");
       } else {
         setError(result.error || "Failed to create checkpoint");
@@ -154,6 +157,7 @@ This action cannot be undone.`;
       );
       if (result.success) {
         await fetchCheckpoints();
+        await refreshAccounts();
         alert("Checkpoint deleted successfully");
       } else {
         setError(result.error || "Failed to delete checkpoint");
@@ -180,6 +184,7 @@ This action cannot be undone.`;
       );
       if (result.success) {
         await fetchCheckpoints();
+        await refreshAccounts();
         alert("Checkpoint reconciled again successfully!");
       } else {
         setError(result.error || "Failed to reconcile checkpoint");

@@ -133,8 +133,8 @@ class DatabaseService {
   }
   /**
    * Get all accounts with their current balances.
-   * Optionally filter by currency, or aggregate by currency if no filter is provided.
-   * Returns: Array<{ ...account, balance: number }> or { [currency: string]: number }
+   * Optionally filter by currency.
+   * Returns: Array<{ ...account, balance: number }>
    */
   public async getAccountsWithBalances(
     includeArchived: boolean = false,
@@ -163,22 +163,8 @@ class DatabaseService {
           };
         })
       );
-      if (currency) {
-        // If filtering, just return the filtered list
-        return results;
-      } else {
-        // Aggregate by currency
-        const grouped: Record<string, number> = {};
-        for (const acc of results) {
-          if (!grouped[acc.currency]) grouped[acc.currency] = 0;
-          grouped[acc.currency] += acc.balance;
-        }
-        // Round to 2 decimals
-        for (const cur in grouped) {
-          grouped[cur] = Math.round(grouped[cur] * 100) / 100;
-        }
-        return grouped;
-      }
+      // Always return the account list with balances
+      return results;
     } catch (error) {
       console.error("Error fetching accounts with balances:", error);
       throw error;

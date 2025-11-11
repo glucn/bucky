@@ -86,7 +86,7 @@ function setupIpcHandlers() {
   ipcMain.handle(
     "get-accounts-with-balances",
     async (_, includeArchived: boolean = false) => {
-      return databaseService.getAccountsWithBalances(includeArchived, undefined, "USD");
+      return databaseService.getAccountsWithBalances(includeArchived, undefined);
     }
   );
 
