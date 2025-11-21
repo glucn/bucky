@@ -268,6 +268,33 @@ class DatabaseService {
     });
   }
 
+  /**
+   * Update an account's name and/or currency.
+   */
+  public async updateAccount(
+    accountId: string,
+    data: {
+      name?: string;
+      currency?: string;
+    },
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    const updateData: any = {};
+    
+    if (data.name !== undefined) {
+      updateData.name = data.name;
+    }
+    if (data.currency !== undefined) {
+      updateData.currency = data.currency;
+    }
+
+    return prisma.account.update({
+      where: { id: accountId },
+      data: updateData,
+    });
+  }
+
   // Double-entry transaction operations
   /**
    * Create a double-entry journal entry (transaction) with multi-currency support.

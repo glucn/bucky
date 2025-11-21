@@ -15,6 +15,7 @@ export const Categories: React.FC = () => {
   const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
   const [archivingCategoryId, setArchivingCategoryId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<CategoryWithBalances | null>(null);
 
   // Fetch categories on mount
   useEffect(() => {
@@ -168,16 +169,25 @@ export const Categories: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatBalances(category)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex gap-2">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <div className="flex gap-3 items-center">
                         <Link
                           to={`/accounts/${category.id}/transactions`}
-                          className="text-blue-600 hover:text-blue-900"
+                          className="text-blue-600 hover:text-blue-900 hover:underline"
                         >
                           View Transactions
                         </Link>
                         <button
-                          className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="text-blue-600 hover:text-blue-900 hover:underline"
+                          onClick={() => {
+                            setEditingCategory(category);
+                            setIsModalOpen(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="text-red-600 hover:text-red-900 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline"
                           onClick={() => handleDeleteOrArchive(category)}
                           disabled={
                             deletingCategoryId === category.id ||
@@ -236,16 +246,25 @@ export const Categories: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatBalances(category)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex gap-2">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <div className="flex gap-3 items-center">
                         <Link
                           to={`/accounts/${category.id}/transactions`}
-                          className="text-blue-600 hover:text-blue-900"
+                          className="text-blue-600 hover:text-blue-900 hover:underline"
                         >
                           View Transactions
                         </Link>
                         <button
-                          className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="text-blue-600 hover:text-blue-900 hover:underline"
+                          onClick={() => {
+                            setEditingCategory(category);
+                            setIsModalOpen(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="text-red-600 hover:text-red-900 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline"
                           onClick={() => handleDeleteOrArchive(category)}
                           disabled={
                             deletingCategoryId === category.id ||
@@ -271,10 +290,15 @@ export const Categories: React.FC = () => {
       {/* Category Modal */}
       <CategoryModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingCategory(null);
+        }}
         onCategoryCreated={() => {
           fetchCategories();
+          setEditingCategory(null);
         }}
+        editingCategory={editingCategory}
       />
     </div>
   );

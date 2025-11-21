@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useLocation, Link } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { useAccounts } from "../context/AccountsContext";
 import AccountNavItem from "./AccountNavItem";
 import AccountManagementButton from "./AccountManagementButton";
@@ -20,18 +20,6 @@ const Sidebar: React.FC = () => {
   return (
     <aside className="flex flex-col min-h-0 w-64 bg-white border-r shadow-md p-4 flex-shrink-0">
       <div className="flex-1 overflow-y-auto">
-        <nav className="mb-6">
-          <Link
-            to="/categories"
-            className={`block px-3 py-2 rounded-md text-sm font-medium ${
-              location.pathname === "/categories"
-                ? "bg-primary-100 text-primary-700"
-                : "text-gray-700 hover:bg-gray-100"
-            }`}
-          >
-            Categories
-          </Link>
-        </nav>
         <h2 className="text-lg font-bold mb-4">Accounts</h2>
         {loading && <div className="text-gray-500">Loading accounts...</div>}
         {error && <div className="text-red-500">Failed to load accounts.</div>}

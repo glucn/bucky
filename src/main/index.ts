@@ -101,6 +101,23 @@ function setupIpcHandlers() {
     return { success: true, account: createdAccount };
   });
 
+  ipcMain.handle("update-account", async (_, data) => {
+    console.log("Handling update-account request:", data);
+    try {
+      const updatedAccount = await databaseService.updateAccount(data.id, {
+        name: data.name,
+        currency: data.currency,
+      });
+      return { success: true, account: updatedAccount };
+    } catch (error) {
+      console.error("Error updating account:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  });
+
   ipcMain.handle("add-transaction", async (_, transaction) => {
     console.log("Handling add-transaction request:", transaction);
     // transaction should include: date, amount, description, fromAccountId, toAccountId
