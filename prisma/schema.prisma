@@ -78,7 +78,8 @@ model CreditCardProperties {
   interestRate          Float    // Annual percentage rate (as decimal, e.g., 0.1899 for 18.99%)
   statementClosingDay   Int      // Day of month statement closes (1-31)
   paymentDueDay         Int      // Day of month payment is due (1-31)
-  minimumPaymentPercent Float    // Minimum payment as percentage (e.g., 0.02 for 2%)
+  minimumPaymentPercent Float?   // Minimum payment as percentage (e.g., 0.02 for 2%)
+  minimumPaymentAmount  Float?   // Minimum payment as fixed dollar amount
   
   // Versioning fields
   effectiveDate         String   // Date these properties became effective (YYYY-MM-DD)

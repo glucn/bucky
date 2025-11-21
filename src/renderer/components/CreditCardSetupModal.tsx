@@ -10,7 +10,8 @@ interface CreditCardSetupModalProps {
     interestRate: number;
     statementClosingDay: number;
     paymentDueDay: number;
-    minimumPaymentPercent: number;
+    minimumPaymentPercent?: number;
+    minimumPaymentAmount?: number;
     effectiveDate: string;
   } | null;
 }
@@ -22,12 +23,17 @@ export const CreditCardSetupModal: React.FC<CreditCardSetupModalProps> = ({
   onSuccess,
   existingProperties,
 }) => {
+  const [minimumPaymentType, setMinimumPaymentType] = useState<"percent" | "amount">(
+    existingProperties?.minimumPaymentAmount ? "amount" : "percent"
+  );
+
   const [formData, setFormData] = useState({
     creditLimit: existingProperties?.creditLimit?.toString() || "",
     interestRate: existingProperties?.interestRate ? (existingProperties.interestRate * 100).toFixed(2) : "",
     statementClosingDay: existingProperties?.statementClosingDay?.toString() || "",
     paymentDueDay: existingProperties?.paymentDueDay?.toString() || "",
     minimumPaymentPercent: existingProperties?.minimumPaymentPercent ? (existingProperties.minimumPaymentPercent * 100).toFixed(2) : "",
+    minimumPaymentAmount: existingProperties?.minimumPaymentAmount?.toString() || "",
     effectiveDate: existingProperties?.effectiveDate || new Date().toISOString().split("T")[0],
   });
 
@@ -62,15 +68,17 @@ export const CreditCardSetupModal: React.FC<CreditCardSetupModalProps> = ({
       newErrors.paymentDueDay = "Payment due day must be between 1 and 31";
     }
 
-    // Payment due day must be after statement closing day
-    if (!isNaN(statementClosingDay) && !isNaN(paymentDueDay) && paymentDueDay <= statementClosingDay) {
-      newErrors.paymentDueDay = "Payment due day must be after statement closing day";
-    }
-
-    // Minimum payment percentage validation (0-100%)
-    const minimumPaymentPercent = parseFloat(formData.minimumPaymentPercent);
-    if (!formData.minimumPaymentPercent || isNaN(minimumPaymentPercent) || minimumPaymentPercent < 0 || minimumPaymentPercent > 100) {
-      newErrors.minimumPaymentPercent = "Minimum payment percentage must be between 0 and 100";
+    // Minimum payment validation based on type
+    if (minimumPaymentType === "percent") {
+      const minimumPaymentPercent = parseFloat(formData.minimumPaymentPercent);
+      if (!formData.minimumPaymentPercent || isNaN(minimumPaymentPercent) || minimumPaymentPercent < 0 || minimumPaymentPercent > 100) {
+        newErrors.minimumPaymentPercent = "Minimum payment percentage must be between 0 and 100";
+      }
+    } else {
+      const minimumPaymentAmount = parseFloat(formData.minimumPaymentAmount);
+      if (!formData.minimumPaymentAmount || isNaN(minimumPaymentAmount) || minimumPaymentAmount < 0) {
+        newErrors.minimumPaymentAmount = "Minimum payment amount must be a non-negative number";
+      }
     }
 
     // Effective date validation
@@ -93,14 +101,20 @@ export const CreditCardSetupModal: React.FC<CreditCardSetupModalProps> = ({
     setLoading(true);
 
     try {
-      const properties = {
+      const properties: any = {
         creditLimit: parseFloat(formData.creditLimit),
         interestRate: parseFloat(formData.interestRate) / 100, // Convert percentage to decimal
         statementClosingDay: parseInt(formData.statementClosingDay),
         paymentDueDay: parseInt(formData.paymentDueDay),
-        minimumPaymentPercent: parseFloat(formData.minimumPaymentPercent) / 100, // Convert percentage to decimal
         effectiveDate: formData.effectiveDate,
       };
+
+      // Add minimum payment based on type
+      if (minimumPaymentType === "percent") {
+        properties.minimumPaymentPercent = parseFloat(formData.minimumPaymentPercent) / 100;
+      } else {
+        properties.minimumPaymentAmount = parseFloat(formData.minimumPaymentAmount);
+      }
 
       const method = existingProperties ? "update-credit-card-properties" : "setup-credit-card";
       const result = await window.electron.ipcRenderer.invoke(method, {
@@ -232,26 +246,82 @@ export const CreditCardSetupModal: React.FC<CreditCardSetupModalProps> = ({
               )}
             </div>
 
-            {/* Minimum Payment Percentage */}
-            <div>
-              <label htmlFor="minimumPaymentPercent" className="block text-sm font-medium text-gray-700">
-                Minimum Payment (%)
+            {/* Minimum Payment Type */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Minimum Payment Type
               </label>
-              <input
-                type="number"
-                id="minimumPaymentPercent"
-                step="0.01"
-                value={formData.minimumPaymentPercent}
-                onChange={(e) => setFormData({ ...formData, minimumPaymentPercent: e.target.value })}
-                className={`mt-1 block w-full rounded-md shadow-sm focus:ring-primary-500 sm:text-sm ${
-                  errors.minimumPaymentPercent ? "border-red-300 focus:border-red-500" : "border-gray-300 focus:border-primary-500"
-                }`}
-                placeholder="2.00"
-              />
-              {errors.minimumPaymentPercent && (
-                <p className="mt-1 text-sm text-red-600">{errors.minimumPaymentPercent}</p>
-              )}
+              <div className="flex gap-4">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="minimumPaymentType"
+                    value="percent"
+                    checked={minimumPaymentType === "percent"}
+                    onChange={(e) => setMinimumPaymentType(e.target.value as "percent" | "amount")}
+                    className="mr-2"
+                  />
+                  Percentage of Balance
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="minimumPaymentType"
+                    value="amount"
+                    checked={minimumPaymentType === "amount"}
+                    onChange={(e) => setMinimumPaymentType(e.target.value as "percent" | "amount")}
+                    className="mr-2"
+                  />
+                  Fixed Dollar Amount
+                </label>
+              </div>
             </div>
+
+            {/* Minimum Payment Percentage */}
+            {minimumPaymentType === "percent" && (
+              <div>
+                <label htmlFor="minimumPaymentPercent" className="block text-sm font-medium text-gray-700">
+                  Minimum Payment (%)
+                </label>
+                <input
+                  type="number"
+                  id="minimumPaymentPercent"
+                  step="0.01"
+                  value={formData.minimumPaymentPercent}
+                  onChange={(e) => setFormData({ ...formData, minimumPaymentPercent: e.target.value })}
+                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-primary-500 sm:text-sm ${
+                    errors.minimumPaymentPercent ? "border-red-300 focus:border-red-500" : "border-gray-300 focus:border-primary-500"
+                  }`}
+                  placeholder="2.00"
+                />
+                {errors.minimumPaymentPercent && (
+                  <p className="mt-1 text-sm text-red-600">{errors.minimumPaymentPercent}</p>
+                )}
+              </div>
+            )}
+
+            {/* Minimum Payment Amount */}
+            {minimumPaymentType === "amount" && (
+              <div>
+                <label htmlFor="minimumPaymentAmount" className="block text-sm font-medium text-gray-700">
+                  Minimum Payment ($)
+                </label>
+                <input
+                  type="number"
+                  id="minimumPaymentAmount"
+                  step="0.01"
+                  value={formData.minimumPaymentAmount}
+                  onChange={(e) => setFormData({ ...formData, minimumPaymentAmount: e.target.value })}
+                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-primary-500 sm:text-sm ${
+                    errors.minimumPaymentAmount ? "border-red-300 focus:border-red-500" : "border-gray-300 focus:border-primary-500"
+                  }`}
+                  placeholder="25.00"
+                />
+                {errors.minimumPaymentAmount && (
+                  <p className="mt-1 text-sm text-red-600">{errors.minimumPaymentAmount}</p>
+                )}
+              </div>
+            )}
 
             {/* Effective Date */}
             <div>

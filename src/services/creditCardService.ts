@@ -9,7 +9,8 @@ export interface CreditCardPropertiesInput {
   interestRate: number;
   statementClosingDay: number;
   paymentDueDay: number;
-  minimumPaymentPercent: number;
+  minimumPaymentPercent?: number;
+  minimumPaymentAmount?: number;
   effectiveDate: string;
 }
 
@@ -20,7 +21,8 @@ export interface CreditCardProperties {
   interestRate: number;
   statementClosingDay: number;
   paymentDueDay: number;
-  minimumPaymentPercent: number;
+  minimumPaymentPercent?: number;
+  minimumPaymentAmount?: number;
   effectiveDate: string;
   endDate?: string;
   isActive: boolean;
@@ -92,6 +94,7 @@ class CreditCardService {
         statementClosingDay: properties.statementClosingDay,
         paymentDueDay: properties.paymentDueDay,
         minimumPaymentPercent: properties.minimumPaymentPercent,
+        minimumPaymentAmount: properties.minimumPaymentAmount,
         effectiveDate: properties.effectiveDate,
         isActive: true
       }
@@ -155,6 +158,7 @@ class CreditCardService {
         statementClosingDay: properties.statementClosingDay,
         paymentDueDay: properties.paymentDueDay,
         minimumPaymentPercent: properties.minimumPaymentPercent,
+        minimumPaymentAmount: properties.minimumPaymentAmount,
         effectiveDate: properties.effectiveDate,
         isActive: true
       }
@@ -244,19 +248,26 @@ class CreditCardService {
       throw new Error("Payment due day must be between 1 and 31");
     }
 
-    if (properties.minimumPaymentPercent < 0 || properties.minimumPaymentPercent > 1) {
-      throw new Error("Minimum payment percentage must be between 0 and 1 (as decimal)");
+    // Validate minimum payment - must have either percentage or amount
+    if (!properties.minimumPaymentPercent && !properties.minimumPaymentAmount) {
+      throw new Error("Must specify either minimum payment percentage or minimum payment amount");
+    }
+
+    if (properties.minimumPaymentPercent !== undefined) {
+      if (properties.minimumPaymentPercent < 0 || properties.minimumPaymentPercent > 1) {
+        throw new Error("Minimum payment percentage must be between 0 and 1 (as decimal)");
+      }
+    }
+
+    if (properties.minimumPaymentAmount !== undefined) {
+      if (properties.minimumPaymentAmount < 0) {
+        throw new Error("Minimum payment amount must be non-negative");
+      }
     }
 
     // Validate date format (YYYY-MM-DD)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(properties.effectiveDate)) {
       throw new Error("Effective date must be in YYYY-MM-DD format");
-    }
-
-    // Validate that payment due day is after statement closing day
-    // Note: This is a simplified check that doesn't account for month boundaries
-    if (properties.paymentDueDay <= properties.statementClosingDay) {
-      throw new Error("Payment due day must be after statement closing day");
     }
   }
 
@@ -341,8 +352,17 @@ class CreditCardService {
       return 0;
     }
 
-    // Calculate minimum payment as percentage of balance owed
-    const minimumPayment = amountOwed * properties.minimumPaymentPercent;
+    let minimumPayment = 0;
+
+    // Calculate based on percentage if specified
+    if (properties.minimumPaymentPercent) {
+      minimumPayment = amountOwed * properties.minimumPaymentPercent;
+    }
+
+    // Use fixed amount if specified (and take the greater of the two if both are specified)
+    if (properties.minimumPaymentAmount) {
+      minimumPayment = Math.max(minimumPayment, properties.minimumPaymentAmount);
+    }
     
     return Math.round(minimumPayment * 100) / 100;
   }
@@ -475,6 +495,7 @@ class CreditCardService {
       statementClosingDay: properties.statementClosingDay,
       paymentDueDay: properties.paymentDueDay,
       minimumPaymentPercent: properties.minimumPaymentPercent,
+      minimumPaymentAmount: properties.minimumPaymentAmount,
       effectiveDate: properties.effectiveDate,
       endDate: properties.endDate,
       isActive: properties.isActive,
