@@ -696,7 +696,10 @@ class DatabaseService {
         entry: true, // Only include the entry id for now
         account: true
       },
-      orderBy: { entry: { displayOrder: "desc" } },
+      orderBy: [
+        { entry: { date: "desc" } },
+        { entry: { displayOrder: "desc" } }
+      ],
     });
 
     // Get all unique entryIds
@@ -1020,7 +1023,10 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     const prisma = tx || this.prisma;
     // If currency is provided, filter lines by currency
     const entries = await prisma.journalEntry.findMany({
-      orderBy: { displayOrder: "desc" },
+      orderBy: [
+        { date: "desc" },
+        { displayOrder: "desc" }
+      ],
       take: limit,
       include: {
         lines: {

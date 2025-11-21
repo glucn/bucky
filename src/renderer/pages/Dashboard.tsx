@@ -1,5 +1,6 @@
 import { AccountType } from "../../shared/accountTypes";
 import React, { useEffect, useState } from "react";
+import { formatCurrencyAmount } from "../utils/currencyUtils";
 
 interface Account {
   id: string;
@@ -33,18 +34,14 @@ export const Dashboard: React.FC = () => {
     Record<string, number>
   >({});
   type NetWorthState = {
-    assets: number;
-    liabilities: number;
-    netWorth: number;
-    currency?: string;
-    all?: any;
+    assets: Record<string, number>;
+    liabilities: Record<string, number>;
+    netWorth: Record<string, number>;
   } | null;
   const [netWorth, setNetWorth] = useState<NetWorthState>(null);
   type IncomeExpenseState = {
-    income: number;
-    expenses: number;
-    currency?: string;
-    all?: any;
+    income: Record<string, number>;
+    expenses: Record<string, number>;
   } | null;
   const [incomeExpense, setIncomeExpense] = useState<IncomeExpenseState>(null);
 
@@ -76,25 +73,7 @@ export const Dashboard: React.FC = () => {
     // Fetch net worth
     const fetchNetWorth = async () => {
       const nw = await window.electron.ipcRenderer.invoke("get-net-worth");
-      // If nw.netWorth is an object (per-currency), pick the first currency or show all
-      if (nw && typeof nw.netWorth === "object" && nw.netWorth !== null) {
-        // Pick the first currency for display, or aggregate if needed
-        const currencies = Object.keys(nw.netWorth);
-        if (currencies.length > 0) {
-          const cur = currencies[0];
-          setNetWorth({
-            netWorth: nw.netWorth[cur],
-            assets: nw.assets[cur],
-            liabilities: nw.liabilities[cur],
-            currency: cur,
-            all: nw, // keep all for possible future use
-          });
-        } else {
-          setNetWorth(null);
-        }
-      } else {
-        setNetWorth(nw);
-      }
+      setNetWorth(nw);
     };
     fetchNetWorth();
   }, []);
@@ -105,38 +84,16 @@ export const Dashboard: React.FC = () => {
       const ie = await window.electron.ipcRenderer.invoke(
         "get-income-expense-this-month"
       );
-      // If income/expenses are objects (per-currency), pick the first available currency from either
-      if (
-        ie &&
-        typeof ie.income === "object" &&
-        ie.income !== null &&
-        typeof ie.expenses === "object" &&
-        ie.expenses !== null
-      ) {
-        const incomeCurrencies = Object.keys(ie.income);
-        const expenseCurrencies = Object.keys(ie.expenses);
-        const allCurrencies = Array.from(
-          new Set([...incomeCurrencies, ...expenseCurrencies])
-        );
-        const cur = allCurrencies[0] || "USD";
-        setIncomeExpense({
-          income: ie.income[cur] ?? 0,
-          expenses: ie.expenses[cur] ?? 0,
-          currency: cur,
-          all: ie,
-        });
-      } else {
-        setIncomeExpense(ie);
-      }
+      setIncomeExpense(ie);
     };
     fetchIncomeExpense();
   }, []);
 
   const formatCurrency = (amount: number, currency: string = "USD") => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency,
-    }).format(amount);
+    return formatCurrencyAmount(amount, currency, {
+      showSymbol: true,
+      showCode: true,
+    });
   };
 
   return (
@@ -146,37 +103,21 @@ export const Dashboard: React.FC = () => {
         <h2 className="text-lg font-medium text-gray-900">Net Worth</h2>
         {netWorth ? (
           <>
-            <p className="mt-2 text-3xl font-bold text-primary-600">
-              {formatCurrency(
-                netWorth.netWorth,
-                "currency" in netWorth && netWorth.currency
-                  ? netWorth.currency
-                  : "USD"
-              )}
-              {"currency" in netWorth && netWorth.currency
-                ? ` (${netWorth.currency})`
-                : ""}
-            </p>
-            <div className="flex space-x-8 mt-2">
-              <span className="text-green-700">
-                Assets:{" "}
-                {formatCurrency(
-                  netWorth.assets,
-                  "currency" in netWorth && netWorth.currency
-                    ? netWorth.currency
-                    : "USD"
-                )}
-              </span>
-              <span className="text-red-700">
-                Liabilities:{" "}
-                {formatCurrency(
-                  netWorth.liabilities,
-                  "currency" in netWorth && netWorth.currency
-                    ? netWorth.currency
-                    : "USD"
-                )}
-              </span>
-            </div>
+            {Object.keys(netWorth.netWorth).map((currency) => (
+              <div key={currency} className="mb-4 last:mb-0">
+                <p className="mt-2 text-3xl font-bold text-primary-600">
+                  {formatCurrency(netWorth.netWorth[currency], currency)}
+                </p>
+                <div className="flex space-x-8 mt-2">
+                  <span className="text-green-700">
+                    Assets: {formatCurrency(netWorth.assets[currency] || 0, currency)}
+                  </span>
+                  <span className="text-red-700">
+                    Liabilities: {formatCurrency(netWorth.liabilities[currency] || 0, currency)}
+                  </span>
+                </div>
+              </div>
+            ))}
           </>
         ) : (
           <p>Loading...</p>
@@ -189,32 +130,26 @@ export const Dashboard: React.FC = () => {
           This Month: Income vs Expenses
         </h2>
         {incomeExpense ? (
-          <div className="flex space-x-8 mt-2">
-            <span className="text-green-700">
-              Income:{" "}
-              {formatCurrency(
-                incomeExpense.income,
-                "currency" in incomeExpense && incomeExpense.currency
-                  ? incomeExpense.currency
-                  : "USD"
-              )}
-              {"currency" in incomeExpense && incomeExpense.currency
-                ? ` (${incomeExpense.currency})`
-                : ""}
-            </span>
-            <span className="text-red-700">
-              Expenses:{" "}
-              {formatCurrency(
-                incomeExpense.expenses,
-                "currency" in incomeExpense && incomeExpense.currency
-                  ? incomeExpense.currency
-                  : "USD"
-              )}
-              {"currency" in incomeExpense && incomeExpense.currency
-                ? ` (${incomeExpense.currency})`
-                : ""}
-            </span>
-          </div>
+          <>
+            {(() => {
+              const allCurrencies = Array.from(
+                new Set([
+                  ...Object.keys(incomeExpense.income),
+                  ...Object.keys(incomeExpense.expenses),
+                ])
+              );
+              return allCurrencies.map((currency) => (
+                <div key={currency} className="flex space-x-8 mt-2">
+                  <span className="text-green-700">
+                    Income: {formatCurrency(incomeExpense.income[currency] || 0, currency)}
+                  </span>
+                  <span className="text-red-700">
+                    Expenses: {formatCurrency(incomeExpense.expenses[currency] || 0, currency)}
+                  </span>
+                </div>
+              ));
+            })()}
+          </>
         ) : (
           <p>Loading...</p>
         )}

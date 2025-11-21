@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Account } from "../types";
+import { formatCurrencyAmount, getCurrencySymbol } from "../utils/currencyUtils";
 
 const RELEVANT_ACCOUNT_TYPES = ["cash", "bank", "credit", "investment"];
 
@@ -187,13 +188,13 @@ export const OpeningBalances: React.FC = () => {
                     </span>
                   </label>
                   <span className="text-xs text-gray-500">
-                    Current: ${Math.round(current * 100) / 100}
+                    Current: {formatCurrencyAmount(Math.round(current * 100) / 100, account.currency, { showSymbol: true, showCode: true })}
                   </span>
                   {selectedAccounts.has(account.id) && (
                     <>
                       <div className="relative rounded-md shadow-sm w-32">
                         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                          <span className="text-gray-500 sm:text-sm">$</span>
+                          <span className="text-gray-500 sm:text-sm">{getCurrencySymbol(account.currency)}</span>
                         </div>
                         <input
                           type="number"
@@ -226,8 +227,8 @@ export const OpeningBalances: React.FC = () => {
                         {diff === 0
                           ? "No change"
                           : diff > 0
-                          ? `+${diff.toFixed(2)}`
-                          : diff.toFixed(2)}
+                          ? `+${formatCurrencyAmount(diff, account.currency, { showSymbol: false, showCode: true })}`
+                          : formatCurrencyAmount(diff, account.currency, { showSymbol: false, showCode: true })}
                       </span>
                     </>
                   )}

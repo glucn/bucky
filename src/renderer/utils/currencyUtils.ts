@@ -6,12 +6,12 @@
  * Common currency symbols mapping
  */
 const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$',
+  USD: 'USD$',
   EUR: '€',
   GBP: '£',
   JPY: '¥',
   CNY: '¥',
-  CAD: 'CA$',
+  CAD: 'CAD$',
   AUD: 'A$',
   CHF: 'CHF',
   INR: '₹',

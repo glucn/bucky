@@ -16,6 +16,7 @@ const SetOpeningBalanceModal: React.FC<{
   const [currentBalance, setCurrentBalance] = React.useState<number | null>(
     null
   );
+  const [accountCurrency, setAccountCurrency] = React.useState<string>("USD");
   const [desiredBalance, setDesiredBalance] = React.useState<string>("");
   const [entryDate, setEntryDate] = React.useState(
     new Date().toISOString().split("T")[0]
@@ -29,6 +30,12 @@ const SetOpeningBalanceModal: React.FC<{
       setIsLoading(true);
       setError(null);
       try {
+        const account = await window.electron.ipcRenderer.invoke(
+          "get-account",
+          accountId
+        );
+        setAccountCurrency(account?.currency || "USD");
+        
         const lines = await window.electron.ipcRenderer.invoke(
           "get-transactions",
           accountId
@@ -116,7 +123,7 @@ const SetOpeningBalanceModal: React.FC<{
                   Current Balance
                 </label>
                 <div className="text-gray-800 font-mono">
-                  ${currentBalance?.toFixed(2) ?? "0.00"}
+                  {formatTransactionCurrency(currentBalance ?? 0, accountCurrency)}
                 </div>
               </div>
               <div>
@@ -583,7 +590,7 @@ export const AccountTransactionsPage: React.FC = () => {
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="text-sm font-medium text-gray-500 mb-1">Current Balance</div>
               <div className="text-2xl font-bold text-gray-900">
-                ${Math.abs(creditCardMetrics.currentBalance).toFixed(2)}
+                {formatTransactionCurrency(Math.abs(creditCardMetrics.currentBalance), account?.currency || "USD")}
               </div>
             </div>
             
@@ -591,7 +598,7 @@ export const AccountTransactionsPage: React.FC = () => {
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="text-sm font-medium text-gray-500 mb-1">Credit Limit</div>
               <div className="text-2xl font-bold text-gray-900">
-                ${creditCardMetrics.creditLimit.toFixed(2)}
+                {formatTransactionCurrency(creditCardMetrics.creditLimit, account?.currency || "USD")}
               </div>
             </div>
             
@@ -599,7 +606,7 @@ export const AccountTransactionsPage: React.FC = () => {
             <div className="bg-blue-50 rounded-lg p-4">
               <div className="text-sm font-medium text-blue-700 mb-1">Available Credit</div>
               <div className="text-2xl font-bold text-blue-900">
-                ${creditCardMetrics.availableCredit.toFixed(2)}
+                {formatTransactionCurrency(creditCardMetrics.availableCredit, account?.currency || "USD")}
               </div>
             </div>
             
@@ -626,7 +633,7 @@ export const AccountTransactionsPage: React.FC = () => {
                   <div className="text-xs text-yellow-700 mt-1">Based on current balance</div>
                 </div>
                 <div className="text-xl font-bold text-yellow-900">
-                  ${creditCardMetrics.minimumPayment.toFixed(2)}
+                  {formatTransactionCurrency(creditCardMetrics.minimumPayment, account?.currency || "USD")}
                 </div>
               </div>
             </div>
