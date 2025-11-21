@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { ManualTransactionModal } from "../components/ManualTransactionModal";
 import { ImportTransactionsWizard } from "../components/ImportTransactionsWizard";
 import { TransferModal } from "../components/TransferModal";
+import { CreditCardSetupModal } from "../components/CreditCardSetupModal";
 import { useAccounts } from "../context/AccountsContext";
 
 // Modal for setting opening balance for the current account
@@ -361,6 +362,8 @@ export const AccountTransactionsPage: React.FC = () => {
   // Credit card state
   const [creditCardMetrics, setCreditCardMetrics] = useState<CreditCardMetrics | null>(null);
   const [isCreditCard, setIsCreditCard] = useState(false);
+  const [showCreditCardSetupModal, setShowCreditCardSetupModal] = useState(false);
+  const [creditCardProperties, setCreditCardProperties] = useState<any>(null);
   
   // Date filtering state
   const [transactionDateFrom, setTransactionDateFrom] = useState<string>("");
@@ -439,14 +442,17 @@ export const AccountTransactionsPage: React.FC = () => {
       );
       if (result.success && result.properties) {
         setIsCreditCard(true);
+        setCreditCardProperties(result.properties);
         fetchCreditCardMetrics();
       } else {
         setIsCreditCard(false);
         setCreditCardMetrics(null);
+        setCreditCardProperties(null);
       }
     } catch (err) {
       setIsCreditCard(false);
       setCreditCardMetrics(null);
+      setCreditCardProperties(null);
     }
   };
 
@@ -560,7 +566,16 @@ export const AccountTransactionsPage: React.FC = () => {
       {/* Credit Card Metrics Section */}
       {isCreditCard && creditCardMetrics && (
         <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Credit Card Overview</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Credit Card Overview</h2>
+            <button
+              onClick={() => setShowCreditCardSetupModal(true)}
+              className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              type="button"
+            >
+              Edit Settings
+            </button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Current Balance */}
             <div className="bg-gray-50 rounded-lg p-4">
@@ -888,6 +903,19 @@ export const AccountTransactionsPage: React.FC = () => {
             await fetchAccount();
             await refreshAccounts();
           }}
+        />
+      )}
+      {showCreditCardSetupModal && accountId && (
+        <CreditCardSetupModal
+          accountId={accountId}
+          isOpen={showCreditCardSetupModal}
+          onClose={() => setShowCreditCardSetupModal(false)}
+          onSuccess={async () => {
+            setShowCreditCardSetupModal(false);
+            await checkIfCreditCard();
+            await fetchCreditCardMetrics();
+          }}
+          existingProperties={creditCardProperties}
         />
       )}
     </div>
