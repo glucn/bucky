@@ -5,6 +5,7 @@ import { ImportTransactionsWizard } from "../components/ImportTransactionsWizard
 import { TransferModal } from "../components/TransferModal";
 import { CreditCardSetupModal } from "../components/CreditCardSetupModal";
 import { useAccounts } from "../context/AccountsContext";
+import { formatTransactionCurrency } from "../utils/currencyUtils";
 
 // Modal for setting opening balance for the current account
 const SetOpeningBalanceModal: React.FC<{
@@ -331,6 +332,7 @@ export interface JournalLine {
   entryId: string;
   accountId: string;
   amount: number;
+  currency: string;
   description?: string;
   entry: JournalEntry;
   account: Account;
@@ -787,13 +789,13 @@ export const AccountTransactionsPage: React.FC = () => {
                           otherLine &&
                           isUser(line.account) &&
                           isUser(otherLine.account) &&
-                          line.account.currency !== otherLine.account.currency;
+                          line.currency !== otherLine.currency;
                         if (isTransfer) {
                           // Show both sides and exchange rate
                           const thisAmt = line.amount;
                           const otherAmt = otherLine.amount;
-                          const thisCur = line.account.currency;
-                          const otherCur = otherLine.account.currency;
+                          const thisCur = line.currency;
+                          const otherCur = otherLine.currency;
                           // Avoid division by zero
                           const rate =
                             Math.abs(thisAmt) > 0
@@ -802,10 +804,10 @@ export const AccountTransactionsPage: React.FC = () => {
                           return (
                             <div>
                               <div>
-                                {thisAmt.toFixed(2)} {thisCur}
+                                {formatTransactionCurrency(thisAmt, thisCur)}
                               </div>
                               <div>
-                                {otherAmt.toFixed(2)} {otherCur}
+                                {formatTransactionCurrency(otherAmt, otherCur)}
                               </div>
                               <div className="text-xs text-gray-500">
                                 Exchange Rate: {rate.toFixed(6)} ({thisCur} →{" "}
@@ -814,10 +816,10 @@ export const AccountTransactionsPage: React.FC = () => {
                             </div>
                           );
                         } else {
-                          // Regular transaction
+                          // Regular transaction - show currency from journal line
                           return (
                             <span>
-                              {line.amount.toFixed(2)} {line.account.currency}
+                              {formatTransactionCurrency(line.amount, line.currency)}
                             </span>
                           );
                         }
@@ -827,7 +829,15 @@ export const AccountTransactionsPage: React.FC = () => {
                       {line.description || line.entry.description}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {categoryName}
+                      <div>
+                        <div>{categoryName}</div>
+                        {/* Show currency if different from account currency */}
+                        {otherLine && otherLine.currency && otherLine.currency !== line.currency && (
+                          <div className="text-xs text-gray-400">
+                            ({otherLine.currency})
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <button

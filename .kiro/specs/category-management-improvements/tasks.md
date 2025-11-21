@@ -58,40 +58,40 @@
   - Position link appropriately in sidebar menu
   - _Requirements: 2.1_
 
-- [ ] 6. Modify ManualTransactionModal for currency-agnostic categories
+- [x] 6. Modify ManualTransactionModal for currency-agnostic categories
   - Remove currency validation that blocks category transactions with different currencies
   - Keep multi-currency transfer UI for user-to-user transfers
   - Display currency information for both accounts
   - Update transaction creation to handle currency mismatch
   - _Requirements: 1.1, 1.2_
 
-- [ ] 7. Update ImportTransactionsWizard for category auto-creation
-- [ ] 7.1 Implement category auto-creation logic
+- [x] 7. Update ImportTransactionsWizard for category auto-creation
+- [x] 7.1 Implement category auto-creation logic
   - Detect when import references non-existent category
   - Determine category subtype from transaction amount sign
   - Create new category with user account currency
   - Track auto-created categories during import
   - _Requirements: 4.2, 4.3, 4.4_
 
-- [ ] 7.2 Add import summary for auto-created categories
+- [x] 7.2 Add import summary for auto-created categories
   - Display list of auto-created categories after import
   - Show category names and their assigned subtypes
   - Provide clear messaging about auto-creation
   - _Requirements: 4.5_
 
-- [ ] 8. Update IPC handlers in main process
+- [x] 8. Update IPC handlers in main process
   - Add IPC handler for getting category balances by currency
   - Update existing handlers to support category filtering
   - Ensure all category operations are properly exposed
   - _Requirements: 1.4, 2.2, 5.1_
 
-- [ ] 9. Add multi-currency balance display utilities
+- [x] 9. Add multi-currency balance display utilities
   - Create helper function to format multi-currency balances
   - Implement currency grouping logic for display
   - Add proper currency symbol/code display
   - _Requirements: 5.1, 5.2, 5.3, 5.5_
 
-- [ ] 10. Update AccountTransactionsPage for category context
+- [x] 10. Update AccountTransactionsPage for category context
   - Ensure transaction page works correctly when accessed from Categories page
   - Display category-specific information in transaction list
   - Show currency for each transaction line

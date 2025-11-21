@@ -79,11 +79,19 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
     fromAccount &&
     fromAccount.type === AccountType.User;
 
+  // Check if either account is a category
+  const isCategoryTransaction =
+    (fromAccount && fromAccount.type === AccountType.Category) ||
+    (toAccount && toAccount.type === AccountType.Category);
+
+  // Only show multi-currency UI for user-to-user transfers with different currencies
   const isMultiCurrency =
     isTransfer &&
     fromAccount?.currency &&
     toAccount?.currency &&
     fromAccount.currency !== toAccount.currency;
+
+
 
   // When toAccount or amount changes, recalc exchange rate/target amount
   React.useEffect(() => {

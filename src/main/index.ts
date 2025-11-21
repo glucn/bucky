@@ -75,6 +75,11 @@ function setupIpcHandlers() {
   ipcMain.removeHandler("delete-checkpoint");
   ipcMain.removeHandler("get-account-balance");
   ipcMain.removeHandler("reconcile-checkpoint");
+  
+  // Category-specific handlers
+  ipcMain.removeHandler("get-category-balances-by-currency");
+  ipcMain.removeHandler("get-accounts-by-type");
+  ipcMain.removeHandler("get-category-accounts");
 
   ipcMain.handle(
     "get-accounts",
@@ -85,8 +90,8 @@ function setupIpcHandlers() {
 
   ipcMain.handle(
     "get-accounts-with-balances",
-    async (_, includeArchived: boolean = false) => {
-      return databaseService.getAccountsWithBalances(includeArchived, undefined);
+    async (_, includeArchived: boolean = false, currency?: string) => {
+      return databaseService.getAccountsWithBalances(includeArchived, undefined, currency);
     }
   );
 
@@ -199,13 +204,14 @@ function setupIpcHandlers() {
     let skippedCount = 0;
     const skippedDetails = [];
     const usedDefaultAccountDetails = [];
+    const autoCreatedCategories: Array<{ name: string; subtype: string }> = [];
     try {
 
       // Ensure default accounts exist
       await databaseService.ensureDefaultAccounts();
 
       // Fetch all category accounts for quick lookup
-      const allAccounts = await databaseService.getAccounts(true);
+      let allAccounts = await databaseService.getAccounts(true);
       const uncategorizedIncome = allAccounts.find(
         (acc) => acc.name === "Uncategorized Income" && acc.type === "category"
       );
@@ -245,6 +251,49 @@ function setupIpcHandlers() {
         let usedDefault = false;
         let defaultAccountName = null;
         const amount = Number(tx.amount);
+
+        // Auto-create category if toAccountId is a string (category name) instead of an ID
+        if (toAccountId && typeof toAccountId === 'string' && !allAccounts.find(acc => acc.id === toAccountId)) {
+          // Check if it's a category name by looking for an account with this name
+          const existingCategory = allAccounts.find(acc => acc.name === toAccountId && acc.type === 'category');
+          
+          if (existingCategory) {
+            // Use existing category
+            toAccountId = existingCategory.id;
+          } else {
+            // Auto-create new category
+            // Determine subtype based on transaction amount sign
+            const categorySubtype = amount > 0 ? 'asset' : 'liability';
+            const categoryName = toAccountId;
+            
+            try {
+              const newCategory = await databaseService.createAccount({
+                name: categoryName,
+                type: 'category',
+                subtype: categorySubtype,
+                currency: userAccount.currency, // Use user account's currency
+              });
+              
+              console.log(`[IMPORT] Auto-created category: ${categoryName} (${categorySubtype})`);
+              
+              // Track auto-created category
+              autoCreatedCategories.push({
+                name: categoryName,
+                subtype: categorySubtype === 'asset' ? 'Income' : 'Expense',
+              });
+              
+              // Update toAccountId to the new category's ID
+              toAccountId = newCategory.id;
+              
+              // Refresh accounts list to include the new category
+              allAccounts = await databaseService.getAccounts(true);
+            } catch (err) {
+              console.error(`[IMPORT] Failed to auto-create category ${categoryName}:`, err);
+              // Fall through to use default account logic below
+              toAccountId = null;
+            }
+          }
+        }
 
         // Determine direction based on subtype and sign
         if (userAccount.subtype === "asset") {
@@ -407,6 +456,7 @@ function setupIpcHandlers() {
         skippedCount,
         skippedDetails,
         usedDefaultAccountDetails,
+        autoCreatedCategories,
       });
       return {
         success: true,
@@ -414,16 +464,18 @@ function setupIpcHandlers() {
         skipped: skippedCount,
         skippedDetails,
         usedDefaultAccountDetails,
+        autoCreatedCategories,
       };
     } catch (err) {
       console.error("Failed to import transactions", err);
       let message = "Unknown error";
       if (err instanceof Error) message = err.message;
-      // Always return usedDefaultAccountDetails if available
+      // Always return usedDefaultAccountDetails and autoCreatedCategories if available
       return {
         success: false,
         error: message,
         usedDefaultAccountDetails: typeof usedDefaultAccountDetails !== "undefined" ? usedDefaultAccountDetails : [],
+        autoCreatedCategories: typeof autoCreatedCategories !== "undefined" ? autoCreatedCategories : [],
       };
     }
   });
@@ -563,6 +615,64 @@ function setupIpcHandlers() {
       };
     }
   });
+
+  // Category-specific handlers
+  ipcMain.handle(
+    "get-category-balances-by-currency",
+    async (_, categoryId: string) => {
+      console.log("Handling get-category-balances-by-currency request for:", categoryId);
+      try {
+        const balances = await databaseService.getCategoryBalancesByCurrency(categoryId);
+        return { success: true, balances };
+      } catch (error) {
+        console.error("Error getting category balances by currency:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-accounts-by-type",
+    async (_, accountType: string, includeArchived: boolean = false) => {
+      console.log("Handling get-accounts-by-type request for type:", accountType);
+      try {
+        const allAccounts = await databaseService.getAccounts(includeArchived);
+        const filteredAccounts = allAccounts.filter(
+          (account) => account.type === accountType
+        );
+        return { success: true, accounts: filteredAccounts };
+      } catch (error) {
+        console.error("Error getting accounts by type:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-category-accounts",
+    async (_, includeArchived: boolean = false) => {
+      console.log("Handling get-category-accounts request");
+      try {
+        const allAccounts = await databaseService.getAccountsWithBalances(includeArchived);
+        const categoryAccounts = allAccounts.filter(
+          (account) => account.type === "category"
+        );
+        return { success: true, accounts: categoryAccounts };
+      } catch (error) {
+        console.error("Error getting category accounts:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
 
   ipcMain.handle("reconcile-checkpoint", async (_, checkpointId: string) => {
     try {

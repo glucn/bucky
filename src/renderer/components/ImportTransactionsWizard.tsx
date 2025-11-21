@@ -77,6 +77,8 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
   const [csvFileName, setCsvFileName] = useState<string>("");
   // Track transactions that used a default account
   const [usedDefaultAccountDetails, setUsedDefaultAccountDetails] = useState<any[]>([]);
+  // Track auto-created categories
+  const [autoCreatedCategories, setAutoCreatedCategories] = useState<Array<{ name: string; subtype: string }>>([]);
 
   // Step 2: Map Fields
   const [fieldMap, setFieldMap] = useState<{ [key: string]: string }>({});
@@ -115,6 +117,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
     setSuccess(null);
     setImportSummary(null);
     setUsedDefaultAccountDetails([]);
+    setAutoCreatedCategories([]);
 
     const file = e.target.files?.[0];
     if (!file) return;
@@ -204,7 +207,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
     setSuccess(null);
     setImportSummary(null);
     try {
-      // Assume backend returns { imported: number, skipped: number, usedDefaultAccountDetails: [] }
+      // Assume backend returns { imported: number, skipped: number, usedDefaultAccountDetails: [], autoCreatedCategories: [] }
       const result = await window.electron.ipcRenderer.invoke("import-transactions", {
         transactions: importPreview,
       });
@@ -230,6 +233,11 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
         setUsedDefaultAccountDetails(result.usedDefaultAccountDetails);
       } else {
         setUsedDefaultAccountDetails([]);
+      }
+      if (result && Array.isArray(result.autoCreatedCategories)) {
+        setAutoCreatedCategories(result.autoCreatedCategories);
+      } else {
+        setAutoCreatedCategories([]);
       }
       // Do not close immediately; let user see summary
       // onSuccess();
@@ -492,6 +500,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                   setSuccess(null);
                   setImportSummary(null);
                   setUsedDefaultAccountDetails([]);
+                  setAutoCreatedCategories([]);
                   setStep(0);
                 }}
               >
@@ -574,6 +583,38 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                     </div>
                   </div>
                 )}
+                {autoCreatedCategories && autoCreatedCategories.length > 0 && (
+                  <div className="mt-4 p-3 border-2 border-green-500 bg-green-50 rounded shadow">
+                    <div className="font-bold text-green-900 mb-2 flex items-center gap-2">
+                      <span role="img" aria-label="Success">✅</span>
+                      New Categories Created
+                    </div>
+                    <div className="text-green-900 mb-2">
+                      The following categories were automatically created during import:
+                    </div>
+                    <div className="overflow-x-auto max-h-40 border rounded mb-2 bg-white">
+                      <table className="min-w-full text-xs">
+                        <thead>
+                          <tr>
+                            <th className="px-2 py-1 border-b text-left">Category Name</th>
+                            <th className="px-2 py-1 border-b text-left">Type</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {autoCreatedCategories.map((cat, i) => (
+                            <tr key={i}>
+                              <td className="px-2 py-1 border-b">{cat.name}</td>
+                              <td className="px-2 py-1 border-b">{cat.subtype}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="text-green-800 text-xs">
+                      You can view and manage these categories on the <span className="font-semibold">Categories</span> page.
+                    </div>
+                  </div>
+                )}
                 {usedDefaultAccountDetails && usedDefaultAccountDetails.length > 0 && (
                   <div className="mt-4 p-3 border-2 border-yellow-500 bg-yellow-50 rounded shadow">
                     <div className="font-bold text-yellow-900 mb-2 flex items-center gap-2">
@@ -621,6 +662,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                       setSuccess(null);
                       setImportSummary(null);
                       setUsedDefaultAccountDetails([]);
+                      setAutoCreatedCategories([]);
                       await refreshAccounts();
                       onSuccess();
                       onClose();

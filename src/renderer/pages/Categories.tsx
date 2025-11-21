@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Account } from "../types";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { CategoryModal } from "../components/CategoryModal";
+import { formatAccountBalance } from "../utils/currencyUtils";
 
 interface CategoryWithBalances extends Account {
   balances?: Record<string, number>;
@@ -49,14 +50,11 @@ export const Categories: React.FC = () => {
 
   // Helper function to format multi-currency balances
   const formatBalances = (category: CategoryWithBalances): string => {
-    if (category.balances && Object.keys(category.balances).length > 0) {
-      // Display all currencies with their balances
-      return Object.entries(category.balances)
-        .map(([currency, amount]) => `${amount.toFixed(2)} ${currency}`)
-        .join(", ");
-    }
-    // Fallback to single balance
-    return `${(category.balance || 0).toFixed(2)} ${category.currency}`;
+    return formatAccountBalance(
+      category.balance || 0,
+      category.currency,
+      category.balances
+    );
   };
 
   // Handle delete or archive category

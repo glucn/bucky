@@ -535,9 +535,9 @@ class DatabaseService {
       }
 
       // Use new logic for journal lines
-      // For category transactions, use each account's own currency
-      const fromCurrency = fromAccount.currency;
-      const toCurrency = toAccount.currency;
+      // For all transactions, both lines use the same currency (from account's currency)
+      // Categories will aggregate transactions in multiple currencies
+      const transactionCurrency = fromAccount.currency;
       
       const [fromLine, toLine] = DatabaseService.generateJournalLines({
         transactionType: data.transactionType || "transfer",
@@ -546,13 +546,9 @@ class DatabaseService {
         counterpartyAccountId: data.toAccountId,
         counterpartyAccountSubtype: toAccount.subtype as AccountSubtype,
         amount: roundedAmount,
-        currency: fromCurrency,
+        currency: transactionCurrency,
         description: data.description,
       });
-
-      // Override currency for each line to use its account's currency
-      fromLine.currency = fromCurrency;
-      toLine.currency = toCurrency;
 
       console.log("[createJournalEntry] Generated journal lines:", { fromLine, toLine });
 
