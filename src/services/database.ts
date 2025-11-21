@@ -134,7 +134,8 @@ class DatabaseService {
   /**
    * Get all accounts with their current balances.
    * Optionally filter by currency.
-   * Returns: Array<{ ...account, balance: number }>
+   * For category accounts, returns multi-currency balances.
+   * Returns: Array<{ ...account, balance: number, balances?: Record<string, number> }>
    */
   public async getAccountsWithBalances(
     includeArchived: boolean = false,
@@ -154,13 +155,30 @@ class DatabaseService {
       // For each account, get its current balance
       const results = await Promise.all(
         accounts.map(async (acc) => {
-          const balance = await this.getAccountBalance(acc.id, prisma);
-          console.log("[getAccountsWithBalances] Account:", acc.id, acc.name, "Balance:", balance);
-          return {
-            ...acc,
-            type: toAccountType(acc.type),
-            balance,
-          };
+          const accountType = toAccountType(acc.type);
+          
+          // For category accounts, get multi-currency balances
+          if (accountType === AccountType.Category) {
+            const balances = await this.getCategoryBalancesByCurrency(acc.id, prisma);
+            // Calculate total balance in account's primary currency (for backward compatibility)
+            const balance = balances[acc.currency] || 0;
+            console.log("[getAccountsWithBalances] Category Account:", acc.id, acc.name, "Balances:", balances);
+            return {
+              ...acc,
+              type: accountType,
+              balance,
+              balances, // Multi-currency balances
+            };
+          } else {
+            // For non-category accounts, use single balance
+            const balance = await this.getAccountBalance(acc.id, prisma);
+            console.log("[getAccountsWithBalances] Account:", acc.id, acc.name, "Balance:", balance);
+            return {
+              ...acc,
+              type: accountType,
+              balance,
+            };
+          }
         })
       );
       // Always return the account list with balances
@@ -407,9 +425,14 @@ class DatabaseService {
     console.log("[createJournalEntry] isCurrencyTransfer:", isCurrencyTransfer);
 
     if (!isCurrencyTransfer) {
-      const currency = fromAccount.currency;
-      if (currency !== toAccount.currency) {
-        console.warn("[createJournalEntry] Skipped: Both accounts must use the same currency for regular transactions", { currency, toCurrency: toAccount.currency });
+      // Check if either account is a category account
+      const isCategoryTransaction = 
+        fromAccount.type === AccountType.Category || 
+        toAccount.type === AccountType.Category;
+      
+      // Allow currency mismatch for category transactions
+      if (!isCategoryTransaction && fromAccount.currency !== toAccount.currency) {
+        console.warn("[createJournalEntry] Skipped: Both accounts must use the same currency for regular transactions", { currency: fromAccount.currency, toCurrency: toAccount.currency });
         return { skipped: true, reason: "Both accounts must use the same currency for regular transactions" };
       }
       if (typeof data.amount !== "number" || isNaN(data.amount)) {
@@ -485,6 +508,10 @@ class DatabaseService {
       }
 
       // Use new logic for journal lines
+      // For category transactions, use each account's own currency
+      const fromCurrency = fromAccount.currency;
+      const toCurrency = toAccount.currency;
+      
       const [fromLine, toLine] = DatabaseService.generateJournalLines({
         transactionType: data.transactionType || "transfer",
         userAccountId: data.fromAccountId,
@@ -492,9 +519,13 @@ class DatabaseService {
         counterpartyAccountId: data.toAccountId,
         counterpartyAccountSubtype: toAccount.subtype as AccountSubtype,
         amount: roundedAmount,
-        currency,
+        currency: fromCurrency,
         description: data.description,
       });
+
+      // Override currency for each line to use its account's currency
+      fromLine.currency = fromCurrency;
+      toLine.currency = toCurrency;
 
       console.log("[createJournalEntry] Generated journal lines:", { fromLine, toLine });
 
@@ -885,6 +916,7 @@ class DatabaseService {
   /**
    * Get total income and expenses for the current month (category accounts only), grouped by currency.
    * Optionally filter by currency.
+   * Uses journal line currency instead of account currency for accurate multi-currency tracking.
    */
   public async getIncomeExpenseThisMonth(tx?: TransactionClient, currency?: string) {
     const prisma = tx || this.prisma;
@@ -908,16 +940,19 @@ class DatabaseService {
       },
     });
 
-    // Group by currency
+    // Group by currency using journal line currency
     const income: Record<string, number> = {};
     const expenses: Record<string, number> = {};
     for (const entry of entries) {
       for (const line of entry.lines) {
         if (line.account.type === AccountType.Category) {
-          const cur = line.account.currency;
-          if (line.account.name.toLowerCase().includes("income")) {
+          // Use the journal line's currency, not the account's currency
+          const cur = line.currency;
+          if (line.account.subtype === AccountSubtype.Asset) {
+            // Income category (asset subtype)
             income[cur] = (income[cur] || 0) + line.amount;
           } else {
+            // Expense category (liability subtype)
             expenses[cur] = (expenses[cur] || 0) + line.amount;
           }
         }
@@ -1429,6 +1464,38 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     return this.getAccountBalanceAtDate(accountId, todayStr, tx);
+  }
+
+  /**
+   * Get category account balances grouped by currency.
+   * Returns a map of currency code to balance amount.
+   * This allows category accounts to show balances in multiple currencies.
+   */
+  public async getCategoryBalancesByCurrency(
+    categoryId: string,
+    tx?: TransactionClient
+  ): Promise<Record<string, number>> {
+    const prisma = tx || this.prisma;
+    
+    // Get all journal lines for this category account
+    const lines = await prisma.journalLine.findMany({
+      where: { accountId: categoryId },
+      select: { amount: true, currency: true }
+    });
+    
+    // Group by currency and sum amounts
+    const balances: Record<string, number> = {};
+    for (const line of lines) {
+      const currency = line.currency;
+      balances[currency] = (balances[currency] || 0) + line.amount;
+    }
+    
+    // Round all balances to 2 decimal places
+    for (const currency in balances) {
+      balances[currency] = Math.round(balances[currency] * 100) / 100;
+    }
+    
+    return balances;
   }
 
   /**

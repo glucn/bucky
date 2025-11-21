@@ -3,9 +3,15 @@ import { Link } from "react-router-dom";
 import { Account } from "../types";
 import { AccountModal } from "../components/AccountModal";
 import { useAccounts } from "../context/AccountsContext";
+import { AccountType } from "../../shared/accountTypes";
 
 export const Accounts: React.FC = () => {
   const { accounts, refreshAccounts } = useAccounts();
+  // Filter out category accounts - only show user and system accounts
+  const nonCategoryAccounts = React.useMemo(
+    () => accounts.filter((a) => a.type !== AccountType.Category),
+    [accounts]
+  );
   const [archivedAccounts, setArchivedAccounts] = useState<Account[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [accountBalances, setAccountBalances] = useState<
@@ -27,12 +33,17 @@ export const Accounts: React.FC = () => {
 
   useEffect(() => {
     // Only set archived accounts, as active accounts come from context
+    // Filter out category accounts
     const fetchArchived = async () => {
       const allAccounts = await window.electron.ipcRenderer.invoke(
         "get-accounts",
         true // include archived
       );
-      setArchivedAccounts(allAccounts.filter((a: Account) => a.isArchived));
+      setArchivedAccounts(
+        allAccounts.filter(
+          (a: Account) => a.isArchived && a.type !== AccountType.Category
+        )
+      );
     };
     fetchArchived();
   }, [accounts]);
@@ -45,7 +56,7 @@ export const Accounts: React.FC = () => {
         { hasCheckpoints: boolean; latestCheckpoint?: any }
       > = {};
 
-      for (const account of [...accounts, ...archivedAccounts]) {
+      for (const account of [...nonCategoryAccounts, ...archivedAccounts]) {
         try {
           const result = await window.electron.ipcRenderer.invoke(
             "get-latest-checkpoint-for-account",
@@ -70,10 +81,10 @@ export const Accounts: React.FC = () => {
       setCheckpointInfo(checkpointData);
     };
 
-    if (accounts.length > 0 || archivedAccounts.length > 0) {
+    if (nonCategoryAccounts.length > 0 || archivedAccounts.length > 0) {
       fetchCheckpointInfo();
     }
-  }, [accounts, archivedAccounts]);
+  }, [nonCategoryAccounts, archivedAccounts]);
 
   // fetchAccounts removed; use refreshAccounts and fetchArchived instead
 
@@ -81,7 +92,7 @@ export const Accounts: React.FC = () => {
   useEffect(() => {
     const fetchAllBalances = async () => {
       const balances: Record<string, number> = {};
-      for (const account of [...accounts, ...archivedAccounts]) {
+      for (const account of [...nonCategoryAccounts, ...archivedAccounts]) {
         try {
           const result = await window.electron.ipcRenderer.invoke(
             "get-account-balance",
@@ -110,10 +121,10 @@ export const Accounts: React.FC = () => {
       }
       setAccountBalances(balances);
     };
-    if (accounts.length > 0 || archivedAccounts.length > 0) {
+    if (nonCategoryAccounts.length > 0 || archivedAccounts.length > 0) {
       fetchAllBalances();
     }
-  }, [accounts, archivedAccounts]);
+  }, [nonCategoryAccounts, archivedAccounts]);
 
   // Account creation now handled in AccountModal
 
@@ -236,7 +247,7 @@ export const Accounts: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {accounts.map((account) => (
+              {nonCategoryAccounts.map((account) => (
                 <tr key={account.id}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {account.name}

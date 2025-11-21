@@ -5,6 +5,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { AccountTransactionsPage } from "./pages/AccountTransactionsPage";
 import { OpeningBalances } from "./pages/OpeningBalances";
 import { Checkpoints } from "./pages/Checkpoints";
+import { Categories } from "./pages/Categories";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 
@@ -21,6 +22,7 @@ const App: React.FC = () => {
               <Route path="/accounts" element={<Navigate to="/accounts/manage" replace />} />
               <Route path="/accounts/:accountId/transactions" element={<AccountTransactionsPage />} />
               <Route path="/accounts/manage" element={<Accounts />} />
+              <Route path="/categories" element={<Categories />} />
               <Route path="/opening-balances" element={<OpeningBalances />} />
               <Route path="/checkpoints" element={<Checkpoints />} />
             </Routes>
