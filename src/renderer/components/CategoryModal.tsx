@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { Account } from "../types";
+import { useAccounts } from "../context/AccountsContext";
 
 interface CategoryModalProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
   onCategoryCreated,
   editingCategory,
 }) => {
+  const { refreshAccounts } = useAccounts();
   const [categoryName, setCategoryName] = useState("");
   const [categoryType, setCategoryType] = useState<"income" | "expense">("expense");
   const [defaultCurrency, setDefaultCurrency] = useState("USD");
@@ -58,6 +60,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
         });
 
         if (result.success) {
+          await refreshAccounts();
           onCategoryCreated();
           onClose();
         } else {
@@ -98,6 +101,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
         });
 
         if (result.success) {
+          await refreshAccounts();
           onCategoryCreated();
           onClose();
         } else {

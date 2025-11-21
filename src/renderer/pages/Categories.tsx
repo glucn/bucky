@@ -4,12 +4,14 @@ import { Account } from "../types";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { CategoryModal } from "../components/CategoryModal";
 import { formatAccountBalance } from "../utils/currencyUtils";
+import { useAccounts } from "../context/AccountsContext";
 
 interface CategoryWithBalances extends Account {
   balances?: Record<string, number>;
 }
 
 export const Categories: React.FC = () => {
+  const { refreshAccounts } = useAccounts();
   const [categories, setCategories] = useState<CategoryWithBalances[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +83,7 @@ export const Categories: React.FC = () => {
         
         if (delResult.success) {
           alert("Category deleted successfully");
+          await refreshAccounts();
           await fetchCategories();
         } else {
           alert(`Failed to delete category: ${delResult.error}`);
@@ -102,6 +105,7 @@ export const Categories: React.FC = () => {
         
         if (archResult.success) {
           alert("Category archived successfully");
+          await refreshAccounts();
           await fetchCategories();
         } else {
           alert(`Failed to archive category: ${archResult.error}`);
