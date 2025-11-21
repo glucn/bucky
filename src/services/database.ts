@@ -558,6 +558,7 @@ class DatabaseService {
           description: data.description,
           type: null,
           postingDate: postingDateStr,
+          displayOrder: Date.now(),
           lines: {
             create: [fromLine, toLine],
           },
@@ -649,6 +650,7 @@ class DatabaseService {
           description: data.description,
           type: "currency_transfer",
           postingDate: postingDateStr,
+          displayOrder: Date.now(),
           lines: {
             create: [
               {
@@ -694,7 +696,7 @@ class DatabaseService {
         entry: true, // Only include the entry id for now
         account: true
       },
-      orderBy: { entry: { date: "desc" } },
+      orderBy: { entry: { displayOrder: "desc" } },
     });
 
     // Get all unique entryIds
@@ -816,6 +818,7 @@ class DatabaseService {
       data: {
         date: typeof entryDate === "string" ? entryDate : entryDate.toISOString().slice(0, 10),
         description: "Opening Balance",
+        displayOrder: Date.now(),
       },
     });
 
@@ -1017,7 +1020,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     const prisma = tx || this.prisma;
     // If currency is provided, filter lines by currency
     const entries = await prisma.journalEntry.findMany({
-      orderBy: { date: "desc" },
+      orderBy: { displayOrder: "desc" },
       take: limit,
       include: {
         lines: {
@@ -1246,6 +1249,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       data: {
         date: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10),
         description: data.description || `Checkpoint for ${checkpoint.id}`,
+        displayOrder: Date.now(),
       },
     });
 

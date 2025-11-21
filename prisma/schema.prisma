@@ -38,14 +38,17 @@ model Account {
 }
 
 model JournalEntry {
-  id          String        @id @default(uuid())
-  date        String
-  description String?
-  type        String?       // e.g., 'regular', 'currency_transfer'
-  postingDate String?       // Date posted to account (YYYY-MM-DD)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  lines       JournalLine[]
+  id           String        @id @default(uuid())
+  date         String
+  description  String?
+  type         String?       // e.g., 'regular', 'currency_transfer'
+  postingDate  String?       // Date posted to account (YYYY-MM-DD)
+  displayOrder Float?        // Order for display, defaults to createdAt timestamp
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  lines        JournalLine[]
+  
+  @@index([displayOrder])
 }
 
 model JournalLine {
