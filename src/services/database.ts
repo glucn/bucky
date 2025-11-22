@@ -417,23 +417,27 @@ class DatabaseService {
       return { skipped: true, reason: "Invalid date format" };
     }
 
-    // Handle postingDate - default to transaction date if not provided
-    let postingDateStr = dateStr; // Default to transaction date
+    // Handle postingDate - allow null if not provided
+    let postingDateStr: string | null = null;
     if (data.postingDate) {
       if (typeof data.postingDate === "string") {
-        postingDateStr = data.postingDate;
+        postingDateStr = data.postingDate.trim() || null; // Treat empty strings as null
       } else if (data.postingDate instanceof Date) {
         postingDateStr = data.postingDate.toISOString().slice(0, 10);
       }
-      // Validate posting date format
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(postingDateStr)) {
-        console.warn("[createJournalEntry] Skipped: Invalid posting date format, must be YYYY-MM-DD", { data });
-        return { skipped: true, reason: "Invalid posting date format" };
-      }
-      // Validate that posting date is not before transaction date
-      if (postingDateStr < dateStr) {
-        console.warn("[createJournalEntry] Skipped: Posting date cannot be before transaction date", { data });
-        return { skipped: true, reason: "Posting date cannot be before transaction date" };
+      
+      // Only validate if we have a valid string
+      if (postingDateStr) {
+        // Validate posting date format
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(postingDateStr)) {
+          console.warn("[createJournalEntry] Skipped: Invalid posting date format, must be YYYY-MM-DD", { data });
+          return { skipped: true, reason: "Invalid posting date format" };
+        }
+        // Validate that posting date is not before transaction date
+        if (postingDateStr < dateStr) {
+          console.warn("[createJournalEntry] Skipped: Posting date cannot be before transaction date", { data });
+          return { skipped: true, reason: "Posting date cannot be before transaction date" };
+        }
       }
     }
 
@@ -1718,7 +1722,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       data: {
         date: data.date,
         description: data.description,
-        postingDate: data.postingDate || data.date,
+        postingDate: data.postingDate?.trim() || null, // Treat empty strings as null
       },
     });
 
