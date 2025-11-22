@@ -286,13 +286,13 @@ class CreditCardService {
       throw new Error("No credit card properties found for this account");
     }
 
-    // Get current account balance (negative for liability accounts means money owed)
+    // Get current account balance (positive for liability accounts means money owed)
     const currentBalance = await databaseService.getAccountBalance(accountId, prisma);
     
-    // For liability accounts, a negative balance means money owed
+    // For liability accounts, a positive balance means money owed
     // Available credit = credit limit - amount owed
-    // Since balance is negative when money is owed, we add it to the credit limit
-    const availableCredit = properties.creditLimit + currentBalance;
+    const amountOwed = Math.max(0, currentBalance);
+    const availableCredit = properties.creditLimit - amountOwed;
     
     return Math.round(Math.max(0, availableCredit) * 100) / 100;
   }
@@ -316,12 +316,12 @@ class CreditCardService {
       return 0;
     }
 
-    // Get current account balance (negative for liability accounts means money owed)
+    // Get current account balance (positive for liability accounts means money owed)
     const currentBalance = await databaseService.getAccountBalance(accountId, prisma);
     
-    // For liability accounts, a negative balance means money owed
+    // For liability accounts, a positive balance means money owed
     // Utilization = amount owed / credit limit
-    const amountOwed = Math.abs(Math.min(0, currentBalance));
+    const amountOwed = Math.abs(Math.max(0, currentBalance));
     const utilization = (amountOwed / properties.creditLimit) * 100;
     
     return Math.round(Math.min(100, utilization) * 100) / 100;
@@ -342,11 +342,11 @@ class CreditCardService {
       throw new Error("No credit card properties found for this account");
     }
 
-    // Get current account balance (negative for liability accounts means money owed)
+    // Get current account balance (positive for liability accounts means money owed)
     const currentBalance = await databaseService.getAccountBalance(accountId, prisma);
     
-    // For liability accounts, a negative balance means money owed
-    const amountOwed = Math.abs(Math.min(0, currentBalance));
+    // For liability accounts, a positive balance means money owed
+    const amountOwed = Math.max(0, currentBalance);
     
     if (amountOwed === 0) {
       return 0;
