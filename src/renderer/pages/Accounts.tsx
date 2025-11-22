@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { Account } from "../types";
 import { AccountModal } from "../components/AccountModal";
 import { useAccounts } from "../context/AccountsContext";
-import { AccountType } from "../../shared/accountTypes";
+import { AccountType, AccountSubtype } from "../../shared/accountTypes";
+import { normalizeAccountBalance } from "../utils/displayNormalization";
 
 export const Accounts: React.FC = () => {
   const { accounts, refreshAccounts } = useAccounts();
@@ -192,6 +193,13 @@ export const Accounts: React.FC = () => {
     }
   };
 
+  // Helper function to get normalized balance for display
+  const getNormalizedBalance = (account: Account): number => {
+    const rawBalance = accountBalances[account.id] ?? 0;
+    const accountSubtype = account.subtype as AccountSubtype;
+    return normalizeAccountBalance(rawBalance, account.type, accountSubtype);
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-white shadow rounded-lg p-6">
@@ -256,8 +264,17 @@ export const Accounts: React.FC = () => {
                     {(account.type || "Unknown").charAt(0).toUpperCase() +
                       (account.type || "Unknown").slice(1)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {(accountBalances[account.id] ?? 0).toFixed(2)}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <span 
+                      className={`font-medium ${
+                        getNormalizedBalance(account) >= 0 
+                          ? 'text-green-600' 
+                          : 'text-red-600'
+                      }`}
+                      aria-label={getNormalizedBalance(account) >= 0 ? 'Positive amount' : 'Negative amount'}
+                    >
+                      {getNormalizedBalance(account).toFixed(2)}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {account.currency}
@@ -347,8 +364,17 @@ export const Accounts: React.FC = () => {
                       {(account.type || "Unknown").charAt(0).toUpperCase() +
                         (account.type || "Unknown").slice(1)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {(accountBalances[account.id] ?? 0).toFixed(2)}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <span 
+                        className={`font-medium ${
+                          getNormalizedBalance(account) >= 0 
+                            ? 'text-green-600' 
+                            : 'text-red-600'
+                        }`}
+                        aria-label={getNormalizedBalance(account) >= 0 ? 'Positive amount' : 'Negative amount'}
+                      >
+                        {getNormalizedBalance(account).toFixed(2)}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {account.currency}

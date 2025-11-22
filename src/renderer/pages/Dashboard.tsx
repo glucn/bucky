@@ -1,11 +1,13 @@
-import { AccountType } from "../../shared/accountTypes";
+import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import React, { useEffect, useState } from "react";
 import { formatCurrencyAmount } from "../utils/currencyUtils";
+import { normalizeAccountBalance } from "../utils/displayNormalization";
 
 interface Account {
   id: string;
   name: string;
   type: string;
+  subtype: string;
   currency: string;
   createdAt: string;
   updatedAt: string;
@@ -103,21 +105,45 @@ export const Dashboard: React.FC = () => {
         <h2 className="text-lg font-medium text-gray-900">Net Worth</h2>
         {netWorth ? (
           <>
-            {Object.keys(netWorth.netWorth).map((currency) => (
-              <div key={currency} className="mb-4 last:mb-0">
-                <p className="mt-2 text-3xl font-bold text-primary-600">
-                  {formatCurrency(netWorth.netWorth[currency], currency)}
-                </p>
-                <div className="flex space-x-8 mt-2">
-                  <span className="text-green-700">
-                    Assets: {formatCurrency(netWorth.assets[currency] || 0, currency)}
-                  </span>
-                  <span className="text-red-700">
-                    Liabilities: {formatCurrency(netWorth.liabilities[currency] || 0, currency)}
-                  </span>
+            {Object.keys(netWorth.netWorth).map((currency) => {
+              // The database returns raw balances
+              // For assets: positive balance = funds available (display as-is)
+              // For liabilities: negative balance = amount owed (display as positive)
+              const rawAssets = netWorth.assets[currency] || 0;
+              const rawLiabilities = netWorth.liabilities[currency] || 0;
+              
+              // Normalize for display
+              // Assets preserve sign, liabilities are negated
+              const normalizedAssets = normalizeAccountBalance(
+                rawAssets,
+                AccountType.User,
+                AccountSubtype.Asset
+              );
+              const normalizedLiabilities = normalizeAccountBalance(
+                rawLiabilities,
+                AccountType.User,
+                AccountSubtype.Liability
+              );
+              
+              // Net worth = assets - liabilities (using normalized values)
+              const normalizedNetWorth = normalizedAssets - normalizedLiabilities;
+              
+              return (
+                <div key={currency} className="mb-4 last:mb-0">
+                  <p className="mt-2 text-3xl font-bold text-primary-600">
+                    {formatCurrency(normalizedNetWorth, currency)}
+                  </p>
+                  <div className="flex space-x-8 mt-2">
+                    <span className="text-green-600 font-medium" aria-label="Positive amount">
+                      Assets: {formatCurrency(normalizedAssets, currency)}
+                    </span>
+                    <span className="text-red-600 font-medium" aria-label="Positive amount">
+                      Liabilities: {formatCurrency(normalizedLiabilities, currency)}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </>
         ) : (
           <p>Loading...</p>
@@ -138,16 +164,36 @@ export const Dashboard: React.FC = () => {
                   ...Object.keys(incomeExpense.expenses),
                 ])
               );
-              return allCurrencies.map((currency) => (
-                <div key={currency} className="flex space-x-8 mt-2">
-                  <span className="text-green-700">
-                    Income: {formatCurrency(incomeExpense.income[currency] || 0, currency)}
-                  </span>
-                  <span className="text-red-700">
-                    Expenses: {formatCurrency(incomeExpense.expenses[currency] || 0, currency)}
-                  </span>
-                </div>
-              ));
+              return allCurrencies.map((currency) => {
+                // The database service already applies Math.abs() to income and expenses
+                // But we use normalization for consistency and to ensure correctness
+                const rawIncome = incomeExpense.income[currency] || 0;
+                const rawExpenses = incomeExpense.expenses[currency] || 0;
+                
+                // Income categories have asset subtype, expenses have liability subtype
+                // Both should display as positive (absolute value)
+                const normalizedIncome = normalizeAccountBalance(
+                  rawIncome,
+                  AccountType.Category,
+                  AccountSubtype.Asset
+                );
+                const normalizedExpenses = normalizeAccountBalance(
+                  rawExpenses,
+                  AccountType.Category,
+                  AccountSubtype.Liability
+                );
+                
+                return (
+                  <div key={currency} className="flex space-x-8 mt-2">
+                    <span className="text-green-600 font-medium" aria-label="Positive amount">
+                      Income: {formatCurrency(normalizedIncome, currency)}
+                    </span>
+                    <span className="text-red-600 font-medium" aria-label="Positive amount">
+                      Expenses: {formatCurrency(normalizedExpenses, currency)}
+                    </span>
+                  </div>
+                );
+              });
             })()}
           </>
         ) : (
@@ -161,29 +207,44 @@ export const Dashboard: React.FC = () => {
         <div className="mt-4">
           {accounts
             .filter((account) => account.type === AccountType.User)
-            .map((account) => (
-              <div
-                key={account.id}
-                className="flex items-center justify-between py-3 border-b last:border-b-0"
-              >
-                <div>
+            .map((account) => {
+              const rawBalance = accountBalances[account.id] ?? 0;
+              
+              // Normalize balance based on account subtype
+              const accountSubtype = account.subtype === 'asset' 
+                ? AccountSubtype.Asset 
+                : AccountSubtype.Liability;
+              
+              const normalizedBalance = normalizeAccountBalance(
+                rawBalance,
+                AccountType.User,
+                accountSubtype
+              );
+              
+              return (
+                <div
+                  key={account.id}
+                  className="flex items-center justify-between py-3 border-b last:border-b-0"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">
+                      {account.name}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {account.type.charAt(0).toUpperCase() +
+                        account.type.slice(1)}{" "}
+                      • {account.currency}
+                    </p>
+                  </div>
                   <p className="text-sm font-medium text-gray-900">
-                    {account.name}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {account.type.charAt(0).toUpperCase() +
-                      account.type.slice(1)}{" "}
-                    • {account.currency}
+                    {formatCurrency(
+                      normalizedBalance,
+                      account.currency
+                    )}
                   </p>
                 </div>
-                <p className="text-sm font-medium text-gray-900">
-                  {formatCurrency(
-                    accountBalances[account.id] ?? 0,
-                    account.currency
-                  )}
-                </p>
-              </div>
-            ))}
+              );
+            })}
         </div>
       </div>
     </div>

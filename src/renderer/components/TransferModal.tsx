@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useAccounts } from "../context/AccountsContext";
-import { AccountType } from "../../shared/accountTypes";
+import { AccountType, AccountSubtype } from "../../shared/accountTypes";
+import { normalizeTransactionAmount } from "../utils/displayNormalization";
+import { formatCurrencyAmount } from "../utils/currencyUtils";
 
 interface TransferModalProps {
   onClose: () => void;
@@ -407,6 +409,78 @@ export const TransferModal: React.FC<TransferModalProps> = ({
               placeholder="Optional description for this transfer"
             />
           </div>
+
+          {/* Transfer Preview with Normalized Amounts */}
+          {fromAccount && toAccount && transferData.amount > 0 && (
+            <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">
+                Transfer Preview
+              </h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">From {fromAccount.name}:</span>
+                  <span
+                    className={
+                      normalizeTransactionAmount(
+                        -transferData.amount,
+                        AccountType.User,
+                        fromAccount.subtype as AccountSubtype,
+                        true
+                      ) < 0
+                        ? "text-red-600 font-medium"
+                        : "text-green-600 font-medium"
+                    }
+                  >
+                    {formatCurrencyAmount(
+                      normalizeTransactionAmount(
+                        -transferData.amount,
+                        AccountType.User,
+                        fromAccount.subtype as AccountSubtype,
+                        true
+                      ),
+                      fromAccount.currency,
+                      { showSymbol: true, showCode: true }
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">To {toAccount.name}:</span>
+                  <span
+                    className={
+                      normalizeTransactionAmount(
+                        isMultiCurrency ? targetAmount : transferData.amount,
+                        AccountType.User,
+                        toAccount.subtype as AccountSubtype,
+                        true
+                      ) < 0
+                        ? "text-red-600 font-medium"
+                        : "text-green-600 font-medium"
+                    }
+                  >
+                    {formatCurrencyAmount(
+                      normalizeTransactionAmount(
+                        isMultiCurrency ? targetAmount : transferData.amount,
+                        AccountType.User,
+                        toAccount.subtype as AccountSubtype,
+                        true
+                      ),
+                      toAccount.currency,
+                      { showSymbol: true, showCode: true }
+                    )}
+                  </span>
+                </div>
+                {isMultiCurrency && (
+                  <div className="flex justify-between text-xs text-gray-500 pt-1 border-t border-gray-200">
+                    <span>Exchange Rate:</span>
+                    <span>
+                      1 {fromAccount.currency} = {exchangeRate.toFixed(6)}{" "}
+                      {toAccount.currency}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <button
             type="submit"

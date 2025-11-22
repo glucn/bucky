@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import Papa from "papaparse";
 import { useAccounts } from "../context/AccountsContext";
+import { normalizeTransactionAmount } from "../utils/displayNormalization";
+import { AccountType, AccountSubtype } from "../../shared/accountTypes";
+import { formatCurrencyAmount } from "../utils/currencyUtils";
 
 interface ImportTransactionsWizardProps {
   accountId: string;
@@ -60,8 +63,13 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
   onClose,
   onSuccess,
 }) => {
-  const { refreshAccounts } = useAccounts();
+  const { refreshAccounts, accounts } = useAccounts();
   const [step, setStep] = useState<Step>(0);
+  
+  // Get the account information for normalization
+  const currentAccount = accounts.find(acc => acc.id === accountId);
+  const accountType = currentAccount?.type as AccountType || AccountType.User;
+  const accountSubtype = currentAccount?.subtype as AccountSubtype || AccountSubtype.Asset;
 
   // CSV header row option
   const [csvHasHeaderRow, setCsvHasHeaderRow] = useState<boolean>(true);
@@ -440,15 +448,30 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                   </tr>
                 </thead>
                 <tbody>
-                  {importPreview.map((row, i) => (
-                    <tr key={i}>
-                      {["date", "amount", "description", "toAccountId"].map((field) => (
-                        <td key={field} className="px-2 py-1 border-b">
-                          {row[field]}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
+                  {importPreview.map((row, i) => {
+                    // Normalize the amount for display
+                    const rawAmount = typeof row.amount === 'number' ? row.amount : parseFloat(row.amount);
+                    const normalizedAmount = !isNaN(rawAmount) 
+                      ? normalizeTransactionAmount(
+                          rawAmount,
+                          accountType,
+                          accountSubtype,
+                          true
+                        )
+                      : rawAmount;
+                    
+                    return (
+                      <tr key={i}>
+                        {["date", "amount", "description", "toAccountId"].map((field) => (
+                          <td key={field} className="px-2 py-1 border-b">
+                            {field === "amount" && !isNaN(rawAmount)
+                              ? formatCurrencyAmount(normalizedAmount, currentAccount?.currency || 'USD')
+                              : row[field]}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 
 import { JournalLine } from "../pages/AccountTransactionsPage";
+import { normalizeTransactionAmount } from "../utils/displayNormalization";
+import { formatNormalizedTransactionAmount } from "../utils/currencyUtils";
 
 interface ManualTransactionModalProps {
   accountId: string;
@@ -18,7 +20,7 @@ interface NewTransaction {
 }
 
 import { useAccounts } from "../context/AccountsContext";
-import { AccountType } from "../../shared/accountTypes";
+import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 
 export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
   accountId,
@@ -28,6 +30,10 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
 }) => {
   const { accounts, refreshAccounts } = useAccounts();
   const isEdit = !!transaction;
+  
+  // Lookup source account
+  const fromAccount = accounts.find((a) => a.id === accountId);
+  
   const [newTransaction, setNewTransaction] = useState<NewTransaction>({
     toAccountId: isEdit
       ? (() => {
@@ -38,7 +44,19 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
           return otherLine?.accountId || "";
         })()
       : "",
-    amount: isEdit ? Math.abs(transaction?.amount ?? 0) : 0,
+    amount: isEdit && transaction && fromAccount
+      ? (() => {
+          // Use normalized amount for display when editing
+          const normalizedAmount = normalizeTransactionAmount(
+            transaction.amount,
+            fromAccount.type,
+            fromAccount.subtype as AccountSubtype,
+            true
+          );
+          // Always show as positive in the input field
+          return Math.abs(normalizedAmount);
+        })()
+      : 0,
     date: isEdit
       ? new Date(transaction?.entry?.date ?? "").toISOString().split("T")[0]
       : (() => {
@@ -57,8 +75,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Lookup source and target accounts
-  const fromAccount = accounts.find((a) => a.id === accountId);
+  // Lookup target account
   const toAccount = accounts.find((a) => a.id === newTransaction.toAccountId);
 
   // When transaction date changes, update posting date to match if posting date is set and before transaction date
@@ -219,6 +236,13 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
               min="0"
               step="0.01"
             />
+            {fromAccount && (
+              <p className="mt-1 text-xs text-gray-500">
+                {fromAccount.subtype === 'asset'
+                  ? 'Enter the amount as a positive number. It will be deducted from this account.'
+                  : 'Enter the amount as a positive number. It will be added to this account\'s balance.'}
+              </p>
+            )}
           </div>
 
           <div>
@@ -288,6 +312,50 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
               rows={2}
             />
           </div>
+
+          {/* Transaction Preview with Normalized Amounts */}
+          {fromAccount && toAccount && newTransaction.amount > 0 && (
+            <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">Transaction Preview</h3>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">From: {fromAccount.name}</span>
+                  <span className={`font-medium ${
+                    fromAccount.subtype === 'asset' ? 'text-red-600' : 'text-green-600'
+                  }`}>
+                    {formatNormalizedTransactionAmount(
+                      -newTransaction.amount,
+                      fromAccount.currency,
+                      fromAccount.type,
+                      fromAccount.subtype as AccountSubtype,
+                      true,
+                      { showSymbol: true, showCode: false }
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">To: {toAccount.name}</span>
+                  <span className={`font-medium ${
+                    toAccount.type === AccountType.Category && toAccount.subtype === 'asset'
+                      ? 'text-green-600'
+                      : toAccount.type === AccountType.Category && toAccount.subtype === 'liability'
+                      ? 'text-red-600'
+                      : 'text-green-600'
+                  }`}>
+                    {formatNormalizedTransactionAmount(
+                      newTransaction.amount,
+                      toAccount.currency,
+                      toAccount.type,
+                      toAccount.subtype as AccountSubtype,
+                      false,
+                      { showSymbol: true, showCode: false }
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <button
             type="submit"
             className="w-full py-2 px-4 bg-primary-600 text-white rounded hover:bg-primary-700"

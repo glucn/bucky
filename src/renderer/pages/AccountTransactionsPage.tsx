@@ -6,6 +6,13 @@ import { TransferModal } from "../components/TransferModal";
 import { CreditCardSetupModal } from "../components/CreditCardSetupModal";
 import { useAccounts } from "../context/AccountsContext";
 import { formatTransactionCurrency } from "../utils/currencyUtils";
+import { 
+  normalizeTransactionAmount, 
+  normalizeAccountBalance,
+  getTransactionColorClass,
+  getTransactionAriaLabel
+} from "../utils/displayNormalization";
+import { AccountType, AccountSubtype, toAccountType } from "../../shared/accountTypes";
 
 // Modal for setting opening balance for the current account
 const SetOpeningBalanceModal: React.FC<{
@@ -40,11 +47,24 @@ const SetOpeningBalanceModal: React.FC<{
           "get-transactions",
           accountId
         );
-        const sum = lines.reduce(
+        const rawBalance = lines.reduce(
           (total: number, line: { amount: number }) => total + line.amount,
           0
         );
-        setCurrentBalance(Math.round(sum * 100) / 100);
+        
+        // Normalize the balance for display
+        const accountType = toAccountType(account?.type || "user");
+        const accountSubtype = (account?.subtype === "liability"
+          ? AccountSubtype.Liability
+          : AccountSubtype.Asset) as AccountSubtype;
+        
+        const normalizedBalance = normalizeAccountBalance(
+          rawBalance,
+          accountType,
+          accountSubtype
+        );
+        
+        setCurrentBalance(Math.round(normalizedBalance * 100) / 100);
       } catch (err) {
         setError("Failed to fetch current balance.");
         setCurrentBalance(null);
@@ -174,6 +194,7 @@ interface Account {
   id: string;
   name: string;
   type: string;
+  subtype: string;
   currency: string;
 }
 
@@ -801,12 +822,55 @@ export const AccountTransactionsPage: React.FC = () => {
                           isUser(line.account) &&
                           isUser(otherLine.account) &&
                           line.currency !== otherLine.currency;
+                        
+                        // Get account type and subtype for normalization
+                        const accountType = toAccountType(line.account?.type || "user");
+                        const accountSubtype = (line.account?.subtype === "liability" 
+                          ? AccountSubtype.Liability 
+                          : AccountSubtype.Asset) as AccountSubtype;
+                        
                         if (isTransfer) {
-                          // Show both sides and exchange rate
+                          // Multi-currency transfer: Show both sides with normalization and exchange rate
                           const thisAmt = line.amount;
                           const otherAmt = otherLine.amount;
                           const thisCur = line.currency;
                           const otherCur = otherLine.currency;
+                          
+                          // Normalize amounts for display
+                          const normalizedThisAmt = normalizeTransactionAmount(
+                            thisAmt,
+                            accountType,
+                            accountSubtype,
+                            true // This is the current account being viewed
+                          );
+                          
+                          // Get other account's type and subtype for normalization
+                          const otherAccountType = toAccountType(otherLine.account?.type || "user");
+                          const otherAccountSubtype = (otherLine.account?.subtype === "liability"
+                            ? AccountSubtype.Liability
+                            : AccountSubtype.Asset) as AccountSubtype;
+                          
+                          const normalizedOtherAmt = normalizeTransactionAmount(
+                            otherAmt,
+                            otherAccountType,
+                            otherAccountSubtype,
+                            false // This is not the current account being viewed
+                          );
+                          
+                          // Get visual indicators for this account
+                          const colorClass = getTransactionColorClass(
+                            thisAmt,
+                            accountType,
+                            accountSubtype,
+                            true
+                          );
+                          const ariaLabel = getTransactionAriaLabel(
+                            thisAmt,
+                            accountType,
+                            accountSubtype,
+                            true
+                          );
+                          
                           // Avoid division by zero
                           const rate =
                             Math.abs(thisAmt) > 0
@@ -814,11 +878,11 @@ export const AccountTransactionsPage: React.FC = () => {
                               : 1;
                           return (
                             <div>
-                              <div>
-                                {formatTransactionCurrency(thisAmt, thisCur)}
+                              <div className={`font-medium ${colorClass}`} aria-label={ariaLabel}>
+                                {formatTransactionCurrency(normalizedThisAmt, thisCur)}
                               </div>
-                              <div>
-                                {formatTransactionCurrency(otherAmt, otherCur)}
+                              <div className="text-xs text-gray-400">
+                                {formatTransactionCurrency(normalizedOtherAmt, otherCur)}
                               </div>
                               <div className="text-xs text-gray-500">
                                 Exchange Rate: {rate.toFixed(6)} ({thisCur} →{" "}
@@ -827,10 +891,31 @@ export const AccountTransactionsPage: React.FC = () => {
                             </div>
                           );
                         } else {
-                          // Regular transaction - show currency from journal line
+                          // Regular transaction - normalize and show currency from journal line
+                          const normalizedAmount = normalizeTransactionAmount(
+                            line.amount,
+                            accountType,
+                            accountSubtype,
+                            true // This is the current account being viewed
+                          );
+                          
+                          // Get visual indicators for styling
+                          const colorClass = getTransactionColorClass(
+                            line.amount,
+                            accountType,
+                            accountSubtype,
+                            true
+                          );
+                          const ariaLabel = getTransactionAriaLabel(
+                            line.amount,
+                            accountType,
+                            accountSubtype,
+                            true
+                          );
+                          
                           return (
-                            <span>
-                              {formatTransactionCurrency(line.amount, line.currency)}
+                            <span className={`font-medium ${colorClass}`} aria-label={ariaLabel}>
+                              {formatTransactionCurrency(normalizedAmount, line.currency)}
                             </span>
                           );
                         }

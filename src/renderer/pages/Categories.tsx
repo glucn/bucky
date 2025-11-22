@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { Account } from "../types";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { CategoryModal } from "../components/CategoryModal";
-import { formatAccountBalance } from "../utils/currencyUtils";
+import { formatAccountBalance, formatCurrencyAmount, formatMultiCurrencyBalances } from "../utils/currencyUtils";
+import { normalizeAccountBalance } from "../utils/displayNormalization";
 import { useAccounts } from "../context/AccountsContext";
 
 interface CategoryWithBalances extends Account {
@@ -50,13 +51,32 @@ export const Categories: React.FC = () => {
     }
   };
 
-  // Helper function to format multi-currency balances
+  // Helper function to format multi-currency balances with normalization
   const formatBalances = (category: CategoryWithBalances): string => {
-    return formatAccountBalance(
+    // If multi-currency balances exist, normalize each currency balance
+    if (category.balances && Object.keys(category.balances).length > 0) {
+      const normalizedBalances: Record<string, number> = {};
+      
+      for (const [currency, balance] of Object.entries(category.balances)) {
+        // Normalize each currency balance (categories always display as positive)
+        normalizedBalances[currency] = normalizeAccountBalance(
+          balance,
+          category.type,
+          category.subtype as AccountSubtype
+        );
+      }
+      
+      return formatMultiCurrencyBalances(normalizedBalances);
+    }
+    
+    // Single currency balance - normalize and format
+    const normalizedBalance = normalizeAccountBalance(
       category.balance || 0,
-      category.currency,
-      category.balances
+      category.type,
+      category.subtype as AccountSubtype
     );
+    
+    return formatCurrencyAmount(normalizedBalance, category.currency);
   };
 
   // Handle delete or archive category
@@ -168,8 +188,10 @@ export const Categories: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {category.name}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatBalances(category)}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <span className="text-green-600 font-medium" aria-label="Positive amount">
+                        {formatBalances(category)}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <div className="flex gap-3 items-center">
@@ -245,8 +267,10 @@ export const Categories: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {category.name}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatBalances(category)}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <span className="text-red-600 font-medium" aria-label="Positive amount">
+                        {formatBalances(category)}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <div className="flex gap-3 items-center">

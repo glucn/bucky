@@ -2,11 +2,17 @@
  * Utility functions for formatting and displaying multi-currency balances
  */
 
+import {
+  normalizeTransactionAmount,
+  normalizeAccountBalance,
+} from './displayNormalization';
+import { AccountType, AccountSubtype } from '../../shared/accountTypes';
+
 /**
  * Common currency symbols mapping
  */
 const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: 'USD$',
+  USD: '$',
   EUR: '€',
   GBP: '£',
   JPY: '¥',
@@ -195,4 +201,73 @@ export function formatTransactionCurrency(
     showSymbol: false,
     showCode: true,
   });
+}
+
+/**
+ * Format a normalized transaction amount with currency
+ * Combines display normalization with currency formatting
+ * @param amount - Raw transaction amount from database
+ * @param currency - Currency code
+ * @param accountType - Type of account (user, category, system)
+ * @param accountSubtype - Subtype of account (asset, liability)
+ * @param isCurrentAccount - Whether this is the account being viewed
+ * @param options - Formatting options
+ * @returns Formatted string with normalized amount and currency
+ */
+export function formatNormalizedTransactionAmount(
+  amount: number,
+  currency: string,
+  accountType: AccountType,
+  accountSubtype: AccountSubtype,
+  isCurrentAccount: boolean,
+  options: {
+    showSymbol?: boolean;
+    showCode?: boolean;
+    decimals?: number;
+    useGrouping?: boolean;
+  } = {}
+): string {
+  // Normalize the amount for display
+  const normalizedAmount = normalizeTransactionAmount(
+    amount,
+    accountType,
+    accountSubtype,
+    isCurrentAccount
+  );
+
+  // Format with currency
+  return formatCurrencyAmount(normalizedAmount, currency, options);
+}
+
+/**
+ * Format a normalized account balance with currency
+ * Combines balance normalization with currency formatting
+ * @param balance - Raw account balance from database
+ * @param currency - Currency code
+ * @param accountType - Type of account (user, category, system)
+ * @param accountSubtype - Subtype of account (asset, liability)
+ * @param options - Formatting options
+ * @returns Formatted string with normalized balance and currency
+ */
+export function formatNormalizedBalance(
+  balance: number,
+  currency: string,
+  accountType: AccountType,
+  accountSubtype: AccountSubtype,
+  options: {
+    showSymbol?: boolean;
+    showCode?: boolean;
+    decimals?: number;
+    useGrouping?: boolean;
+  } = {}
+): string {
+  // Normalize the balance for display
+  const normalizedBalance = normalizeAccountBalance(
+    balance,
+    accountType,
+    accountSubtype
+  );
+
+  // Format with currency
+  return formatCurrencyAmount(normalizedBalance, currency, options);
 }
