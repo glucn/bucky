@@ -777,9 +777,13 @@ export const AccountTransactionsPage: React.FC = () => {
                         : ""}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {/* Display posting date, show only if different from transaction date */}
-                      {line.entry.postingDate && line.entry.postingDate !== line.entry.date ? (
-                        <span className="text-blue-600">{line.entry.postingDate}</span>
+                      {/* Display posting date */}
+                      {line.entry.postingDate ? (
+                        line.entry.postingDate !== line.entry.date ? (
+                          <span className="text-blue-600">{line.entry.postingDate}</span>
+                        ) : (
+                          <span>{line.entry.postingDate}</span>
+                        )
                       ) : (
                         <span className="text-gray-400">—</span>
                       )}
