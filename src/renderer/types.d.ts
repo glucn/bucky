@@ -1,5 +1,17 @@
 import { AccountType } from "../shared/accountTypes";
 
+export type AccountGroup = {
+  id: string;
+  name: string;
+  accountType: AccountType;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  accounts?: Account[];
+  aggregateBalance?: number;
+  aggregateBalances?: Record<string, number>;
+};
+
 export type Account = {
   id: string;
   name: string;
@@ -9,6 +21,13 @@ export type Account = {
   isArchived: boolean;
   archivedAt?: string | null;
   balance?: number; // Added for accounts-with-balances
+  groupId?: string | null;
+  group?: AccountGroup;
+};
+
+export type GroupedAccountsView = {
+  groups: AccountGroup[];
+  ungroupedAccounts: Account[];
 };
 
 interface IElectronAPI {
@@ -16,6 +35,20 @@ interface IElectronAPI {
     invoke(channel: string, ...args: any[]): Promise<any>;
     on(channel: string, listener: (...args: any[]) => void): void;
   };
+  
+  // Account Group operations
+  createAccountGroup(data: { name: string; accountType: string }): Promise<{ success: boolean; group?: AccountGroup; error?: string }>;
+  getAccountGroups(accountType?: string): Promise<{ success: boolean; groups?: AccountGroup[]; error?: string }>;
+  updateAccountGroup(id: string, data: { name?: string; displayOrder?: number }): Promise<{ success: boolean; group?: AccountGroup; error?: string }>;
+  deleteAccountGroup(id: string): Promise<{ success: boolean; group?: AccountGroup; error?: string }>;
+  
+  // Account-Group relationship operations
+  addAccountToGroup(accountId: string, groupId: string): Promise<{ success: boolean; account?: Account; error?: string }>;
+  removeAccountFromGroup(accountId: string): Promise<{ success: boolean; account?: Account; error?: string }>;
+  
+  // Query operations
+  getAccountsWithGroups(params: { includeArchived?: boolean; accountType?: string }): Promise<{ success: boolean; data?: GroupedAccountsView; error?: string }>;
+  reorderAccountGroups(groupOrders: Array<{ id: string; displayOrder: number }>): Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {

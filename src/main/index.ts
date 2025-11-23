@@ -81,6 +81,17 @@ function setupIpcHandlers() {
   ipcMain.removeHandler("get-accounts-by-type");
   ipcMain.removeHandler("get-category-accounts");
 
+  // Account Group handlers
+  ipcMain.removeHandler("create-account-group");
+  ipcMain.removeHandler("get-account-groups");
+  ipcMain.removeHandler("update-account-group");
+  ipcMain.removeHandler("delete-account-group");
+  ipcMain.removeHandler("add-account-to-group");
+  ipcMain.removeHandler("remove-account-from-group");
+  ipcMain.removeHandler("get-accounts-with-groups");
+  ipcMain.removeHandler("reorder-account-groups");
+  ipcMain.removeHandler("get-group-aggregate-balance");
+
   ipcMain.handle(
     "get-accounts",
     async (_, includeArchived: boolean = false) => {
@@ -773,6 +784,160 @@ function setupIpcHandlers() {
           success: false,
           error: error instanceof Error ? error.message : "Unknown error",
         };
+      }
+    }
+  );
+
+  // Account Group handlers
+  ipcMain.handle(
+    "create-account-group",
+    async (_, data: { name: string; accountType: string }) => {
+      console.log("Handling create-account-group request:", data);
+      try {
+        const result = await databaseService.createAccountGroup(data);
+        return { success: true, group: result };
+      } catch (error) {
+        console.error("Error creating account group:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-account-groups",
+    async (_, accountType?: string) => {
+      console.log("Handling get-account-groups request, accountType:", accountType);
+      try {
+        const groups = await databaseService.getAccountGroups(accountType);
+        return { success: true, groups };
+      } catch (error) {
+        console.error("Error getting account groups:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "update-account-group",
+    async (_, { id, data }: { id: string; data: { name?: string; displayOrder?: number } }) => {
+      console.log("Handling update-account-group request:", { id, data });
+      try {
+        const result = await databaseService.updateAccountGroup(id, data);
+        return { success: true, group: result };
+      } catch (error) {
+        console.error("Error updating account group:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "delete-account-group",
+    async (_, id: string) => {
+      console.log("Handling delete-account-group request:", id);
+      try {
+        const result = await databaseService.deleteAccountGroup(id);
+        return { success: true, group: result };
+      } catch (error) {
+        console.error("Error deleting account group:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "add-account-to-group",
+    async (_, { accountId, groupId }: { accountId: string; groupId: string }) => {
+      console.log("Handling add-account-to-group request:", { accountId, groupId });
+      try {
+        const result = await databaseService.addAccountToGroup(accountId, groupId);
+        return { success: true, account: result };
+      } catch (error) {
+        console.error("Error adding account to group:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "remove-account-from-group",
+    async (_, accountId: string) => {
+      console.log("Handling remove-account-from-group request:", accountId);
+      try {
+        const result = await databaseService.removeAccountFromGroup(accountId);
+        return { success: true, account: result };
+      } catch (error) {
+        console.error("Error removing account from group:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-accounts-with-groups",
+    async (_, { includeArchived, accountType }: { includeArchived?: boolean; accountType?: string }) => {
+      console.log("Handling get-accounts-with-groups request:", { includeArchived, accountType });
+      try {
+        const result = await databaseService.getAccountsWithGroups(
+          includeArchived ?? false,
+          accountType
+        );
+        return { success: true, data: result };
+      } catch (error) {
+        console.error("Error getting accounts with groups:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "reorder-account-groups",
+    async (_, groupOrders: Array<{ id: string; displayOrder: number }>) => {
+      console.log("Handling reorder-account-groups request:", groupOrders);
+      try {
+        await databaseService.reorderAccountGroups(groupOrders);
+        return { success: true };
+      } catch (error) {
+        console.error("Error reordering account groups:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-group-aggregate-balance",
+    async (_, groupId: string) => {
+      console.log("Handling get-group-aggregate-balance request:", groupId);
+      try {
+        const balance = await databaseService.getGroupAggregateBalance(groupId);
+        return balance;
+      } catch (error) {
+        console.error("Error getting group aggregate balance:", error);
+        throw error;
       }
     }
   );

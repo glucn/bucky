@@ -22,6 +22,19 @@ enum AccountType {
   system
 }
 
+model AccountGroup {
+  id           String      @id @default(uuid())
+  name         String
+  accountType  AccountType
+  displayOrder Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  accounts     Account[]
+  
+  @@unique([name, accountType])
+  @@index([accountType, displayOrder])
+}
+
 model Account {
   id        String      @id @default(uuid())
   name      String
@@ -30,11 +43,15 @@ model Account {
   currency  String      @default("USD")
   isArchived Boolean   @default(false)
   archivedAt DateTime?
+  groupId   String?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   lines     JournalLine[]
   checkpoints Checkpoint[]
   creditCardProperties CreditCardProperties[]
+  group     AccountGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  
+  @@index([groupId])
 }
 
 model JournalEntry {

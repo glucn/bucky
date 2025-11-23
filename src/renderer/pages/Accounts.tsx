@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Account } from "../types";
+import { Account, AccountGroup, GroupedAccountsView } from "../types";
 import { AccountModal } from "../components/AccountModal";
+import { AccountGroupModal } from "../components/AccountGroupModal";
+import { GroupedAccountsList } from "../components/GroupedAccountsList";
 import { useAccounts } from "../context/AccountsContext";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { normalizeAccountBalance } from "../utils/displayNormalization";
@@ -13,12 +15,18 @@ export const Accounts: React.FC = () => {
     () => accounts.filter((a) => a.type !== AccountType.Category),
     [accounts]
   );
+  const [groupedAccountsView, setGroupedAccountsView] = useState<GroupedAccountsView>({
+    groups: [],
+    ungroupedAccounts: [],
+  });
   const [archivedAccounts, setArchivedAccounts] = useState<Account[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [accountBalances, setAccountBalances] = useState<
     Record<string, number>
   >({});
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<AccountGroup | null>(null);
   const [deletingAccountId, setDeletingAccountId] = useState<string | null>(
     null
   );
@@ -31,6 +39,29 @@ export const Accounts: React.FC = () => {
   const [checkpointInfo, setCheckpointInfo] = useState<
     Record<string, { hasCheckpoints: boolean; latestCheckpoint?: any }>
   >({});
+
+  // Fetch grouped accounts view
+  const fetchGroupedAccounts = async () => {
+    try {
+      const response = await window.electron.ipcRenderer.invoke(
+        "get-accounts-with-groups",
+        { includeArchived: false, accountType: AccountType.User }
+      );
+      
+      if (response.success && response.data) {
+        setGroupedAccountsView(response.data);
+      } else {
+        console.error("Failed to fetch grouped accounts:", response.error);
+        // Keep the current state (empty arrays) on error
+      }
+    } catch (error) {
+      console.error("Error fetching grouped accounts:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchGroupedAccounts();
+  }, [accounts]);
 
   useEffect(() => {
     // Only set archived accounts, as active accounts come from context
@@ -200,6 +231,104 @@ export const Accounts: React.FC = () => {
     return normalizeAccountBalance(rawBalance, account.type, accountSubtype);
   };
 
+  // Group management handlers
+  const handleCreateGroup = () => {
+    setEditingGroup(null);
+    setShowGroupModal(true);
+  };
+
+  const handleGroupCreated = async () => {
+    await fetchGroupedAccounts();
+    await refreshAccounts();
+  };
+
+  const handleGroupEdit = (group: AccountGroup) => {
+    setEditingGroup(group);
+    setShowGroupModal(true);
+  };
+
+  const handleGroupDelete = async (group: AccountGroup) => {
+    if (confirm(`Are you sure you want to delete the group "${group.name}"? Accounts in this group will be moved to ungrouped.`)) {
+      try {
+        const result = await window.electron.ipcRenderer.invoke("delete-account-group", group.id);
+        if (result.success) {
+          await fetchGroupedAccounts();
+          await refreshAccounts();
+        } else {
+          alert(result.error || "Failed to delete group");
+        }
+      } catch (error) {
+        console.error("Error deleting group:", error);
+        alert("Failed to delete group");
+      }
+    }
+  };
+
+  const handleAccountMove = async (accountId: string, groupId: string | null) => {
+    try {
+      let result;
+      if (groupId === null) {
+        result = await window.electron.ipcRenderer.invoke("remove-account-from-group", accountId);
+      } else {
+        result = await window.electron.ipcRenderer.invoke("add-account-to-group", { accountId, groupId });
+      }
+      
+      if (result.success) {
+        await fetchGroupedAccounts();
+        await refreshAccounts();
+      } else {
+        alert(result.error || "Failed to move account");
+      }
+    } catch (error) {
+      console.error("Error moving account:", error);
+      alert("Failed to move account");
+    }
+  };
+
+  const handleGroupReorder = async (groupId: string, direction: 'up' | 'down') => {
+    try {
+      const currentGroups = groupedAccountsView.groups;
+      const currentIndex = currentGroups.findIndex(g => g.id === groupId);
+      
+      if (currentIndex === -1) return;
+      
+      // Calculate new positions
+      const newGroups = [...currentGroups];
+      if (direction === 'up' && currentIndex > 0) {
+        // Swap with previous group
+        [newGroups[currentIndex - 1], newGroups[currentIndex]] = 
+        [newGroups[currentIndex], newGroups[currentIndex - 1]];
+      } else if (direction === 'down' && currentIndex < newGroups.length - 1) {
+        // Swap with next group
+        [newGroups[currentIndex], newGroups[currentIndex + 1]] = 
+        [newGroups[currentIndex + 1], newGroups[currentIndex]];
+      } else {
+        return; // No change needed
+      }
+      
+      // Create array of {id, displayOrder} for all groups
+      const groupOrders = newGroups.map((group, index) => ({
+        id: group.id,
+        displayOrder: index,
+      }));
+      
+      // Call IPC handler to persist the new order
+      const result = await window.electron.ipcRenderer.invoke("reorder-account-groups", groupOrders);
+      
+      if (!result.success) {
+        console.error("Failed to reorder groups:", result.error);
+        alert(result.error || "Failed to reorder groups");
+        return;
+      }
+      
+      // Refresh the groups list
+      await fetchGroupedAccounts();
+    } catch (error) {
+      console.error("Error reordering groups:", error);
+      alert("Failed to reorder groups");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-white shadow rounded-lg p-6">
@@ -212,10 +341,23 @@ export const Accounts: React.FC = () => {
             >
               Add New Account
             </button>
+            <button
+              className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              onClick={handleCreateGroup}
+            >
+              Create Group
+            </button>
             <AccountModal
               isOpen={showAccountModal}
               onClose={() => setShowAccountModal(false)}
               onAccountCreated={refreshAccounts}
+            />
+            <AccountGroupModal
+              isOpen={showGroupModal}
+              onClose={() => setShowGroupModal(false)}
+              onGroupCreated={handleGroupCreated}
+              accountType={AccountType.User}
+              editingGroup={editingGroup}
             />
           </div>
           <div className="flex items-center gap-4">
@@ -230,102 +372,18 @@ export const Accounts: React.FC = () => {
             </label>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Balance
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Currency
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Checkpoints
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {nonCategoryAccounts.map((account) => (
-                <tr key={account.id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {account.name}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {(account.type || "Unknown").charAt(0).toUpperCase() +
-                      (account.type || "Unknown").slice(1)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <span 
-                      className={`font-medium ${
-                        getNormalizedBalance(account) >= 0 
-                          ? 'text-green-600' 
-                          : 'text-red-600'
-                      }`}
-                      aria-label={getNormalizedBalance(account) >= 0 ? 'Positive amount' : 'Negative amount'}
-                    >
-                      {getNormalizedBalance(account).toFixed(2)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {account.currency}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {checkpointInfo[account.id]?.hasCheckpoints ? (
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          ✓ Active
-                        </span>
-                        {checkpointInfo[account.id]?.latestCheckpoint && (
-                          <span className="text-xs text-gray-500">
-                            {new Date(
-                              checkpointInfo[account.id].latestCheckpoint.date
-                            ).toLocaleDateString()}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-gray-400">None</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <div className="flex gap-2">
-                      <Link
-                        to={`/checkpoints?account=${account.id}`}
-                        className="text-blue-600 hover:text-blue-900"
-                      >
-                        Manage
-                      </Link>
-                      <button
-                        className={`text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed`}
-                        onClick={() => handleDeleteOrArchive(account)}
-                        disabled={
-                          deletingAccountId === account.id ||
-                          archivingAccountId === account.id
-                        }
-                      >
-                        {deletingAccountId === account.id
-                          ? "Deleting..."
-                          : archivingAccountId === account.id
-                          ? "Archiving..."
-                          : "Delete / Archive"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        
+        {/* Grouped Accounts List */}
+        <GroupedAccountsList
+          groups={groupedAccountsView.groups}
+          ungroupedAccounts={groupedAccountsView.ungroupedAccounts}
+          accountType={AccountType.User}
+          onGroupEdit={handleGroupEdit}
+          onGroupDelete={handleGroupDelete}
+          onAccountMove={handleAccountMove}
+          onGroupReorder={handleGroupReorder}
+          accountBalances={accountBalances}
+        />
         {showArchived && archivedAccounts.length > 0 && (
           <div className="mt-8">
             <h3 className="text-md font-semibold text-gray-700 mb-2">

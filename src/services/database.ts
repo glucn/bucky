@@ -38,20 +38,25 @@ class DatabaseService {
 
   private constructor() {
     const isDev = process.env.NODE_ENV === "development";
-    const queryEnginePath = isDev
-      ? path.join(
-          __dirname,
-          "../../node_modules/@prisma/client/libquery_engine-darwin-arm64.dylib.node"
-        )
-      : path.join(
-          process.resourcesPath,
-          "libquery_engine-darwin-arm64.dylib.node"
-        );
+    const isTest = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+    
+    // Only set query engine path if not in test mode and __dirname is available
+    if (!isTest && typeof __dirname !== 'undefined') {
+      const queryEnginePath = isDev
+        ? path.join(
+            __dirname,
+            "../../node_modules/@prisma/client/libquery_engine-darwin-arm64.dylib.node"
+          )
+        : path.join(
+            process.resourcesPath,
+            "libquery_engine-darwin-arm64.dylib.node"
+          );
 
-    console.log("Query engine path:", queryEnginePath);
+      console.log("Query engine path:", queryEnginePath);
 
-    // Set the query engine path as an environment variable
-    process.env.PRISMA_QUERY_ENGINE_BINARY = queryEnginePath;
+      // Set the query engine path as an environment variable
+      process.env.PRISMA_QUERY_ENGINE_BINARY = queryEnginePath;
+    }
 
     this.prisma = new PrismaClient({
       datasources: {
@@ -293,6 +298,319 @@ class DatabaseService {
       where: { id: accountId },
       data: updateData,
     });
+  }
+
+  // Account Group operations
+  /**
+   * Create a new account group.
+   * Sets displayOrder to max(existing displayOrder) + 1 for the given account type.
+   * Handles unique constraint violations for duplicate names within the same account type.
+   */
+  public async createAccountGroup(
+    data: {
+      name: string;
+      accountType: AccountType | string;
+    },
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    
+    try {
+      // Get the maximum displayOrder for this account type
+      const maxOrderGroup = await prisma.accountGroup.findFirst({
+        where: { accountType: data.accountType as AccountType },
+        orderBy: { displayOrder: 'desc' },
+        select: { displayOrder: true },
+      });
+      
+      const displayOrder = maxOrderGroup ? maxOrderGroup.displayOrder + 1 : 0;
+      
+      return await prisma.accountGroup.create({
+        data: {
+          name: data.name,
+          accountType: data.accountType as AccountType,
+          displayOrder,
+        },
+      });
+    } catch (error: any) {
+      // Handle unique constraint violation
+      if (error.code === 'P2002') {
+        throw new Error('A group with this name already exists for this account type');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Get all account groups, optionally filtered by account type.
+   * Orders by displayOrder ascending and includes related accounts.
+   */
+  public async getAccountGroups(
+    accountType?: AccountType | string,
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    
+    const where = accountType ? { accountType: accountType as AccountType } : {};
+    
+    return await prisma.accountGroup.findMany({
+      where,
+      orderBy: { displayOrder: 'asc' },
+      include: { accounts: true },
+    });
+  }
+
+  /**
+   * Get a specific account group by ID with its accounts.
+   * Returns null if not found.
+   */
+  public async getAccountGroupById(
+    id: string,
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    
+    return await prisma.accountGroup.findUnique({
+      where: { id },
+      include: { accounts: true },
+    });
+  }
+
+  /**
+   * Update an account group's name and/or displayOrder.
+   * Handles unique constraint violations on rename.
+   */
+  public async updateAccountGroup(
+    id: string,
+    data: { name?: string; displayOrder?: number },
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    
+    try {
+      const updateData: any = {};
+      
+      if (data.name !== undefined) {
+        updateData.name = data.name;
+      }
+      if (data.displayOrder !== undefined) {
+        updateData.displayOrder = data.displayOrder;
+      }
+      
+      return await prisma.accountGroup.update({
+        where: { id },
+        data: updateData,
+      });
+    } catch (error: any) {
+      // Handle unique constraint violation
+      if (error.code === 'P2002') {
+        throw new Error('A group with this name already exists for this account type');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Delete an account group.
+   * Accounts in the group will have their groupId set to null (handled by onDelete: SetNull).
+   */
+  public async deleteAccountGroup(
+    id: string,
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    
+    return await prisma.accountGroup.delete({
+      where: { id },
+    });
+  }
+
+  /**
+   * Add an account to a group.
+   * Verifies that the account type matches the group type.
+   * If the account is already in another group, it will be moved to the new group.
+   */
+  public async addAccountToGroup(
+    accountId: string,
+    groupId: string,
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    
+    // Fetch the account and group
+    const [account, group] = await Promise.all([
+      prisma.account.findUnique({ where: { id: accountId } }),
+      prisma.accountGroup.findUnique({ where: { id: groupId } }),
+    ]);
+    
+    if (!account) {
+      throw new Error('Account not found');
+    }
+    
+    if (!group) {
+      throw new Error('Account group not found');
+    }
+    
+    // Verify account type matches group type
+    if (account.type !== group.accountType) {
+      throw new Error('Account type does not match group type');
+    }
+    
+    // Update the account's groupId
+    return await prisma.account.update({
+      where: { id: accountId },
+      data: { groupId },
+    });
+  }
+
+  /**
+   * Remove an account from its group.
+   * Sets the account's groupId to null.
+   */
+  public async removeAccountFromGroup(
+    accountId: string,
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    
+    return await prisma.account.update({
+      where: { id: accountId },
+      data: { groupId: null },
+    });
+  }
+
+  /**
+   * Get all accounts organized by groups.
+   * Returns groups with their accounts and ungrouped accounts separately.
+   * Optionally filter by accountType.
+   */
+  public async getAccountsWithGroups(
+    includeArchived: boolean = false,
+    accountType?: AccountType | string,
+    tx?: TransactionClient
+  ) {
+    const prisma = tx || this.prisma;
+    
+    // Build where clause for accounts
+    const accountWhere: any = includeArchived ? {} : { isArchived: false };
+    if (accountType) {
+      accountWhere.type = accountType as AccountType;
+    }
+    
+    // Fetch all groups with their accounts
+    const groupWhere = accountType ? { accountType: accountType as AccountType } : {};
+    const groups = await prisma.accountGroup.findMany({
+      where: groupWhere,
+      orderBy: { displayOrder: 'asc' },
+      include: {
+        accounts: {
+          where: accountWhere,
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+    
+    // Fetch all ungrouped accounts
+    const ungroupedAccounts = await prisma.account.findMany({
+      where: {
+        ...accountWhere,
+        groupId: null,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    
+    // Convert account types
+    const groupsWithTypedAccounts = groups.map(group => ({
+      ...group,
+      accounts: group.accounts.map(acc => ({
+        ...acc,
+        type: toAccountType(acc.type),
+      })),
+    }));
+    
+    const typedUngroupedAccounts = ungroupedAccounts.map(acc => ({
+      ...acc,
+      type: toAccountType(acc.type),
+    }));
+    
+    return {
+      groups: groupsWithTypedAccounts,
+      ungroupedAccounts: typedUngroupedAccounts,
+    };
+  }
+
+  /**
+   * Get aggregate balance for an account group.
+   * For single currency groups: returns a single number.
+   * For multi-currency groups: returns Record<currency, sum>.
+   */
+  public async getGroupAggregateBalance(
+    groupId: string,
+    tx?: TransactionClient
+  ): Promise<number | Record<string, number>> {
+    const prisma = tx || this.prisma;
+    
+    // Fetch the group with its accounts
+    const group = await prisma.accountGroup.findUnique({
+      where: { id: groupId },
+      include: { accounts: true },
+    });
+    
+    if (!group) {
+      throw new Error('Account group not found');
+    }
+    
+    // Get balances for all accounts in the group
+    const balances: Record<string, number> = {};
+    
+    for (const account of group.accounts) {
+      const balance = await this.getAccountBalance(account.id, prisma);
+      const currency = account.currency;
+      
+      balances[currency] = (balances[currency] || 0) + balance;
+    }
+    
+    // Round all balances to 2 decimal places
+    for (const currency in balances) {
+      balances[currency] = Math.round(balances[currency] * 100) / 100;
+    }
+    
+    // If single currency, return just the number
+    const currencies = Object.keys(balances);
+    if (currencies.length === 0) {
+      return 0;
+    } else if (currencies.length === 1) {
+      return balances[currencies[0]];
+    } else {
+      // Multi-currency: return the record
+      return balances;
+    }
+  }
+
+  /**
+   * Reorder account groups.
+   * Accepts an array of {id, displayOrder} and updates all groups in a transaction.
+   */
+  public async reorderAccountGroups(
+    groupOrders: Array<{ id: string; displayOrder: number }>,
+    tx?: TransactionClient
+  ): Promise<void> {
+    const prisma = tx || this.prisma;
+    
+    // If no transaction provided, create one
+    if (!tx) {
+      return this.prisma.$transaction(async (trx) => {
+        return this.reorderAccountGroups(groupOrders, trx);
+      });
+    }
+    
+    // Update each group's displayOrder
+    for (const { id, displayOrder } of groupOrders) {
+      await prisma.accountGroup.update({
+        where: { id },
+        data: { displayOrder },
+      });
+    }
   }
 
   // Double-entry transaction operations

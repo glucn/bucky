@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Account } from "../types";
+import { Account, AccountGroup, GroupedAccountsView } from "../types";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { CategoryModal } from "../components/CategoryModal";
+import { AccountGroupModal } from "../components/AccountGroupModal";
+import { GroupedAccountsList } from "../components/GroupedAccountsList";
 import { formatAccountBalance, formatCurrencyAmount, formatMultiCurrencyBalances } from "../utils/currencyUtils";
 import { normalizeAccountBalance } from "../utils/displayNormalization";
 import { useAccounts } from "../context/AccountsContext";
@@ -13,71 +15,48 @@ interface CategoryWithBalances extends Account {
 
 export const Categories: React.FC = () => {
   const { refreshAccounts } = useAccounts();
-  const [categories, setCategories] = useState<CategoryWithBalances[]>([]);
+  const [groupedAccountsView, setGroupedAccountsView] = useState<GroupedAccountsView>({
+    groups: [],
+    ungroupedAccounts: [],
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
   const [archivingCategoryId, setArchivingCategoryId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CategoryWithBalances | null>(null);
+  const [editingGroup, setEditingGroup] = useState<AccountGroup | null>(null);
 
-  // Fetch categories on mount
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  const fetchCategories = async () => {
+  // Fetch grouped categories
+  const fetchGroupedCategories = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // Fetch all accounts with balances
-      const allAccounts = await window.electron.ipcRenderer.invoke(
-        "get-accounts-with-balances",
-        false // don't include archived
+      const response = await window.electron.ipcRenderer.invoke(
+        "get-accounts-with-groups",
+        { includeArchived: false, accountType: AccountType.Category }
       );
       
-      // Filter to only category accounts
-      const categoryAccounts = allAccounts.filter(
-        (account: Account) => account.type === AccountType.Category
-      );
-      
-      setCategories(categoryAccounts);
+      if (response.success && response.data) {
+        setGroupedAccountsView(response.data);
+      } else {
+        console.error("Failed to fetch grouped categories:", response.error);
+        setError(response.error || "Failed to load categories");
+      }
     } catch (err) {
-      console.error("Error fetching categories:", err);
+      console.error("Error fetching grouped categories:", err);
       setError("Failed to load categories");
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper function to format multi-currency balances with normalization
-  const formatBalances = (category: CategoryWithBalances): string => {
-    // If multi-currency balances exist, normalize each currency balance
-    if (category.balances && Object.keys(category.balances).length > 0) {
-      const normalizedBalances: Record<string, number> = {};
-      
-      for (const [currency, balance] of Object.entries(category.balances)) {
-        // Normalize each currency balance (categories always display as positive)
-        normalizedBalances[currency] = normalizeAccountBalance(
-          balance,
-          category.type,
-          category.subtype as AccountSubtype
-        );
-      }
-      
-      return formatMultiCurrencyBalances(normalizedBalances);
-    }
-    
-    // Single currency balance - normalize and format
-    const normalizedBalance = normalizeAccountBalance(
-      category.balance || 0,
-      category.type,
-      category.subtype as AccountSubtype
-    );
-    
-    return formatCurrencyAmount(normalizedBalance, category.currency);
-  };
+  // Fetch categories on mount
+  useEffect(() => {
+    fetchGroupedCategories();
+  }, []);
 
   // Handle delete or archive category
   const handleDeleteOrArchive = async (category: CategoryWithBalances) => {
@@ -104,7 +83,7 @@ export const Categories: React.FC = () => {
         if (delResult.success) {
           alert("Category deleted successfully");
           await refreshAccounts();
-          await fetchCategories();
+          await fetchGroupedCategories();
         } else {
           alert(`Failed to delete category: ${delResult.error}`);
         }
@@ -126,7 +105,7 @@ export const Categories: React.FC = () => {
         if (archResult.success) {
           alert("Category archived successfully");
           await refreshAccounts();
-          await fetchCategories();
+          await fetchGroupedCategories();
         } else {
           alert(`Failed to archive category: ${archResult.error}`);
         }
@@ -134,182 +113,146 @@ export const Categories: React.FC = () => {
     }
   };
 
-  // Separate categories by subtype
-  const incomeCategories = categories.filter(
-    (cat) => cat.subtype === AccountSubtype.Asset
-  );
-  const expenseCategories = categories.filter(
-    (cat) => cat.subtype === AccountSubtype.Liability
-  );
+  // Group management handlers
+  const handleCreateGroup = () => {
+    setEditingGroup(null);
+    setShowGroupModal(true);
+  };
+
+  const handleGroupCreated = async () => {
+    await fetchGroupedCategories();
+    await refreshAccounts();
+  };
+
+  const handleGroupEdit = (group: AccountGroup) => {
+    setEditingGroup(group);
+    setShowGroupModal(true);
+  };
+
+  const handleGroupDelete = async (group: AccountGroup) => {
+    if (confirm(`Are you sure you want to delete the group "${group.name}"? Categories in this group will be moved to ungrouped.`)) {
+      try {
+        const result = await window.electron.ipcRenderer.invoke("delete-account-group", group.id);
+        if (result.success) {
+          await fetchGroupedCategories();
+          await refreshAccounts();
+        } else {
+          alert(result.error || "Failed to delete group");
+        }
+      } catch (error) {
+        console.error("Error deleting group:", error);
+        alert("Failed to delete group");
+      }
+    }
+  };
+
+  const handleAccountMove = async (accountId: string, groupId: string | null) => {
+    try {
+      let result;
+      if (groupId === null) {
+        result = await window.electron.ipcRenderer.invoke("remove-account-from-group", accountId);
+      } else {
+        result = await window.electron.ipcRenderer.invoke("add-account-to-group", { accountId, groupId });
+      }
+      
+      if (result.success) {
+        await fetchGroupedCategories();
+        await refreshAccounts();
+      } else {
+        alert(result.error || "Failed to move category");
+      }
+    } catch (error) {
+      console.error("Error moving category:", error);
+      alert("Failed to move category");
+    }
+  };
+
+  const handleGroupReorder = async (groupId: string, direction: 'up' | 'down') => {
+    try {
+      const currentGroups = groupedAccountsView.groups;
+      const currentIndex = currentGroups.findIndex(g => g.id === groupId);
+      
+      if (currentIndex === -1) return;
+      
+      // Calculate new positions
+      const newGroups = [...currentGroups];
+      if (direction === 'up' && currentIndex > 0) {
+        // Swap with previous group
+        [newGroups[currentIndex - 1], newGroups[currentIndex]] = 
+        [newGroups[currentIndex], newGroups[currentIndex - 1]];
+      } else if (direction === 'down' && currentIndex < newGroups.length - 1) {
+        // Swap with next group
+        [newGroups[currentIndex], newGroups[currentIndex + 1]] = 
+        [newGroups[currentIndex + 1], newGroups[currentIndex]];
+      } else {
+        return; // No change needed
+      }
+      
+      // Create array of {id, displayOrder} for all groups
+      const groupOrders = newGroups.map((group, index) => ({
+        id: group.id,
+        displayOrder: index,
+      }));
+      
+      // Call IPC handler to persist the new order
+      const result = await window.electron.ipcRenderer.invoke("reorder-account-groups", groupOrders);
+      
+      if (!result.success) {
+        console.error("Failed to reorder groups:", result.error);
+        alert(result.error || "Failed to reorder groups");
+        return;
+      }
+      
+      // Refresh the groups list
+      await fetchGroupedCategories();
+    } catch (error) {
+      console.error("Error reordering groups:", error);
+      alert("Failed to reorder groups");
+    }
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header with Add Category Button */}
+      {/* Header with Add Category and Create Group Buttons */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-gray-900">Categories</h1>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-        >
-          Add Category
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+          >
+            Add Category
+          </button>
+          <button
+            onClick={handleCreateGroup}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+          >
+            Create Group
+          </button>
+        </div>
       </div>
 
-      {/* Income Categories Section */}
+      {/* Grouped Categories List */}
       <div className="bg-white shadow rounded-lg p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-medium text-gray-900">Income Categories</h2>
-        </div>
         {loading ? (
           <div className="text-center py-4 text-gray-500">Loading...</div>
         ) : error ? (
           <div className="text-center py-4 text-red-500">{error}</div>
-        ) : incomeCategories.length === 0 ? (
-          <div className="text-center py-4 text-gray-500">No income categories found</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Balances
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {incomeCategories.map((category) => (
-                  <tr key={category.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {category.name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className="text-green-600 font-medium" aria-label="Positive amount">
-                        {formatBalances(category)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex gap-3 items-center">
-                        <Link
-                          to={`/accounts/${category.id}/transactions`}
-                          className="text-blue-600 hover:text-blue-900 hover:underline"
-                        >
-                          View Transactions
-                        </Link>
-                        <button
-                          className="text-blue-600 hover:text-blue-900 hover:underline"
-                          onClick={() => {
-                            setEditingCategory(category);
-                            setIsModalOpen(true);
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="text-red-600 hover:text-red-900 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline"
-                          onClick={() => handleDeleteOrArchive(category)}
-                          disabled={
-                            deletingCategoryId === category.id ||
-                            archivingCategoryId === category.id
-                          }
-                        >
-                          {deletingCategoryId === category.id
-                            ? "Deleting..."
-                            : archivingCategoryId === category.id
-                            ? "Archiving..."
-                            : "Delete / Archive"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Expense Categories Section */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-medium text-gray-900">Expense Categories</h2>
-        </div>
-        {loading ? (
-          <div className="text-center py-4 text-gray-500">Loading...</div>
-        ) : error ? (
-          <div className="text-center py-4 text-red-500">{error}</div>
-        ) : expenseCategories.length === 0 ? (
-          <div className="text-center py-4 text-gray-500">No expense categories found</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Balances
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {expenseCategories.map((category) => (
-                  <tr key={category.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {category.name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className="text-red-600 font-medium" aria-label="Positive amount">
-                        {formatBalances(category)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex gap-3 items-center">
-                        <Link
-                          to={`/accounts/${category.id}/transactions`}
-                          className="text-blue-600 hover:text-blue-900 hover:underline"
-                        >
-                          View Transactions
-                        </Link>
-                        <button
-                          className="text-blue-600 hover:text-blue-900 hover:underline"
-                          onClick={() => {
-                            setEditingCategory(category);
-                            setIsModalOpen(true);
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="text-red-600 hover:text-red-900 hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline"
-                          onClick={() => handleDeleteOrArchive(category)}
-                          disabled={
-                            deletingCategoryId === category.id ||
-                            archivingCategoryId === category.id
-                          }
-                        >
-                          {deletingCategoryId === category.id
-                            ? "Deleting..."
-                            : archivingCategoryId === category.id
-                            ? "Archiving..."
-                            : "Delete / Archive"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <GroupedAccountsList
+            groups={groupedAccountsView.groups}
+            ungroupedAccounts={groupedAccountsView.ungroupedAccounts}
+            accountType={AccountType.Category}
+            onAccountEdit={(account) => {
+              setEditingCategory(account as CategoryWithBalances);
+              setIsModalOpen(true);
+            }}
+            onGroupEdit={handleGroupEdit}
+            onGroupDelete={handleGroupDelete}
+            onAccountMove={handleAccountMove}
+            onGroupReorder={handleGroupReorder}
+            accountBalances={{}}
+          />
         )}
       </div>
 
@@ -321,10 +264,22 @@ export const Categories: React.FC = () => {
           setEditingCategory(null);
         }}
         onCategoryCreated={() => {
-          fetchCategories();
+          fetchGroupedCategories();
           setEditingCategory(null);
         }}
         editingCategory={editingCategory}
+      />
+
+      {/* Account Group Modal */}
+      <AccountGroupModal
+        isOpen={showGroupModal}
+        onClose={() => {
+          setShowGroupModal(false);
+          setEditingGroup(null);
+        }}
+        onGroupCreated={handleGroupCreated}
+        accountType={AccountType.Category}
+        editingGroup={editingGroup}
       />
     </div>
   );
