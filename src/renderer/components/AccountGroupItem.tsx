@@ -36,7 +36,6 @@ export const AccountGroupItem: React.FC<AccountGroupItemProps> = ({
 }) => {
   const navigate = useNavigate();
   const [aggregateBalance, setAggregateBalance] = useState<number | Record<string, number> | null>(null);
-  const [loadingBalance, setLoadingBalance] = useState(false);
 
   // Helper function to format balances for categories (with multi-currency support)
   const formatBalances = (account: Account): string => {
@@ -99,24 +98,54 @@ export const AccountGroupItem: React.FC<AccountGroupItemProps> = ({
     return account.subtype === AccountSubtype.Asset ? "text-green-600" : "text-red-600";
   };
 
-  // Fetch aggregate balance when component mounts or group changes
+  // Calculate aggregate balance from accounts when component mounts or accounts change
   useEffect(() => {
-    fetchAggregateBalance();
-  }, [group.id]);
+    calculateAggregateBalance();
+  }, [group.accounts, accountBalances]);
 
-  const fetchAggregateBalance = async () => {
-    setLoadingBalance(true);
-    try {
-      const result = await window.electron.ipcRenderer.invoke(
-        "get-group-aggregate-balance",
-        group.id
-      );
-      setAggregateBalance(result);
-    } catch (err) {
-      console.error("Failed to fetch aggregate balance:", err);
+  const calculateAggregateBalance = () => {
+    if (!group.accounts || group.accounts.length === 0) {
       setAggregateBalance(null);
-    } finally {
-      setLoadingBalance(false);
+      return;
+    }
+
+    const balances: Record<string, number> = {};
+    
+    for (const account of group.accounts) {
+      const rawBalance = accountBalances[account.id] ?? account.balance ?? 0;
+      
+      // Normalize the balance for display (same logic as individual accounts)
+      let normalizedBalance: number;
+      if (group.accountType === AccountType.Category) {
+        // Categories always display as positive
+        normalizedBalance = Math.abs(rawBalance);
+      } else {
+        // User accounts: normalize based on subtype
+        normalizedBalance = normalizeAccountBalance(
+          rawBalance,
+          account.type,
+          account.subtype as AccountSubtype
+        );
+      }
+      
+      const currency = account.currency;
+      balances[currency] = (balances[currency] || 0) + normalizedBalance;
+    }
+    
+    // Round all balances to 2 decimal places
+    for (const currency in balances) {
+      balances[currency] = Math.round(balances[currency] * 100) / 100;
+    }
+    
+    // If single currency, return just the number
+    const currencies = Object.keys(balances);
+    if (currencies.length === 0) {
+      setAggregateBalance(0);
+    } else if (currencies.length === 1) {
+      setAggregateBalance(balances[currencies[0]]);
+    } else {
+      // Multi-currency: return the record
+      setAggregateBalance(balances);
     }
   };
 
@@ -132,29 +161,33 @@ export const AccountGroupItem: React.FC<AccountGroupItemProps> = ({
   };
 
   const renderBalance = () => {
-    if (loadingBalance) {
-      return <span className="text-sm text-gray-500">Loading...</span>;
-    }
-
     if (aggregateBalance === null) {
       return null;
     }
 
+    // Determine color based on account type
+    const colorClass = group.accountType === AccountType.Category 
+      ? "text-gray-900" // Categories show in neutral color
+      : "text-gray-600";
+    
     // Check if it's a multi-currency balance (Record<string, number>)
     if (typeof aggregateBalance === "object" && !Array.isArray(aggregateBalance)) {
       return (
-        <span className="text-sm text-gray-600">
+        <span className={`text-sm font-medium ${colorClass}`}>
           {formatMultiCurrencyBalances(aggregateBalance, { showSymbol: true, showCode: true })}
         </span>
       );
     }
 
-    // Single currency balance
+    // Single currency balance (already normalized in calculateAggregateBalance)
+    const displayBalance = aggregateBalance as number;
+    
     // Get the first account's currency as default, or use USD
     const currency = group.accounts?.[0]?.currency || "USD";
+    
     return (
-      <span className="text-sm text-gray-600">
-        {formatCurrencyAmount(aggregateBalance as number, currency, { showSymbol: true, showCode: true })}
+      <span className={`text-sm font-medium ${colorClass}`}>
+        {formatCurrencyAmount(displayBalance, currency, { showSymbol: true, showCode: true })}
       </span>
     );
   };

@@ -20,8 +20,28 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
   const [categoryName, setCategoryName] = useState("");
   const [categoryType, setCategoryType] = useState<"income" | "expense">("expense");
   const [defaultCurrency, setDefaultCurrency] = useState("USD");
+  const [selectedGroupId, setSelectedGroupId] = useState<string>("");
+  const [availableGroups, setAvailableGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch available groups
+  useEffect(() => {
+    if (isOpen) {
+      fetchGroups();
+    }
+  }, [isOpen]);
+
+  const fetchGroups = async () => {
+    try {
+      const response = await window.electron.ipcRenderer.invoke("get-account-groups", AccountType.Category);
+      if (response.success) {
+        setAvailableGroups(response.groups || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch groups:", err);
+    }
+  };
 
   // Populate form when editing
   useEffect(() => {
@@ -29,11 +49,13 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
       setCategoryName(editingCategory.name);
       setCategoryType(editingCategory.subtype === AccountSubtype.Asset ? "income" : "expense");
       setDefaultCurrency(editingCategory.currency);
+      setSelectedGroupId(editingCategory.groupId || "");
     } else {
       // Reset form for new category
       setCategoryName("");
       setCategoryType("expense");
       setDefaultCurrency("USD");
+      setSelectedGroupId("");
     }
     setError(null);
   }, [editingCategory, isOpen]);
@@ -100,7 +122,20 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
           currency: defaultCurrency,
         });
 
-        if (result.success) {
+        if (result.success && result.account) {
+          // If a group was selected, add the category to the group
+          if (selectedGroupId) {
+            try {
+              await window.electron.ipcRenderer.invoke("add-account-to-group", {
+                accountId: result.account.id,
+                groupId: selectedGroupId,
+              });
+            } catch (groupErr) {
+              console.error("Failed to add category to group:", groupErr);
+              // Don't fail the whole operation if group assignment fails
+            }
+          }
+          
           await refreshAccounts();
           onCategoryCreated();
           onClose();
@@ -209,6 +244,33 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
               This category can be used with any currency
             </p>
           </div>
+
+          {!editingCategory && availableGroups.length > 0 && (
+            <div>
+              <label
+                htmlFor="categoryGroup"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Group (Optional)
+              </label>
+              <select
+                id="categoryGroup"
+                value={selectedGroupId}
+                onChange={(e) => setSelectedGroupId(e.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              >
+                <option value="">No Group</option>
+                {availableGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Assign this category to a group for better organization
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="text-sm text-red-600 bg-red-50 p-2 rounded">

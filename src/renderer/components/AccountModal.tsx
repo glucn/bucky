@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { AccountType, toAccountType, AccountSubtype } from "../../shared/accountTypes";
 import { CreditCardSetupModal } from "./CreditCardSetupModal";
 
@@ -19,10 +19,34 @@ export const AccountModal: React.FC<AccountModalProps> = ({
     currency: "USD",
     subtype: AccountSubtype.Asset,
   });
+  const [selectedGroupId, setSelectedGroupId] = useState<string>("");
+  const [availableGroups, setAvailableGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreditCardSetup, setShowCreditCardSetup] = useState(false);
   const [createdAccountId, setCreatedAccountId] = useState<string | null>(null);
   const [selectedTypeValue, setSelectedTypeValue] = useState<string>("cash"); // Track raw dropdown value
+
+  // Fetch available groups
+  useEffect(() => {
+    if (isOpen) {
+      fetchGroups();
+      // Reset form when modal opens
+      setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
+      setSelectedTypeValue("cash");
+      setSelectedGroupId("");
+    }
+  }, [isOpen]);
+
+  const fetchGroups = async () => {
+    try {
+      const response = await window.electron.ipcRenderer.invoke("get-account-groups", AccountType.User);
+      if (response.success) {
+        setAvailableGroups(response.groups || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch groups:", err);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +54,19 @@ export const AccountModal: React.FC<AccountModalProps> = ({
     
     try {
       const result = await window.electron.ipcRenderer.invoke("add-account", newAccount);
+      
+      // If a group was selected, add the account to the group
+      if (result?.account?.id && selectedGroupId) {
+        try {
+          await window.electron.ipcRenderer.invoke("add-account-to-group", {
+            accountId: result.account.id,
+            groupId: selectedGroupId,
+          });
+        } catch (groupErr) {
+          console.error("Failed to add account to group:", groupErr);
+          // Don't fail the whole operation if group assignment fails
+        }
+      }
       
       // Check if this is a credit card account using the tracked dropdown value
       const isCreditCard = selectedTypeValue === "credit" && newAccount.subtype === AccountSubtype.Liability;
@@ -42,6 +79,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
         // For non-credit card accounts, close immediately
         setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
         setSelectedTypeValue("cash");
+        setSelectedGroupId("");
         onAccountCreated();
         onClose();
       }
@@ -57,6 +95,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
     setCreatedAccountId(null);
     setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
     setSelectedTypeValue("cash");
+    setSelectedGroupId("");
     onAccountCreated();
     onClose();
   };
@@ -66,6 +105,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
     setCreatedAccountId(null);
     setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
     setSelectedTypeValue("cash");
+    setSelectedGroupId("");
     onAccountCreated();
     onClose();
   };
@@ -178,6 +218,34 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               <option value="JPY">JPY</option>
             </select>
           </div>
+          
+          {availableGroups.length > 0 && (
+            <div>
+              <label
+                htmlFor="accountGroup"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Group (Optional)
+              </label>
+              <select
+                id="accountGroup"
+                value={selectedGroupId}
+                onChange={(e) => setSelectedGroupId(e.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              >
+                <option value="">No Group</option>
+                {availableGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Assign this account to a group for better organization
+              </p>
+            </div>
+          )}
+          
           <button
             type="submit"
             className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"

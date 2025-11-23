@@ -28,6 +28,38 @@ export const Categories: React.FC = () => {
   const [editingCategory, setEditingCategory] = useState<CategoryWithBalances | null>(null);
   const [editingGroup, setEditingGroup] = useState<AccountGroup | null>(null);
 
+  // Fetch category balances and attach them to account objects
+  const fetchCategoryBalances = async (groupedView: GroupedAccountsView) => {
+    // Collect all categories
+    const allCategories = [
+      ...groupedView.groups.flatMap((g: AccountGroup) => g.accounts),
+      ...groupedView.ungroupedAccounts
+    ].filter((category): category is Account => category !== undefined);
+    
+    // Fetch balances for each category
+    for (const category of allCategories) {
+      try {
+        const result = await window.electron.ipcRenderer.invoke(
+          "get-category-balances-by-currency",
+          category.id
+        );
+        
+        if (result.success && result.balances) {
+          // Attach balances to the category object
+          (category as CategoryWithBalances).balances = result.balances;
+        } else {
+          console.error(`Failed to fetch balance for category ${category.id}:`, result.error);
+          (category as CategoryWithBalances).balances = {};
+        }
+      } catch (error) {
+        console.error(`Error fetching balance for category ${category.id}:`, error);
+        (category as CategoryWithBalances).balances = {};
+      }
+    }
+    
+    return groupedView;
+  };
+
   // Fetch grouped categories
   const fetchGroupedCategories = async () => {
     try {
@@ -40,7 +72,9 @@ export const Categories: React.FC = () => {
       );
       
       if (response.success && response.data) {
-        setGroupedAccountsView(response.data);
+        // Fetch balances and attach them to the account objects
+        const viewWithBalances = await fetchCategoryBalances(response.data);
+        setGroupedAccountsView(viewWithBalances);
       } else {
         console.error("Failed to fetch grouped categories:", response.error);
         setError(response.error || "Failed to load categories");

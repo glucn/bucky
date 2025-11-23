@@ -106,14 +106,14 @@ export const Dashboard: React.FC = () => {
         {netWorth ? (
           <>
             {Object.keys(netWorth.netWorth).map((currency) => {
-              // The database returns raw balances
-              // For assets: positive balance = funds available (display as-is)
-              // For liabilities: negative balance = amount owed (display as positive)
+              // The database returns raw balances and already calculates net worth correctly
+              // Net worth = assets - liabilities (using raw values)
+              const rawNetWorth = netWorth.netWorth[currency] || 0;
               const rawAssets = netWorth.assets[currency] || 0;
               const rawLiabilities = netWorth.liabilities[currency] || 0;
               
-              // Normalize for display
-              // Assets preserve sign, liabilities are negated
+              // Normalize assets and liabilities for display only
+              // Assets preserve sign, liabilities are negated for display
               const normalizedAssets = normalizeAccountBalance(
                 rawAssets,
                 AccountType.User,
@@ -125,20 +125,21 @@ export const Dashboard: React.FC = () => {
                 AccountSubtype.Liability
               );
               
-              // Net worth = assets - liabilities (using normalized values)
-              const normalizedNetWorth = normalizedAssets - normalizedLiabilities;
+              // Use the net worth directly from backend (already correct)
+              // Don't recalculate from normalized values
+              const displayNetWorth = rawNetWorth;
               
               return (
                 <div key={currency} className="mb-4 last:mb-0">
                   <p className="mt-2 text-3xl font-bold text-primary-600">
-                    {formatCurrency(normalizedNetWorth, currency)}
+                    {formatCurrency(displayNetWorth, currency)}
                   </p>
                   <div className="flex space-x-8 mt-2">
                     <span className="text-green-600 font-medium" aria-label="Positive amount">
                       Assets: {formatCurrency(normalizedAssets, currency)}
                     </span>
                     <span className="text-red-600 font-medium" aria-label="Positive amount">
-                      Liabilities: {formatCurrency(normalizedLiabilities, currency)}
+                      Liabilities: {formatCurrency(Math.abs(normalizedLiabilities), currency)}
                     </span>
                   </div>
                 </div>

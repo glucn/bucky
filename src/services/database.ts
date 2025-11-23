@@ -519,23 +519,40 @@ class DatabaseService {
       orderBy: { createdAt: 'asc' },
     });
     
-    // Convert account types
-    const groupsWithTypedAccounts = groups.map(group => ({
-      ...group,
-      accounts: group.accounts.map(acc => ({
-        ...acc,
-        type: toAccountType(acc.type),
-      })),
-    }));
+    // Fetch balances for all accounts
+    const groupsWithBalances = await Promise.all(
+      groups.map(async (group) => {
+        const accountsWithBalances = await Promise.all(
+          group.accounts.map(async (acc) => {
+            const balance = await this.getAccountBalance(acc.id, prisma);
+            return {
+              ...acc,
+              type: toAccountType(acc.type),
+              balance,
+            };
+          })
+        );
+        return {
+          ...group,
+          accounts: accountsWithBalances,
+        };
+      })
+    );
     
-    const typedUngroupedAccounts = ungroupedAccounts.map(acc => ({
-      ...acc,
-      type: toAccountType(acc.type),
-    }));
+    const ungroupedWithBalances = await Promise.all(
+      ungroupedAccounts.map(async (acc) => {
+        const balance = await this.getAccountBalance(acc.id, prisma);
+        return {
+          ...acc,
+          type: toAccountType(acc.type),
+          balance,
+        };
+      })
+    );
     
     return {
-      groups: groupsWithTypedAccounts,
-      ungroupedAccounts: typedUngroupedAccounts,
+      groups: groupsWithBalances,
+      ungroupedAccounts: ungroupedWithBalances,
     };
   }
 
