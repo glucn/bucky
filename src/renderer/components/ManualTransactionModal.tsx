@@ -74,6 +74,21 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
       : "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Separate state for amount display to allow empty string
+  const [amountDisplay, setAmountDisplay] = useState<string>(
+    isEdit && transaction && fromAccount
+      ? (() => {
+          const normalizedAmount = normalizeTransactionAmount(
+            transaction.amount,
+            fromAccount.type,
+            fromAccount.subtype as AccountSubtype,
+            true
+          );
+          return Math.abs(normalizedAmount).toString();
+        })()
+      : ""
+  );
 
   // Lookup target account
   const toAccount = accounts.find((a) => a.id === newTransaction.toAccountId);
@@ -226,13 +241,14 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
             <input
               id="amount"
               type="number"
-              value={newTransaction.amount}
-              onChange={(e) =>
+              value={amountDisplay}
+              onChange={(e) => {
+                setAmountDisplay(e.target.value);
                 setNewTransaction((prev) => ({
                   ...prev,
-                  amount: parseFloat(e.target.value),
-                }))
-              }
+                  amount: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0,
+                }));
+              }}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
               required
               min="0"
