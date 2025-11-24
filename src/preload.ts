@@ -30,4 +30,10 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("get-accounts-with-groups", params),
   reorderAccountGroups: (groupOrders: Array<{ id: string; displayOrder: number }>) =>
     ipcRenderer.invoke("reorder-account-groups", groupOrders),
+  
+  // Transaction reordering operations
+  moveTransactionUp: (entryId: string) =>
+    ipcRenderer.invoke("move-transaction-up", entryId),
+  moveTransactionDown: (entryId: string) =>
+    ipcRenderer.invoke("move-transaction-down", entryId),
 });

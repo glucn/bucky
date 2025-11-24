@@ -49,6 +49,10 @@ interface IElectronAPI {
   // Query operations
   getAccountsWithGroups(params: { includeArchived?: boolean; accountType?: string }): Promise<{ success: boolean; data?: GroupedAccountsView; error?: string }>;
   reorderAccountGroups(groupOrders: Array<{ id: string; displayOrder: number }>): Promise<{ success: boolean; error?: string }>;
+  
+  // Transaction reordering operations
+  moveTransactionUp(entryId: string): Promise<{ success: boolean; error?: string }>;
+  moveTransactionDown(entryId: string): Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {

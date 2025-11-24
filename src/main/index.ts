@@ -59,6 +59,8 @@ function setupIpcHandlers() {
   ipcMain.removeHandler("add-account");
   ipcMain.removeHandler("add-transaction");
   ipcMain.removeHandler("delete-transaction");
+  ipcMain.removeHandler("move-transaction-up");
+  ipcMain.removeHandler("move-transaction-down");
 
   ipcMain.removeHandler("create-opening-balance-entry");
   ipcMain.removeHandler("get-net-worth");
@@ -162,6 +164,34 @@ function setupIpcHandlers() {
       return { success: true, updatedEntry: result };
     } catch (error) {
       console.error("Error updating transaction:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  });
+
+  ipcMain.handle("move-transaction-up", async (_, entryId: string) => {
+    console.log("Handling move-transaction-up request for entry:", entryId);
+    try {
+      const result = await databaseService.moveTransactionUp(entryId);
+      return result;
+    } catch (error) {
+      console.error("Error moving transaction up:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  });
+
+  ipcMain.handle("move-transaction-down", async (_, entryId: string) => {
+    console.log("Handling move-transaction-down request for entry:", entryId);
+    try {
+      const result = await databaseService.moveTransactionDown(entryId);
+      return result;
+    } catch (error) {
+      console.error("Error moving transaction down:", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

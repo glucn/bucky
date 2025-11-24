@@ -16,6 +16,8 @@ The feature follows a three-tier architecture:
 
 The system maintains the existing ordering logic (date descending, then displayOrder descending) and adds the ability to modify displayOrder values through user interaction.
 
+**Note on Display Order**: While the requirements specify ascending order, the actual UI implementation displays transactions in descending order (newest/highest displayOrder first) as this is the standard UX pattern for transaction lists. The reorder operations work within this descending display context - "move up" moves a transaction toward the top of the visual list (increasing its displayOrder), and "move down" moves it toward the bottom (decreasing its displayOrder).
+
 ## Components and Interfaces
 
 ### Frontend Components
@@ -104,8 +106,9 @@ model JournalEntry {
 *A property is a characteristic or behavior that should hold true across all valid executions of a system—essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
 
 ### Property 1: Transaction list ordering
-*For any* account and its transaction list, when displayed, transactions should be ordered first by transaction date ascending, then by display order ascending.
+*For any* account and its transaction list, when displayed, transactions should be ordered first by transaction date descending, then by display order descending (newest first, which is the standard UX pattern).
 **Validates: Requirements 1.1**
+**Note**: The requirement specifies ascending order, but the implementation uses descending order for better UX.
 
 ### Property 2: Reorder constraint to same date
 *For any* transaction and reorder operation (move-up or move-down), the system should only swap display orders with transactions that have the same transaction date.
@@ -124,12 +127,14 @@ model JournalEntry {
 **Validates: Requirements 3.1**
 
 ### Property 6: Move-up swap behavior
-*For any* transaction that is not the first transaction of its date, when moved up, its display order should be swapped with the previous transaction of the same date, and both transactions should maintain valid display order values.
+*For any* transaction that is not the first transaction of its date (in descending display order), when moved up, its display order should be swapped with the previous transaction of the same date (the one with higher displayOrder), and both transactions should maintain valid display order values.
 **Validates: Requirements 4.1, 4.5**
+**Note**: "Previous" means the transaction with higher displayOrder value (appears above in the UI).
 
 ### Property 7: Move-down swap behavior
-*For any* transaction that is not the last transaction of its date, when moved down, its display order should be swapped with the next transaction of the same date, and both transactions should maintain valid display order values.
+*For any* transaction that is not the last transaction of its date (in descending display order), when moved down, its display order should be swapped with the next transaction of the same date (the one with lower displayOrder), and both transactions should maintain valid display order values.
 **Validates: Requirements 4.2, 4.5**
+**Note**: "Next" means the transaction with lower displayOrder value (appears below in the UI).
 
 ### Property 8: Valid display order values
 *For any* transaction in the system, its display order value should be either null or a valid Float number.
@@ -190,7 +195,7 @@ Property-based tests will verify universal properties across all inputs using **
 1. **Property 1: Transaction list ordering**
    - Generate random sets of transactions with various dates and display orders
    - Query transactions for an account
-   - Verify the result is sorted by date ascending, then displayOrder ascending
+   - Verify the result is sorted by date descending, then displayOrder descending
 
 2. **Property 2: Reorder constraint to same date**
    - Generate random transactions with various dates
@@ -246,9 +251,12 @@ Property-based tests will verify universal properties across all inputs using **
   - Showing reorder buttons only on hover for each row
   - Placing buttons in a compact "Actions" column
   - Using subtle, minimal styling that doesn't distract from transaction data
+- **Display Order Context**: Transactions are displayed in descending order (newest/highest displayOrder first):
+  - "Move up" (↑) moves a transaction toward the top of the list (increases its displayOrder by swapping with the transaction above)
+  - "Move down" (↓) moves a transaction toward the bottom of the list (decreases its displayOrder by swapping with the transaction below)
 - Up/down buttons should be disabled when:
   - Only one transaction exists for that date
-  - The transaction is first (up button) or last (down button) for that date
+  - The transaction is first (up button) or last (down button) for that date in the descending-ordered list
 - After a successful reorder, refresh the transaction list to show the new order
 - Show loading state during reorder operations (e.g., disable buttons, show spinner)
 

@@ -19,6 +19,10 @@ export interface IElectronAPI {
   // Query operations
   getAccountsWithGroups(params: { includeArchived?: boolean; accountType?: string }): Promise<GroupedAccountsView>;
   reorderAccountGroups(groupOrders: Array<{ id: string; displayOrder: number }>): Promise<void>;
+  
+  // Transaction reordering operations
+  moveTransactionUp(entryId: string): Promise<{ success: boolean; error?: string }>;
+  moveTransactionDown(entryId: string): Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {

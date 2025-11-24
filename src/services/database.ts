@@ -2083,6 +2083,173 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       include: { lines: true },
     });
   }
+
+  // Transaction reordering methods
+
+  /**
+   * Get all transactions for a specific date, ordered by displayOrder ascending.
+   * Treats null displayOrder as createdAt timestamp.
+   */
+  private async getTransactionsForDate(
+    date: string,
+    tx?: TransactionClient
+  ): Promise<any[]> {
+    const prisma = tx || this.prisma;
+    
+    const transactions = await prisma.journalEntry.findMany({
+      where: { date },
+      orderBy: [
+        { displayOrder: 'desc' },
+        { createdAt: 'desc' }
+      ],
+    });
+    
+    return transactions;
+  }
+
+  /**
+   * Swap display order values between two transactions.
+   * Uses a transaction to ensure atomicity.
+   */
+  private async swapDisplayOrder(
+    entryId1: string,
+    entryId2: string,
+    tx?: TransactionClient
+  ): Promise<void> {
+    const prisma = tx || this.prisma;
+    
+    // If no transaction provided, create one
+    if (!tx) {
+      return this.prisma.$transaction(async (trx) => {
+        return this.swapDisplayOrder(entryId1, entryId2, trx);
+      });
+    }
+    
+    try {
+      // Read both displayOrder values
+      const [entry1, entry2] = await Promise.all([
+        prisma.journalEntry.findUnique({ where: { id: entryId1 } }),
+        prisma.journalEntry.findUnique({ where: { id: entryId2 } }),
+      ]);
+      
+      if (!entry1 || !entry2) {
+        throw new Error('Transaction not found');
+      }
+      
+      // Handle null displayOrder by treating as createdAt timestamp
+      const displayOrder1 = entry1.displayOrder ?? entry1.createdAt.getTime();
+      const displayOrder2 = entry2.displayOrder ?? entry2.createdAt.getTime();
+      
+      // Swap the values
+      await Promise.all([
+        prisma.journalEntry.update({
+          where: { id: entryId1 },
+          data: { displayOrder: displayOrder2 },
+        }),
+        prisma.journalEntry.update({
+          where: { id: entryId2 },
+          data: { displayOrder: displayOrder1 },
+        }),
+      ]);
+    } catch (error) {
+      console.error('Error swapping display order:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Move a transaction up in display order (swap with previous transaction of same date).
+   */
+  public async moveTransactionUp(
+    entryId: string,
+    tx?: TransactionClient
+  ): Promise<{ success: boolean; error?: string }> {
+    const prisma = tx || this.prisma;
+    
+    try {
+      // Query the transaction
+      const entry = await prisma.journalEntry.findUnique({
+        where: { id: entryId },
+      });
+      
+      if (!entry) {
+        return { success: false, error: 'Transaction not found' };
+      }
+      
+      // Get all transactions for the same date, ordered by displayOrder ascending
+      const transactions = await this.getTransactionsForDate(entry.date, prisma);
+      
+      // Find the current transaction's position
+      const currentIndex = transactions.findIndex(t => t.id === entryId);
+      
+      if (currentIndex === -1) {
+        return { success: false, error: 'Transaction not found in date list' };
+      }
+      
+      // Check if this is the first transaction
+      if (currentIndex === 0) {
+        return { success: false, error: 'Cannot move up: already first transaction' };
+      }
+      
+      // Get the previous transaction
+      const previousTransaction = transactions[currentIndex - 1];
+      
+      // Swap display orders
+      await this.swapDisplayOrder(entryId, previousTransaction.id, prisma);
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error moving transaction up:', error);
+      return { success: false, error: error.message || 'Unknown error' };
+    }
+  }
+
+  /**
+   * Move a transaction down in display order (swap with next transaction of same date).
+   */
+  public async moveTransactionDown(
+    entryId: string,
+    tx?: TransactionClient
+  ): Promise<{ success: boolean; error?: string }> {
+    const prisma = tx || this.prisma;
+    
+    try {
+      // Query the transaction
+      const entry = await prisma.journalEntry.findUnique({
+        where: { id: entryId },
+      });
+      
+      if (!entry) {
+        return { success: false, error: 'Transaction not found' };
+      }
+      
+      // Get all transactions for the same date, ordered by displayOrder ascending
+      const transactions = await this.getTransactionsForDate(entry.date, prisma);
+      
+      // Find the current transaction's position
+      const currentIndex = transactions.findIndex(t => t.id === entryId);
+      
+      if (currentIndex === -1) {
+        return { success: false, error: 'Transaction not found in date list' };
+      }
+      
+      // Check if this is the last transaction
+      if (currentIndex === transactions.length - 1) {
+        return { success: false, error: 'Cannot move down: already last transaction' };
+      }
+      
+      // Get the next transaction
+      const nextTransaction = transactions[currentIndex + 1];
+      
+      // Swap display orders
+      await this.swapDisplayOrder(entryId, nextTransaction.id, prisma);
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error moving transaction down:', error);
+      return { success: false, error: error.message || 'Unknown error' };
+    }
+  }
 }
 
 export const databaseService = DatabaseService.getInstance();

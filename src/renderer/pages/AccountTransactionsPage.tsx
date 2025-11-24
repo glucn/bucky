@@ -401,6 +401,10 @@ export const AccountTransactionsPage: React.FC = () => {
   const [postingDateFrom, setPostingDateFrom] = useState<string>("");
   const [postingDateTo, setPostingDateTo] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Reordering state
+  const [reorderingEntryId, setReorderingEntryId] = useState<string | null>(null);
+  const [reorderError, setReorderError] = useState<string | null>(null);
 
   const fetchTransactions = async () => {
     if (!accountId) return;
@@ -412,6 +416,42 @@ export const AccountTransactionsPage: React.FC = () => {
       setTransactions(txs);
     } catch (err) {
       console.error("Failed to fetch transactions", err);
+    }
+  };
+
+  const handleMoveUp = async (entryId: string) => {
+    setReorderingEntryId(entryId);
+    setReorderError(null);
+    try {
+      const result = await window.electron.moveTransactionUp(entryId);
+      if (result.success) {
+        await fetchTransactions();
+      } else {
+        setReorderError(result.error || "Failed to move transaction up");
+      }
+    } catch (err) {
+      setReorderError("Failed to move transaction up");
+      console.error(err);
+    } finally {
+      setReorderingEntryId(null);
+    }
+  };
+
+  const handleMoveDown = async (entryId: string) => {
+    setReorderingEntryId(entryId);
+    setReorderError(null);
+    try {
+      const result = await window.electron.moveTransactionDown(entryId);
+      if (result.success) {
+        await fetchTransactions();
+      } else {
+        setReorderError(result.error || "Failed to move transaction down");
+      }
+    } catch (err) {
+      setReorderError("Failed to move transaction down");
+      console.error(err);
+    } finally {
+      setReorderingEntryId(null);
     }
   };
 
@@ -440,6 +480,36 @@ export const AccountTransactionsPage: React.FC = () => {
       return true;
     });
   }, [transactions, transactionDateFrom, transactionDateTo, postingDateFrom, postingDateTo]);
+
+  // Helper function to group transactions by date and determine position
+  const getTransactionPositionInfo = React.useMemo(() => {
+    const dateGroups = new Map<string, JournalLine[]>();
+    
+    // Group transactions by date
+    filteredTransactions.forEach((line) => {
+      const date = line.entry.date;
+      if (!dateGroups.has(date)) {
+        dateGroups.set(date, []);
+      }
+      dateGroups.get(date)!.push(line);
+    });
+    
+    // Create position info map
+    const positionInfo = new Map<string, { isFirst: boolean; isLast: boolean; isOnly: boolean }>();
+    
+    dateGroups.forEach((lines) => {
+      const count = lines.length;
+      lines.forEach((line, index) => {
+        positionInfo.set(line.id, {
+          isFirst: index === 0,
+          isLast: index === count - 1,
+          isOnly: count === 1,
+        });
+      });
+    });
+    
+    return positionInfo;
+  }, [filteredTransactions]);
 
   const fetchAccount = async () => {
     try {
@@ -663,6 +733,21 @@ export const AccountTransactionsPage: React.FC = () => {
       )}
       
       <div className="bg-white shadow rounded-lg p-6">
+        {/* Reorder Error Display */}
+        {reorderError && (
+          <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded flex justify-between items-center">
+            <span>{reorderError}</span>
+            <button
+              onClick={() => setReorderError(null)}
+              className="text-red-700 hover:text-red-900 font-bold"
+              type="button"
+              aria-label="Close error"
+            >
+              ×
+            </button>
+          </div>
+        )}
+        
         {/* Date Filters */}
         <div className="mb-4">
           <button
@@ -781,15 +866,18 @@ export const AccountTransactionsPage: React.FC = () => {
                   (l: any) => l.accountId !== line.accountId
                 );
                 const categoryName = otherLine?.account?.name || "—";
+                const positionInfo = getTransactionPositionInfo.get(line.id);
+                const isReordering = reorderingEntryId === line.entry.id;
+                
                 return (
                   <tr
                     key={line.id}
-                    className={
+                    className={`group ${
                       categoryName === "Uncategorized Income" ||
                       categoryName === "Uncategorized Expense"
                         ? "bg-yellow-50 border-l-4 border-yellow-400"
-                        : "border-b border-gray-200"
-                    }
+                        : "border-b border-gray-200 hover:bg-gray-50"
+                    }`}
                   >
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {/* Display transaction date string as-is to avoid timezone shift */}
@@ -936,14 +1024,65 @@ export const AccountTransactionsPage: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <button
-                        className="text-primary-600 hover:underline"
-                        onClick={() => setEditTransaction(line)}
-                        type="button"
-                        aria-label="Edit transaction"
-                      >
-                        Edit
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {/* Reorder buttons - only show on hover and when not the only transaction */}
+                        {!positionInfo?.isOnly && (
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => handleMoveUp(line.entry.id)}
+                              disabled={positionInfo?.isFirst || isReordering}
+                              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                              type="button"
+                              aria-label="Move transaction up"
+                              title="Move up"
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M5 15l7-7 7 7"
+                                />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleMoveDown(line.entry.id)}
+                              disabled={positionInfo?.isLast || isReordering}
+                              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                              type="button"
+                              aria-label="Move transaction down"
+                              title="Move down"
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 9l-7 7-7-7"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        )}
+                        <button
+                          className="text-primary-600 hover:underline"
+                          onClick={() => setEditTransaction(line)}
+                          type="button"
+                          aria-label="Edit transaction"
+                        >
+                          Edit
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
