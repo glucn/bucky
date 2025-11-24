@@ -100,38 +100,40 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
     
     setIsSubmitting(true);
     try {
+      // Determine transactionType (needed for both create and update)
+      let transactionType: "income" | "expense" | "transfer" = "transfer";
+      if (fromAccount && toAccount) {
+        if (fromAccount.type === AccountType.User && toAccount.type === AccountType.Category) {
+          if (toAccount.subtype === "asset") {
+            transactionType = "income";
+          } else if (toAccount.subtype === "liability") {
+            transactionType = "expense";
+          } else {
+            transactionType = "expense";
+          }
+        } else if (fromAccount.type === AccountType.Category && toAccount.type === AccountType.User) {
+          if (fromAccount.subtype === "asset") {
+            transactionType = "expense";
+          } else if (fromAccount.subtype === "liability") {
+            transactionType = "income";
+          } else {
+            transactionType = "expense";
+          }
+        } else {
+          transactionType = "transfer";
+        }
+      }
+      
       if (isEdit && transaction) {
         // Update transaction
         await window.electron.ipcRenderer.invoke("update-transaction", {
           lineId: transaction.id,
           fromAccountId: accountId,
           ...newTransaction,
+          transactionType,
         });
       } else {
         // Add transaction, handle potential duplicate
-        // Determine transactionType
-        let transactionType: "income" | "expense" | "transfer" = "transfer";
-        if (fromAccount && toAccount) {
-          if (fromAccount.type === AccountType.User && toAccount.type === AccountType.Category) {
-            if (toAccount.subtype === "asset") {
-              transactionType = "income";
-            } else if (toAccount.subtype === "liability") {
-              transactionType = "expense";
-            } else {
-              transactionType = "expense";
-            }
-          } else if (fromAccount.type === AccountType.Category && toAccount.type === AccountType.User) {
-            if (fromAccount.subtype === "asset") {
-              transactionType = "expense";
-            } else if (fromAccount.subtype === "liability") {
-              transactionType = "income";
-            } else {
-              transactionType = "expense";
-            }
-          } else {
-            transactionType = "transfer";
-          }
-        }
         let result = await window.electron.ipcRenderer.invoke("add-transaction", {
           fromAccountId: accountId,
           ...newTransaction,
@@ -314,47 +316,98 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
           </div>
 
           {/* Transaction Preview with Normalized Amounts */}
-          {fromAccount && toAccount && newTransaction.amount > 0 && (
-            <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">Transaction Preview</h3>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">From: {fromAccount.name}</span>
-                  <span className={`font-medium ${
-                    fromAccount.subtype === 'asset' ? 'text-red-600' : 'text-green-600'
-                  }`}>
-                    {formatNormalizedTransactionAmount(
-                      -newTransaction.amount,
-                      fromAccount.currency,
-                      fromAccount.type,
-                      fromAccount.subtype as AccountSubtype,
-                      true,
-                      { showSymbol: true, showCode: false }
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">To: {toAccount.name}</span>
-                  <span className={`font-medium ${
-                    toAccount.type === AccountType.Category && toAccount.subtype === 'asset'
-                      ? 'text-green-600'
-                      : toAccount.type === AccountType.Category && toAccount.subtype === 'liability'
-                      ? 'text-red-600'
-                      : 'text-green-600'
-                  }`}>
-                    {formatNormalizedTransactionAmount(
-                      newTransaction.amount,
-                      toAccount.currency,
-                      toAccount.type,
-                      toAccount.subtype as AccountSubtype,
-                      false,
-                      { showSymbol: true, showCode: false }
-                    )}
-                  </span>
+          {fromAccount && toAccount && newTransaction.amount > 0 && (() => {
+            // Determine transaction type for preview
+            let transactionType: "income" | "expense" | "transfer" = "transfer";
+            if (fromAccount.type === AccountType.User && toAccount.type === AccountType.Category) {
+              transactionType = toAccount.subtype === 'asset' ? 'income' : 'expense';
+            } else if (fromAccount.type === AccountType.Category && toAccount.type === AccountType.User) {
+              transactionType = fromAccount.subtype === 'asset' ? 'expense' : 'income';
+            }
+
+            // Calculate the actual amounts that will be stored based on transaction type
+            let userAccountAmount = 0;
+            let categoryAmount = 0;
+            
+            if (transactionType === 'income') {
+              // Income: user account increases, category shows positive
+              if (fromAccount.type === AccountType.User) {
+                userAccountAmount = fromAccount.subtype === 'asset' 
+                  ? newTransaction.amount  // Asset increases (positive)
+                  : -newTransaction.amount; // Liability decreases (negative)
+                categoryAmount = newTransaction.amount; // Always positive for categories
+              } else {
+                // Category is fromAccount (unusual but possible)
+                categoryAmount = newTransaction.amount;
+                userAccountAmount = toAccount.subtype === 'asset'
+                  ? newTransaction.amount
+                  : -newTransaction.amount;
+              }
+            } else if (transactionType === 'expense') {
+              // Expense: user account decreases, category shows positive
+              if (fromAccount.type === AccountType.User) {
+                userAccountAmount = fromAccount.subtype === 'asset'
+                  ? -newTransaction.amount // Asset decreases (negative)
+                  : newTransaction.amount;  // Liability increases (positive)
+                categoryAmount = newTransaction.amount; // Always positive for categories
+              } else {
+                // Category is fromAccount (unusual but possible)
+                categoryAmount = newTransaction.amount;
+                userAccountAmount = toAccount.subtype === 'asset'
+                  ? -newTransaction.amount
+                  : newTransaction.amount;
+              }
+            } else {
+              // Transfer: use the old logic
+              userAccountAmount = fromAccount.subtype === 'asset'
+                ? -newTransaction.amount
+                : newTransaction.amount;
+              categoryAmount = toAccount.subtype === 'asset'
+                ? newTransaction.amount
+                : -newTransaction.amount;
+            }
+
+            const fromAmount = fromAccount.type === AccountType.User ? userAccountAmount : categoryAmount;
+            const toAmount = toAccount.type === AccountType.User ? userAccountAmount : categoryAmount;
+
+            return (
+              <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Transaction Preview</h3>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">{fromAccount.name}</span>
+                    <span className={`font-medium ${
+                      fromAmount > 0 ? 'text-green-600' : fromAmount < 0 ? 'text-red-600' : 'text-gray-600'
+                    }`}>
+                      {formatNormalizedTransactionAmount(
+                        fromAmount,
+                        fromAccount.currency,
+                        fromAccount.type,
+                        fromAccount.subtype as AccountSubtype,
+                        true,
+                        { showSymbol: true, showCode: false }
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">{toAccount.name}</span>
+                    <span className={`font-medium ${
+                      toAmount > 0 ? 'text-green-600' : toAmount < 0 ? 'text-red-600' : 'text-gray-600'
+                    }`}>
+                      {formatNormalizedTransactionAmount(
+                        toAmount,
+                        toAccount.currency,
+                        toAccount.type,
+                        toAccount.subtype as AccountSubtype,
+                        false,
+                        { showSymbol: true, showCode: false }
+                      )}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <button
             type="submit"
