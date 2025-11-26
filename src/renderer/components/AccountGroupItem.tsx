@@ -292,7 +292,14 @@ export const AccountGroupItem: React.FC<AccountGroupItemProps> = ({
       {/* Accounts List (shown when expanded) */}
       {isExpanded && group.accounts && group.accounts.length > 0 && (
         <div className="ml-6 mt-2">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="min-w-full divide-y divide-gray-200 table-fixed">
+            <colgroup>
+              <col className="w-[35%]" />
+              {group.accountType === AccountType.User && <col className="w-[15%]" />}
+              <col className="w-[20%]" />
+              {group.accountType === AccountType.User && <col className="w-[10%]" />}
+              <col className="w-[20%]" />
+            </colgroup>
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

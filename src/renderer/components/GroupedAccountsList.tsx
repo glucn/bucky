@@ -204,7 +204,14 @@ export const GroupedAccountsList: React.FC<GroupedAccountsListProps> = ({
           <h3 className="text-md font-semibold text-gray-700 mb-2">
             Ungrouped {accountType === AccountType.User ? "Accounts" : "Categories"}
           </h3>
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="min-w-full divide-y divide-gray-200 table-fixed">
+            <colgroup>
+              <col className="w-[35%]" />
+              {accountType === AccountType.User && <col className="w-[15%]" />}
+              <col className="w-[20%]" />
+              {accountType === AccountType.User && <col className="w-[10%]" />}
+              <col className="w-[20%]" />
+            </colgroup>
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
