@@ -1523,6 +1523,32 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
    */
   public async ensureDefaultAccounts(tx?: TransactionClient) {
     const prisma = tx || this.prisma;
+    
+    // First, ensure account groups exist
+    const defaultGroups = [
+      // Income groups
+      { name: "[Income] Active Income", accountType: AccountType.Category, displayOrder: 0 },
+      { name: "[Income] Passive Income", accountType: AccountType.Category, displayOrder: 1 },
+      { name: "[Income] Other Income", accountType: AccountType.Category, displayOrder: 2 },
+      // Expense groups
+      { name: "[Expense] Essentials", accountType: AccountType.Category, displayOrder: 3 },
+      { name: "[Expense] Lifestyle", accountType: AccountType.Category, displayOrder: 8 },
+      { name: "[Expense] Education", accountType: AccountType.Category, displayOrder: 10 },
+      { name: "[Expense] Financial & Business", accountType: AccountType.Category, displayOrder: 11 },
+      { name: "[Expense] Other Expense", accountType: AccountType.Category, displayOrder: 12 },
+    ];
+    
+    const groupMap: Record<string, string> = {};
+    for (const group of defaultGroups) {
+      let existingGroup = await prisma.accountGroup.findFirst({
+        where: { name: group.name, accountType: group.accountType },
+      });
+      if (!existingGroup) {
+        existingGroup = await prisma.accountGroup.create({ data: group });
+      }
+      groupMap[group.name] = existingGroup.id;
+    }
+    
     const defaultAccounts = [
       // User accounts
       {
@@ -1550,62 +1576,140 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
         subtype: AccountSubtype.Asset,
         currency: "USD",
       },
-      // Category accounts
-      {
-        name: "Uncategorized Income",
-        type: AccountType.Category,
-        subtype: AccountSubtype.Asset,
-        currency: "USD",
-      },
-      {
-        name: "Uncategorized Expense",
-        type: AccountType.Category,
-        subtype: AccountSubtype.Liability,
-        currency: "USD",
-      },
+      // Category accounts - Income
       {
         name: "Salary",
         type: AccountType.Category,
         subtype: AccountSubtype.Asset,
         currency: "USD",
+        groupId: groupMap["[Income] Active Income"],
       },
       {
         name: "Interest Income",
         type: AccountType.Category,
         subtype: AccountSubtype.Asset,
         currency: "USD",
+        groupId: groupMap["[Income] Passive Income"],
       },
+      {
+        name: "Uncategorized Income",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+        groupId: groupMap["[Income] Other Income"],
+      },
+      // Category accounts - Expenses (Essentials)
       {
         name: "Groceries",
         type: AccountType.Category,
         subtype: AccountSubtype.Liability,
         currency: "USD",
+        groupId: groupMap["[Expense] Essentials"],
       },
       {
         name: "Rent",
         type: AccountType.Category,
         subtype: AccountSubtype.Liability,
         currency: "USD",
+        groupId: groupMap["[Expense] Essentials"],
       },
       {
         name: "Utilities",
         type: AccountType.Category,
         subtype: AccountSubtype.Liability,
         currency: "USD",
+        groupId: groupMap["[Expense] Essentials"],
       },
+      {
+        name: "Household Supplies",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Liability,
+        currency: "USD",
+        groupId: groupMap["[Expense] Essentials"],
+      },
+      {
+        name: "Medical & Dental",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Liability,
+        currency: "USD",
+        groupId: groupMap["[Expense] Essentials"],
+      },
+      {
+        name: "Telecom",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Liability,
+        currency: "USD",
+        groupId: groupMap["[Expense] Essentials"],
+      },
+      {
+        name: "Transportation",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Liability,
+        currency: "USD",
+        groupId: groupMap["[Expense] Essentials"],
+      },
+      // Category accounts - Expenses (Lifestyle)
       {
         name: "Dining Out",
         type: AccountType.Category,
         subtype: AccountSubtype.Liability,
         currency: "USD",
+        groupId: groupMap["[Expense] Lifestyle"],
       },
       {
         name: "Entertainment",
         type: AccountType.Category,
         subtype: AccountSubtype.Liability,
         currency: "USD",
+        groupId: groupMap["[Expense] Lifestyle"],
+      },
+      {
+        name: "Sports",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Liability,
+        currency: "USD",
+        groupId: groupMap["[Expense] Lifestyle"],
+      },
+      {
+        name: "Travel",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Liability,
+        currency: "USD",
+        groupId: groupMap["[Expense] Lifestyle"],
+      },
+      // Category accounts - Expenses (Education)
+      {
+        name: "Books",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Liability,
+        currency: "USD",
+        groupId: groupMap["[Expense] Education"],
+      },
+      {
+        name: "Software",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Liability,
+        currency: "USD",
+        groupId: groupMap["[Expense] Education"],
+      },
+      // Category accounts - Expenses (Financial & Business)
+      {
+        name: "Insurance",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Liability,
+        currency: "USD",
+        groupId: groupMap["[Expense] Financial & Business"],
+      },
+      // Category accounts - Expenses (Other)
+      {
+        name: "Uncategorized Expense",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Liability,
+        currency: "USD",
+        groupId: groupMap["[Expense] Other Expense"],
       },
     ];
+    
     for (const acc of defaultAccounts) {
       const exists = await prisma.account.findFirst({
         where: { name: acc.name, type: acc.type },
