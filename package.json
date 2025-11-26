@@ -17,10 +17,14 @@
     "test": "vitest --run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
+    "test:db:reset": "rm -f prisma/test.db prisma/test.db-journal && npm run test:db:push",
+    "test:db:migrate": "echo 'Note: Migrations are applied automatically when tests run. This script creates/updates test.db schema.' && npm run test:db:push",
+    "test:db:push": "node -e \"const fs=require('fs'); const schema=fs.readFileSync('prisma/schema.prisma','utf8'); fs.writeFileSync('prisma/schema.test.prisma', schema.replace('file:./dev.db','file:./test.db'));\" && npx prisma db push --schema=prisma/schema.test.prisma && rm prisma/schema.test.prisma",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "tsc && node prisma/seed.js"
+    "prisma:seed": "tsc && node prisma/seed.js",
+    "dev:db:reset": "rm -f prisma/dev.db prisma/dev.db-journal && npm run prisma:migrate"
   },
   "keywords": [
     "bookkeeping",

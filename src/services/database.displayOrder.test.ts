@@ -1,22 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { databaseService } from './database';
+import { resetTestDatabase } from './database.test.utils';
 import { PrismaClient } from '@prisma/client';
 
 describe('Transaction displayOrder', () => {
   let prisma: PrismaClient;
 
   beforeEach(async () => {
+    await resetTestDatabase();
     prisma = new PrismaClient();
-    
-    // Clean up test data in correct order (respecting foreign key constraints)
-    await prisma.journalLine.deleteMany({});
-    await prisma.journalEntry.deleteMany({});
-    await prisma.checkpoint.deleteMany({});
-    await prisma.account.deleteMany({});
-  });
-
-  afterEach(async () => {
-    await prisma.$disconnect();
   });
 
   it('should set displayOrder to Date.now() for new regular transactions', async () => {
@@ -41,10 +33,10 @@ describe('Transaction displayOrder', () => {
 
     const beforeCreate = Date.now();
     
-    // Create a transaction
+    // Create a transaction with unique description to avoid duplicate detection
     const result = await databaseService.createJournalEntry({
       date: '2024-01-15',
-      description: 'Test Transaction',
+      description: `Test Transaction ${Date.now()} ${Math.random()}`,
       fromAccountId: fromAccount.id,
       toAccountId: toAccount.id,
       amount: 100,
@@ -81,10 +73,10 @@ describe('Transaction displayOrder', () => {
 
     const beforeCreate = Date.now();
     
-    // Create a currency transfer transaction
+    // Create a currency transfer transaction with unique description
     const result = await databaseService.createJournalEntry({
       date: '2024-01-15',
-      description: 'Currency Transfer',
+      description: `Currency Transfer ${Date.now()} ${Math.random()}`,
       fromAccountId: fromAccount.id,
       toAccountId: toAccount.id,
       type: 'currency_transfer',

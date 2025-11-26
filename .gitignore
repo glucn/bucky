@@ -99,3 +99,7 @@ out/
 prisma/dev.db
 prisma/*.js
 prisma/generated/
+
+# Test database files
+prisma/test.db
+prisma/test.db-journal

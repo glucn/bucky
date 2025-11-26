@@ -5,32 +5,15 @@
  * the requirements specified in the account-grouping feature design.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import * as fc from 'fast-check';
 import { databaseService } from './database';
 import { AccountType } from '../shared/accountTypes';
+import { resetTestDatabase } from './database.test.utils';
 
-// Helper to clean up test data
-async function cleanupTestGroups() {
-  const groups = await databaseService.getAccountGroups();
-  for (const group of groups) {
-    try {
-      await databaseService.deleteAccountGroup(group.id);
-    } catch (e) {
-      // Ignore errors during cleanup
-    }
-  }
-}
-
-// Skip these tests by default since they touch the real database
-// Run with: npm test -- --run database.accountGroups.test.ts
-describe.skip('Account Group Database Operations - Property-Based Tests', () => {
+describe('Account Group Database Operations - Property-Based Tests', () => {
   beforeEach(async () => {
-    await cleanupTestGroups();
-  });
-
-  afterEach(async () => {
-    await cleanupTestGroups();
+    await resetTestDatabase();
   });
 
   /**
@@ -49,9 +32,9 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
         // Generate account type (user or category)
         fc.constantFrom(AccountType.User, AccountType.Category),
         async (groupName, accountType) => {
-          // Create the group
+          // Create the group with unique name to avoid collisions within test run
           const createdGroup = await databaseService.createAccountGroup({
-            name: groupName.trim(),
+            name: `${groupName.trim()}-${Date.now()}-${Math.random()}`,
             accountType,
           });
 
@@ -60,12 +43,9 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
 
           // Property: retrieved group should match created group
           expect(retrievedGroup).not.toBeNull();
-          expect(retrievedGroup!.name).toBe(groupName.trim());
+          expect(retrievedGroup!.name).toBe(createdGroup.name);
           expect(retrievedGroup!.accountType).toBe(accountType);
           expect(retrievedGroup!.id).toBe(createdGroup.id);
-
-          // Cleanup
-          await databaseService.deleteAccountGroup(createdGroup.id);
         }
       ),
       { numRuns: 100 }
@@ -88,17 +68,20 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
         // Generate account type
         fc.constantFrom(AccountType.User, AccountType.Category),
         async (groupName, accountType) => {
+          // Create unique name for this test iteration
+          const uniqueName = `${groupName.trim()}-${Date.now()}-${Math.random()}`;
+          
           // Create the first group
           const firstGroup = await databaseService.createAccountGroup({
-            name: groupName.trim(),
+            name: uniqueName,
             accountType,
           });
 
-          // Attempt to create a duplicate group
+          // Attempt to create a duplicate group with the same name
           let errorThrown = false;
           try {
             await databaseService.createAccountGroup({
-              name: groupName.trim(),
+              name: uniqueName,
               accountType,
             });
           } catch (error: any) {
@@ -109,9 +92,6 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
 
           // Property: duplicate creation should fail
           expect(errorThrown).toBe(true);
-
-          // Cleanup
-          await databaseService.deleteAccountGroup(firstGroup.id);
         }
       ),
       { numRuns: 100 }
@@ -173,15 +153,6 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
 
           // Property: new group should have displayOrder greater than all existing groups of same type
           expect(newGroup.displayOrder).toBeGreaterThan(maxDisplayOrder);
-
-          // Cleanup
-          for (const group of [...existingGroups, newGroup]) {
-            try {
-              await databaseService.deleteAccountGroup(group.id);
-            } catch (e) {
-              // Ignore cleanup errors
-            }
-          }
         }
       ),
       { numRuns: 50 }
@@ -230,9 +201,6 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
           expect(retrievedGroup).not.toBeNull();
           expect(retrievedGroup!.name).toBe(updatedGroup.name);
           expect(retrievedGroup!.id).toBe(createdGroup.id);
-
-          // Cleanup
-          await databaseService.deleteAccountGroup(createdGroup.id);
         }
       ),
       { numRuns: 100 }
@@ -286,10 +254,6 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
 
           // Property: rename to duplicate name should fail
           expect(errorThrown).toBe(true);
-
-          // Cleanup
-          await databaseService.deleteAccountGroup(groupA.id);
-          await databaseService.deleteAccountGroup(groupB.id);
         }
       ),
       { numRuns: 100 }
@@ -395,15 +359,6 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
             const account = await databaseService.getAccount(accountId);
             expect(account!.groupId).toBeNull();
           }
-
-          // Cleanup accounts
-          for (const accountId of accountIds) {
-            try {
-              await databaseService.deleteAccount(accountId);
-            } catch (e) {
-              // Ignore cleanup errors
-            }
-          }
         }
       ),
       { numRuns: 50 }
@@ -473,15 +428,6 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
             const account = await databaseService.getAccount(accountId);
             expect(account).not.toBeNull();
           }
-
-          // Cleanup accounts
-          for (const accountId of accountIds) {
-            try {
-              await databaseService.deleteAccount(accountId);
-            } catch (e) {
-              // Ignore cleanup errors
-            }
-          }
         }
       ),
       { numRuns: 50 }
@@ -535,10 +481,6 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
 
           // Property: adding account to mismatched group should fail
           expect(errorThrown).toBe(true);
-
-          // Cleanup
-          await databaseService.deleteAccount(account.id);
-          await databaseService.deleteAccountGroup(group.id);
         }
       ),
       { numRuns: 100 }
@@ -584,10 +526,6 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
           // Property: account's groupId should equal the group's id
           expect(retrievedAccount).not.toBeNull();
           expect(retrievedAccount!.groupId).toBe(group.id);
-
-          // Cleanup
-          await databaseService.deleteAccount(account.id);
-          await databaseService.deleteAccountGroup(group.id);
         }
       ),
       { numRuns: 100 }
@@ -651,11 +589,6 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
           const groupAWithAccounts = await databaseService.getAccountGroupById(groupA.id);
           const accountInGroupAList = groupAWithAccounts!.accounts.find(a => a.id === account.id);
           expect(accountInGroupAList).toBeUndefined();
-
-          // Cleanup
-          await databaseService.deleteAccount(account.id);
-          await databaseService.deleteAccountGroup(groupA.id);
-          await databaseService.deleteAccountGroup(groupB.id);
         }
       ),
       { numRuns: 100 }
@@ -708,10 +641,6 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
           // Property: account's groupId should be null
           expect(retrievedAccount).not.toBeNull();
           expect(retrievedAccount!.groupId).toBeNull();
-
-          // Cleanup
-          await databaseService.deleteAccount(account.id);
-          await databaseService.deleteAccountGroup(group.id);
         }
       ),
       { numRuns: 100 }
@@ -799,14 +728,6 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
 
           // Property: transaction count should remain the same throughout all operations
           expect(transactionsAfterDeleteGroup.length).toBe(countBefore);
-
-          // Cleanup - archive accounts instead of deleting since they have transactions
-          try {
-            await databaseService.archiveAccount(account1.id);
-            await databaseService.archiveAccount(account2.id);
-          } catch (e) {
-            // Ignore cleanup errors
-          }
         }
       ),
       { numRuns: 50 }
@@ -890,16 +811,6 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
 
           // Property: aggregate balance should equal sum of account balances
           expect(aggregateBalance).toBe(expectedSum);
-
-          // Cleanup
-          for (const accountId of accountIds) {
-            try {
-              await databaseService.archiveAccount(accountId);
-            } catch (e) {
-              // Ignore cleanup errors
-            }
-          }
-          await databaseService.deleteAccountGroup(group.id);
         }
       ),
       { numRuns: 10 } // Reduced runs due to transaction overhead
@@ -1009,16 +920,6 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
           const actualCurrencies = Object.keys(aggregateBalance as Record<string, number>);
           const expectedCurrencies = Object.keys(expectedBalances);
           expect(actualCurrencies.sort()).toEqual(expectedCurrencies.sort());
-
-          // Cleanup
-          for (const accountId of accountIds) {
-            try {
-              await databaseService.archiveAccount(accountId);
-            } catch (e) {
-              // Ignore cleanup errors
-            }
-          }
-          await databaseService.deleteAccountGroup(group.id);
         }
       ),
       { numRuns: 10 } // Reduced runs due to transaction overhead
@@ -1086,18 +987,9 @@ describe.skip('Account Group Database Operations - Property-Based Tests', () => 
             const expectedOrder = shuffledOrdering.find(o => o.id === group.id);
             expect(group.displayOrder).toBe(expectedOrder!.displayOrder);
           }
-
-          // Cleanup
-          for (const group of createdGroups) {
-            try {
-              await databaseService.deleteAccountGroup(group.id);
-            } catch (e) {
-              // Ignore cleanup errors
-            }
-          }
         }
       ),
       { numRuns: 50 }
     );
-  });
+  }, 15000); // Increase timeout to 15 seconds for property-based test with 50 runs
 });

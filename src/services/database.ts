@@ -9,9 +9,45 @@ import {
 // Type for transaction client
 type TransactionClient = Prisma.TransactionClient;
 
+/**
+ * DatabaseService - Singleton service for database operations
+ * 
+ * This service automatically detects the runtime environment and routes database
+ * operations to the appropriate SQLite database file:
+ * 
+ * - Test Environment (VITEST=true or NODE_ENV=test): Uses prisma/test.db
+ * - Development Environment (NODE_ENV=development): Uses prisma/dev.db
+ * - Production/Other: Uses prisma/dev.db
+ * 
+ * Environment Detection:
+ * - Checks VITEST environment variable (set by Vitest test runner)
+ * - Checks NODE_ENV environment variable
+ * - Defaults to development database if environment is ambiguous
+ * 
+ * Database Isolation:
+ * - Test database is automatically reset between test runs
+ * - Development database persists between application restarts
+ * - Both databases use the same schema (defined in prisma/schema.prisma)
+ * 
+ * Logging:
+ * - Test environment: Minimal logging (errors only) unless DB_VERBOSE=true
+ * - Development environment: Verbose logging (queries, info, warnings, errors)
+ * - Set DB_VERBOSE=true to enable verbose logging in tests for debugging
+ * 
+ * Usage:
+ * ```typescript
+ * import { databaseService } from './database';
+ * 
+ * // Get accounts (automatically uses correct database)
+ * const accounts = await databaseService.getAccounts();
+ * ```
+ * 
+ * See README.md for database management commands and troubleshooting.
+ */
 class DatabaseService {
   private static instance: DatabaseService;
   private prisma: PrismaClient;
+  private databasePath: string;
 
   /**
    * Reset all data in the database to the initial state.
@@ -36,9 +72,47 @@ class DatabaseService {
     console.log("[DEV] All data reset to initial state.");
   }
 
+  /**
+   * Private constructor - implements singleton pattern with environment-aware database selection.
+   * 
+   * Environment Detection Logic:
+   * 1. Check if VITEST=true or NODE_ENV=test -> Use test.db
+   * 2. Check if NODE_ENV=development -> Use dev.db
+   * 3. If NODE_ENV is undefined -> Default to dev.db with warning
+   * 4. Otherwise (production) -> Use dev.db
+   * 
+   * The selected database path is logged on initialization for debugging.
+   * 
+   * Prisma Client Configuration:
+   * - datasources.db.url: Set to the environment-specific database path
+   * - log: Minimal (errors only) in tests, verbose in development
+   *   - Override with DB_VERBOSE=true to enable verbose logging in tests
+   */
   private constructor() {
+    // Environment detection logic
+    const isTest = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
     const isDev = process.env.NODE_ENV === "development";
-    const isTest = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+    
+    // Determine database path based on environment
+    if (isTest) {
+      this.databasePath = "file:./test.db";
+      console.log("[DatabaseService] Environment: TEST");
+    } else if (isDev || process.env.NODE_ENV === undefined) {
+      // Default to development database if environment is ambiguous
+      this.databasePath = "file:./dev.db";
+      if (process.env.NODE_ENV === undefined) {
+        console.warn("[DatabaseService] Unable to detect environment, defaulting to development database");
+      } else {
+        console.log("[DatabaseService] Environment: DEVELOPMENT");
+      }
+    } else {
+      // Production or other environments
+      this.databasePath = "file:./dev.db";
+      console.log("[DatabaseService] Environment: PRODUCTION");
+    }
+    
+    // Log selected database path for debugging
+    console.log(`[DatabaseService] Using database: ${this.databasePath}`);
     
     // Only set query engine path if not in test mode and __dirname is available
     if (!isTest && typeof __dirname !== 'undefined') {
@@ -58,13 +132,16 @@ class DatabaseService {
       process.env.PRISMA_QUERY_ENGINE_BINARY = queryEnginePath;
     }
 
+    // Configure Prisma Client with environment-specific datasource URL
+    // Enable verbose logging with DB_VERBOSE=true (useful for debugging tests)
+    const verboseLogging = process.env.DB_VERBOSE === "true";
     this.prisma = new PrismaClient({
       datasources: {
         db: {
-          url: "file:./dev.db",
+          url: this.databasePath,
         },
       },
-      log: ["query", "info", "warn", "error"],
+      log: (isTest && !verboseLogging) ? ["error"] : ["query", "info", "warn", "error"],
     });
 
     // Set connection timeout
