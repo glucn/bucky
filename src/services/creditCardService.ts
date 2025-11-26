@@ -320,8 +320,9 @@ class CreditCardService {
     const currentBalance = await databaseService.getAccountBalance(accountId, prisma);
     
     // For liability accounts, a positive balance means money owed
+    // Negative balance means credit balance (overpayment), which should result in 0% utilization
     // Utilization = amount owed / credit limit
-    const amountOwed = Math.abs(Math.max(0, currentBalance));
+    const amountOwed = Math.max(0, currentBalance);
     const utilization = (amountOwed / properties.creditLimit) * 100;
     
     return Math.round(Math.min(100, utilization) * 100) / 100;

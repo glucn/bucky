@@ -448,6 +448,7 @@ function setupIpcHandlers() {
         try {
           const result = await databaseService.createJournalEntry({
             date: tx.date,
+            postingDate: tx.postingDate,
             amount: Math.abs(amount),
             description: tx.description,
             fromAccountId,

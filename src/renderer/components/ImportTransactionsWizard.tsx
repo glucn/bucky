@@ -13,6 +13,7 @@ interface ImportTransactionsWizardProps {
 
 const systemFields = [
   "date",
+  "postingDate",
   "amount",
   "credit",
   "debit",
@@ -31,7 +32,11 @@ const systemFieldMeta: {
 } = {
   date: {
     label: "Date",
-    help: "The date of the transaction. Format: YYYY-MM-DD or MM/DD/YYYY.",
+    help: "The date of the transaction. Supports: YYYY-MM-DD, YYYYMMDD, MM/DD/YYYY, YYYY/MM/DD.",
+  },
+  postingDate: {
+    label: "Posting Date",
+    help: "The date the transaction was posted to the account (optional). Must be on or after the transaction date. Supports same formats as Date.",
   },
   amount: {
     label: "Amount",
@@ -150,8 +155,8 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
           if (["amount"].includes(field)) return;
           if (fieldMap[field]) {
             mapped[field] = row[fieldMap[field]] || "";
-          } else if (field === "toAccountId") {
-            mapped[field] = ""; // leave blank if not mapped
+          } else if (field === "toAccountId" || field === "postingDate") {
+            mapped[field] = ""; // leave blank if not mapped (optional fields)
           } else {
             mapped[field] = "";
           }
@@ -374,8 +379,8 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
               </div>
             )}
             <div className="flex flex-col gap-4 mb-4">
-              {/* Only show mapping for amount, credit, debit, date, description, toAccountId */}
-              {["date", "amount", "credit", "debit", "description", "toAccountId"].map((field) => (
+              {/* Only show mapping for amount, credit, debit, date, postingDate, description, toAccountId */}
+              {["date", "postingDate", "amount", "credit", "debit", "description", "toAccountId"].map((field) => (
                 <div
                   key={field}
                   className="flex flex-col sm:flex-row sm:items-center gap-2 last:border-b-0 last:pb-0"
@@ -439,8 +444,8 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
               <table className="min-w-full text-xs">
                 <thead>
                   <tr>
-                    {/* Only show preview for date, amount, description, toAccountId */}
-                    {["date", "amount", "description", "toAccountId"].map((field) => (
+                    {/* Only show preview for date, postingDate, amount, description, toAccountId */}
+                    {["date", "postingDate", "amount", "description", "toAccountId"].map((field) => (
                       <th key={field} className="px-2 py-1 border-b">
                         {systemFieldMeta[field]?.label || field}
                       </th>
@@ -462,7 +467,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                     
                     return (
                       <tr key={i}>
-                        {["date", "amount", "description", "toAccountId"].map((field) => (
+                        {["date", "postingDate", "amount", "description", "toAccountId"].map((field) => (
                           <td key={field} className="px-2 py-1 border-b">
                             {field === "amount" && !isNaN(rawAmount)
                               ? formatCurrencyAmount(normalizedAmount, currentAccount?.currency || 'USD')

@@ -5,6 +5,7 @@ import {
   toAccountType,
   AccountSubtype,
 } from "../shared/accountTypes";
+import { parseToStandardDate } from "../shared/dateUtils";
 
 // Type for transaction client
 type TransactionClient = Prisma.TransactionClient;
@@ -817,39 +818,29 @@ class DatabaseService {
     // LOG: Start createJournalEntry
     console.log("[createJournalEntry] called with data:", data);
 
-    // Accept only "YYYY-MM-DD" string for date
-    let dateStr = typeof data.date === "string" ? data.date : "";
-    if (data.date instanceof Date) {
-      // Convert Date object to YYYY-MM-DD
-      dateStr = data.date.toISOString().slice(0, 10);
-    }
-    // Validate date string
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      console.warn("[createJournalEntry] Skipped: Invalid date format, must be YYYY-MM-DD", { data });
+    // Parse date to standard YYYY-MM-DD format
+    const dateStr = parseToStandardDate(data.date);
+    if (!dateStr) {
+      console.warn("[createJournalEntry] Skipped: Invalid date format", { data });
       return { skipped: true, reason: "Invalid date format" };
     }
 
     // Handle postingDate - allow null if not provided
     let postingDateStr: string | null = null;
     if (data.postingDate) {
-      if (typeof data.postingDate === "string") {
-        postingDateStr = data.postingDate.trim() || null; // Treat empty strings as null
-      } else if (data.postingDate instanceof Date) {
-        postingDateStr = data.postingDate.toISOString().slice(0, 10);
-      }
+      postingDateStr = parseToStandardDate(data.postingDate);
       
       // Only validate if we have a valid string
       if (postingDateStr) {
-        // Validate posting date format
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(postingDateStr)) {
-          console.warn("[createJournalEntry] Skipped: Invalid posting date format, must be YYYY-MM-DD", { data });
-          return { skipped: true, reason: "Invalid posting date format" };
-        }
         // Validate that posting date is not before transaction date
         if (postingDateStr < dateStr) {
           console.warn("[createJournalEntry] Skipped: Posting date cannot be before transaction date", { data });
           return { skipped: true, reason: "Posting date cannot be before transaction date" };
         }
+      } else if (data.postingDate) {
+        // postingDate was provided but couldn't be parsed
+        console.warn("[createJournalEntry] Skipped: Invalid posting date format", { data });
+        return { skipped: true, reason: "Invalid posting date format" };
       }
     }
 
@@ -951,9 +942,15 @@ class DatabaseService {
       }
 
       // Use new logic for journal lines
-      // For all transactions, both lines use the same currency (from account's currency)
+      // For all transactions, both lines use the same currency
+      // For transactions involving categories, use the user account's currency (not the category's)
       // Categories will aggregate transactions in multiple currencies
-      const transactionCurrency = fromAccount.currency;
+      
+      // If one account is a category, use the non-category account's currency
+      // Otherwise, use fromAccount's currency (they should match for non-category transactions)
+      const transactionCurrency = isCategoryTransaction
+        ? (fromAccount.type === AccountType.Category ? toAccount.currency : fromAccount.currency)
+        : fromAccount.currency;
       
       const [fromLine, toLine] = DatabaseService.generateJournalLines({
         transactionType: data.transactionType || "transfer",
