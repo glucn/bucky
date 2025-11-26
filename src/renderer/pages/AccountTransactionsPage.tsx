@@ -1025,55 +1025,6 @@ export const AccountTransactionsPage: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div className="flex items-center gap-2">
-                        {/* Reorder buttons - only show on hover and when not the only transaction */}
-                        {!positionInfo?.isOnly && (
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => handleMoveUp(line.entry.id)}
-                              disabled={positionInfo?.isFirst || isReordering}
-                              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                              type="button"
-                              aria-label="Move transaction up"
-                              title="Move up"
-                            >
-                              <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M5 15l7-7 7 7"
-                                />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => handleMoveDown(line.entry.id)}
-                              disabled={positionInfo?.isLast || isReordering}
-                              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                              type="button"
-                              aria-label="Move transaction down"
-                              title="Move down"
-                            >
-                              <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M19 9l-7 7-7-7"
-                                />
-                              </svg>
-                            </button>
-                          </div>
-                        )}
                         <button
                           className="text-primary-600 hover:underline"
                           onClick={() => setEditTransaction(line)}
@@ -1082,6 +1033,52 @@ export const AccountTransactionsPage: React.FC = () => {
                         >
                           Edit
                         </button>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleMoveUp(line.entry.id)}
+                            disabled={positionInfo?.isFirst || positionInfo?.isOnly || isReordering}
+                            className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-0 disabled:cursor-not-allowed"
+                            type="button"
+                            aria-label="Move transaction up"
+                            title="Move up"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M5 15l7-7 7 7"
+                              />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleMoveDown(line.entry.id)}
+                            disabled={positionInfo?.isLast || positionInfo?.isOnly || isReordering}
+                            className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-0 disabled:cursor-not-allowed"
+                            type="button"
+                            aria-label="Move transaction down"
+                            title="Move down"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 9l-7 7-7-7"
+                              />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     </td>
                   </tr>
