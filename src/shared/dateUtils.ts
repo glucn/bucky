@@ -100,3 +100,27 @@ export function isValidStandardDate(dateStr: string): boolean {
   const date = new Date(dateStr + 'T00:00:00');
   return !isNaN(date.getTime());
 }
+
+/**
+ * Format a date string (YYYY-MM-DD) to a localized date string without timezone offset issues
+ * 
+ * @param dateStr - Date string in YYYY-MM-DD format
+ * @param locale - Locale for formatting (default: 'en-US')
+ * @returns Formatted date string
+ */
+export function formatDateString(dateStr: string, locale: string = 'en-US'): string {
+  if (!dateStr) return '';
+  
+  // Parse the date components directly to avoid timezone issues
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return dateStr;
+  
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10) - 1; // Month is 0-indexed
+  const day = parseInt(match[3], 10);
+  
+  // Create date in local timezone
+  const date = new Date(year, month, day);
+  
+  return date.toLocaleDateString(locale);
+}

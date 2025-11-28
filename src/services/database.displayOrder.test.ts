@@ -1,34 +1,26 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { databaseService } from './database';
 import { resetTestDatabase } from './database.test.utils';
-import { PrismaClient } from '@prisma/client';
 
 describe('Transaction displayOrder', () => {
-  let prisma: PrismaClient;
-
   beforeEach(async () => {
     await resetTestDatabase();
-    prisma = new PrismaClient();
   });
 
   it('should set displayOrder to Date.now() for new regular transactions', async () => {
     // Create test accounts
-    const fromAccount = await prisma.account.create({
-      data: {
-        name: 'Test From Account',
-        type: 'user',
-        subtype: 'asset',
-        currency: 'USD',
-      },
+    const fromAccount = await databaseService.createAccount({
+      name: 'Test From Account',
+      type: 'user',
+      subtype: 'asset',
+      currency: 'USD',
     });
 
-    const toAccount = await prisma.account.create({
-      data: {
-        name: 'Test To Account',
-        type: 'user',
-        subtype: 'asset',
-        currency: 'USD',
-      },
+    const toAccount = await databaseService.createAccount({
+      name: 'Test To Account',
+      type: 'user',
+      subtype: 'asset',
+      currency: 'USD',
     });
 
     const beforeCreate = Date.now();
@@ -53,22 +45,18 @@ describe('Transaction displayOrder', () => {
 
   it('should set displayOrder to Date.now() for currency transfer transactions', async () => {
     // Create test accounts with different currencies
-    const fromAccount = await prisma.account.create({
-      data: {
-        name: 'USD Account',
-        type: 'user',
-        subtype: 'asset',
-        currency: 'USD',
-      },
+    const fromAccount = await databaseService.createAccount({
+      name: 'USD Account',
+      type: 'user',
+      subtype: 'asset',
+      currency: 'USD',
     });
 
-    const toAccount = await prisma.account.create({
-      data: {
-        name: 'EUR Account',
-        type: 'user',
-        subtype: 'asset',
-        currency: 'EUR',
-      },
+    const toAccount = await databaseService.createAccount({
+      name: 'EUR Account',
+      type: 'user',
+      subtype: 'asset',
+      currency: 'EUR',
     });
 
     const beforeCreate = Date.now();
@@ -96,13 +84,11 @@ describe('Transaction displayOrder', () => {
 
   it('should set displayOrder for opening balance transactions', async () => {
     // Create test account
-    const account = await prisma.account.create({
-      data: {
-        name: 'Test Account',
-        type: 'user',
-        subtype: 'asset',
-        currency: 'USD',
-      },
+    const account = await databaseService.createAccount({
+      name: 'Test Account',
+      type: 'user',
+      subtype: 'asset',
+      currency: 'USD',
     });
 
     const beforeCreate = Date.now();
@@ -120,16 +106,14 @@ describe('Transaction displayOrder', () => {
 
     const afterCreate = Date.now();
 
-    // Verify the journal entry has displayOrder set
-    const entries = await prisma.journalEntry.findMany({
-      where: {
-        description: 'Opening Balance',
-      },
-    });
+    // Verify the journal entry has displayOrder set by querying the account's journal entries
+    const entries = await databaseService.getJournalEntriesForAccount(account.id);
 
-    expect(entries.length).toBe(1);
-    expect(entries[0].displayOrder).toBeDefined();
-    expect(entries[0].displayOrder).toBeGreaterThanOrEqual(beforeCreate);
-    expect(entries[0].displayOrder).toBeLessThanOrEqual(afterCreate);
+    expect(entries.length).toBeGreaterThan(0);
+    const openingBalanceEntry = entries.find(e => e.entry.description === 'Opening Balance');
+    expect(openingBalanceEntry).toBeDefined();
+    expect(openingBalanceEntry!.entry.displayOrder).toBeDefined();
+    expect(openingBalanceEntry!.entry.displayOrder).toBeGreaterThanOrEqual(beforeCreate);
+    expect(openingBalanceEntry!.entry.displayOrder).toBeLessThanOrEqual(afterCreate);
   });
 });

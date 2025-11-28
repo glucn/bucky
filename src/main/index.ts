@@ -7,6 +7,7 @@ import * as path from "path";
 import * as isDev from "electron-is-dev";
 import { databaseService } from "../services/database";
 import { creditCardService } from "../services/creditCardService";
+import { setupInvestmentIpcHandlers } from "./ipcHandlers.investments";
 
 // Add this at the top of the file for type safety with the injected variable
 // eslint-disable-next-line no-var
@@ -972,6 +973,9 @@ function setupIpcHandlers() {
       }
     }
   );
+
+  // Setup investment IPC handlers
+  setupInvestmentIpcHandlers();
 
   console.log("All IPC handlers registered");
   // DEV ONLY: Reset all data to initial state

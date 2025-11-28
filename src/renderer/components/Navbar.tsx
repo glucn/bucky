@@ -42,6 +42,12 @@ const Navbar: React.FC = () => {
                 Accounts
               </Link>
               <Link
+                to="/investments"
+                className="border-transparent text-gray-500 hover:border-primary-500 hover:text-primary-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+              >
+                Investments
+              </Link>
+              <Link
                 to="/categories"
                 className="border-transparent text-gray-500 hover:border-primary-500 hover:text-primary-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
               >

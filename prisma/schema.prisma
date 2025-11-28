@@ -49,6 +49,7 @@ model Account {
   lines     JournalLine[]
   checkpoints Checkpoint[]
   creditCardProperties CreditCardProperties[]
+  investmentProperties InvestmentProperties?
   group     AccountGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   
   @@index([groupId])
@@ -117,4 +118,48 @@ model CreditCardProperties {
   
   @@index([accountId, effectiveDate])
   @@index([accountId, isActive])
+}
+
+model InvestmentProperties {
+  id              String   @id @default(uuid())
+  accountId       String   @unique
+  
+  // Security identification
+  tickerSymbol    String   // e.g., "AAPL", "VTSAX"
+  securityType    String?  // "stock", "bond", "mutual_fund", "etf", etc.
+  
+  // Quantity tracking (shares/units)
+  quantity        Float    @default(0) // Current number of shares owned
+  
+  // Cost basis method
+  costBasisMethod String   @default("FIFO") // "FIFO" or "AVERAGE_COST"
+  
+  // Lot tracking for FIFO (stored as JSON)
+  lots            String?  // JSON array of {date, quantity, pricePerShare, amount}
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([tickerSymbol])
+}
+
+model SecurityPriceHistory {
+  id           String   @id @default(uuid())
+  
+  // Security identification
+  tickerSymbol String   // e.g., "AAPL", "VTSAX"
+  
+  // Price data
+  date         String   // Date of this price (YYYY-MM-DD)
+  price        Float    // Market price per share on this date
+  
+  // Source tracking
+  source       String?  // "manual", "import", "api", etc.
+  
+  createdAt    DateTime @default(now())
+  
+  @@unique([tickerSymbol, date])
+  @@index([tickerSymbol, date])
 }

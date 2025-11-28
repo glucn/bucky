@@ -51,6 +51,14 @@ class DatabaseService {
   private databasePath: string;
 
   /**
+   * Get the Prisma client instance for direct database access.
+   * Use with caution - prefer using the service methods when possible.
+   */
+  public get prismaClient(): PrismaClient {
+    return this.prisma;
+  }
+
+  /**
    * Reset all data in the database to the initial state.
    * Deletes all accounts, journal entries, journal lines, and checkpoints,
    * then re-creates the default accounts.
@@ -65,8 +73,16 @@ class DatabaseService {
       await tx.journalEntry.deleteMany({});
       // Delete all checkpoints
       await tx.checkpoint.deleteMany({});
+      // Delete all investment properties (must be before accounts due to foreign key)
+      await tx.investmentProperties.deleteMany({});
+      // Delete all credit card properties (must be before accounts due to foreign key)
+      await tx.creditCardProperties.deleteMany({});
+      // Delete all security price history
+      await tx.securityPriceHistory.deleteMany({});
       // Delete all accounts
       await tx.account.deleteMany({});
+      // Delete all account groups
+      await tx.accountGroup.deleteMany({});
       // Re-create default accounts
       await this.ensureDefaultAccounts(tx);
     });
@@ -1595,6 +1611,21 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
         currency: "USD",
         groupId: groupMap["[Income] Other Income"],
       },
+      // Investment Income Categories
+      {
+        name: "Dividend Income",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+        groupId: groupMap["[Income] Passive Income"],
+      },
+      {
+        name: "Realized Gains/Losses",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Asset,
+        currency: "USD",
+        groupId: groupMap["[Income] Passive Income"],
+      },
       // Category accounts - Expenses (Essentials)
       {
         name: "Groceries",
@@ -1692,6 +1723,13 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       // Category accounts - Expenses (Financial & Business)
       {
         name: "Insurance",
+        type: AccountType.Category,
+        subtype: AccountSubtype.Liability,
+        currency: "USD",
+        groupId: groupMap["[Expense] Financial & Business"],
+      },
+      {
+        name: "Investment Expenses",
         type: AccountType.Category,
         subtype: AccountSubtype.Liability,
         currency: "USD",

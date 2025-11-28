@@ -6,6 +6,10 @@ import { AccountTransactionsPage } from "./pages/AccountTransactionsPage";
 import { OpeningBalances } from "./pages/OpeningBalances";
 import { Checkpoints } from "./pages/Checkpoints";
 import { Categories } from "./pages/Categories";
+import { InvestmentPortfolios } from "./pages/InvestmentPortfolios";
+import { PortfolioDetailsPage } from "./pages/PortfolioDetailsPage";
+import { PositionDetailsPage } from "./pages/PositionDetailsPage";
+import { PerformanceReportsPage } from "./pages/PerformanceReportsPage";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 
@@ -25,6 +29,10 @@ const App: React.FC = () => {
               <Route path="/categories" element={<Categories />} />
               <Route path="/opening-balances" element={<OpeningBalances />} />
               <Route path="/checkpoints" element={<Checkpoints />} />
+              <Route path="/investments" element={<InvestmentPortfolios />} />
+              <Route path="/investments/:portfolioId" element={<PortfolioDetailsPage />} />
+              <Route path="/investments/:portfolioId/position/:tickerSymbol" element={<PositionDetailsPage />} />
+              <Route path="/investments/:portfolioId/reports" element={<PerformanceReportsPage />} />
             </Routes>
           </main>
         </div>
