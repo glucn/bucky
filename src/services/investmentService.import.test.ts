@@ -5,7 +5,7 @@ import { resetTestDatabase } from './database.test.utils';
 
 describe('Investment Transaction Import', () => {
   let portfolioId: string;
-  let tradingCashId: string;
+  let tradeCashId: string;
 
   beforeEach(async () => {
     await resetTestDatabase();
@@ -13,7 +13,7 @@ describe('Investment Transaction Import', () => {
     // Create a test portfolio
     const portfolio = await investmentService.createInvestmentPortfolio('Test Portfolio', 'USD');
     portfolioId = portfolio.group.id;
-    tradingCashId = portfolio.tradingCashAccount.id;
+    tradeCashId = portfolio.tradeCashAccount.id;
 
     // Add some cash to the portfolio
     const accounts = await databaseService.getAccounts();
@@ -212,7 +212,7 @@ invalid-date,buy,AAPL,1500.00`;
       expect(result.errors).toHaveLength(0);
 
       // Verify cash balance increased
-      const cashBalance = await databaseService.getAccountBalance(tradingCashId);
+      const cashBalance = await databaseService.getAccountBalance(tradeCashId);
       expect(cashBalance).toBeGreaterThan(10000);
     });
 
@@ -256,7 +256,7 @@ invalid-date,buy,AAPL,1500.00`;
       expect(result.errors).toHaveLength(0);
 
       // Verify cash balance decreased
-      const cashBalance = await databaseService.getAccountBalance(tradingCashId);
+      const cashBalance = await databaseService.getAccountBalance(tradeCashId);
       expect(cashBalance).toBeLessThan(10000);
     });
 

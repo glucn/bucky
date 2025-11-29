@@ -10,13 +10,13 @@ describe("InvestmentService - Stock Splits, Fees, and Interest", () => {
 
   describe("recordStockSplit", () => {
     it("should record a stock split and update quantity", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -79,13 +79,13 @@ describe("InvestmentService - Stock Splits, Fees, and Interest", () => {
 
   describe("recordFee", () => {
     it("should record an investment fee", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -113,7 +113,7 @@ describe("InvestmentService - Stock Splits, Fees, and Interest", () => {
       expect(expenseLine.amount).toBe(25);
 
       // Verify trade cash was credited
-      const cashLine = journalEntry.lines.find((l: any) => l.accountId === tradingCashAccount.id);
+      const cashLine = journalEntry.lines.find((l: any) => l.accountId === tradeCashAccount.id);
       expect(cashLine).toBeDefined();
       expect(cashLine.amount).toBe(-25);
     });
@@ -137,7 +137,7 @@ describe("InvestmentService - Stock Splits, Fees, and Interest", () => {
 
   describe("recordInterest", () => {
     it("should record interest income", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Record interest
       const journalEntry = await investmentService.recordInterest(
@@ -154,7 +154,7 @@ describe("InvestmentService - Stock Splits, Fees, and Interest", () => {
       expect(journalEntry.lines).toHaveLength(2);
 
       // Verify trade cash was debited
-      const cashLine = journalEntry.lines.find((l: any) => l.accountId === tradingCashAccount.id);
+      const cashLine = journalEntry.lines.find((l: any) => l.accountId === tradeCashAccount.id);
       expect(cashLine).toBeDefined();
       expect(cashLine.amount).toBe(15.50);
 

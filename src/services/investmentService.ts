@@ -21,7 +21,7 @@ export enum InvestmentTransactionType {
  * 
  * This service provides functionality for:
  * - Creating and managing investment portfolios (AccountGroups)
- * - Managing security accounts and trade case accounts
+ * - Managing security accounts and trade cash accounts
  * - Recording investment transactions (buy, sell, dividends, etc.)
  * - Tracking cost basis and calculating gains/losses
  * - Managing price history for securities
@@ -40,11 +40,11 @@ class InvestmentService {
 
   /**
    * Create a new investment portfolio.
-   * Creates an AccountGroup with accountType "user" and a trade case Account linked to it.
+   * Creates an AccountGroup with accountType "user" and a trade cash Account linked to it.
    * 
    * @param name - Name of the portfolio (e.g., "Fidelity 401(k)", "Vanguard Brokerage")
-   * @param currency - Currency for the trade case account (default: "USD")
-   * @returns Object containing the created group and trade case account
+   * @param currency - Currency for the trade cash account (default: "USD")
+   * @returns Object containing the created group and trade cash account
    * 
    * Requirements: 1.1, 1.2, 1.3
    */
@@ -53,7 +53,7 @@ class InvestmentService {
     currency: string = "USD"
   ): Promise<{
     group: any;
-    tradingCashAccount: any;
+    tradeCashAccount: any;
   }> {
     // Create the AccountGroup with accountType "user"
     const group = await databaseService.createAccountGroup({
@@ -61,20 +61,20 @@ class InvestmentService {
       accountType: AccountType.User,
     });
 
-    // Create the trade case Account linked to the group
-    const tradingCashAccount = await databaseService.createAccount({
-      name: `trade case - ${name}`,
+    // Create the trade cash Account linked to the group
+    const tradeCashAccount = await databaseService.createAccount({
+      name: `Trade Cash - ${name}`,
       type: AccountType.User,
       subtype: AccountSubtype.Asset,
       currency,
     });
 
-    // Link the trade case account to the group
-    await databaseService.addAccountToGroup(tradingCashAccount.id, group.id);
+    // Link the trade cash account to the group
+    await databaseService.addAccountToGroup(tradeCashAccount.id, group.id);
 
     return {
       group,
-      tradingCashAccount,
+      tradeCashAccount,
     };
   }
 
@@ -82,7 +82,7 @@ class InvestmentService {
    * Get all investment portfolios.
    * Returns all AccountGroups with accountType "user" that contain investment-related accounts.
    * An account group is considered an investment portfolio if it contains:
-   * - A trade case account (name contains "trade case"), OR
+   * - A trade cash account (name contains "Trade Cash"), OR
    * - Any security accounts (accounts with InvestmentProperties)
    * 
    * This filters out regular banking account groups that don't have investment accounts.
@@ -103,8 +103,8 @@ class InvestmentService {
       let hasInvestmentAccounts = false;
 
       for (const account of group.accounts) {
-        // Check if it's a trade case account
-        if (account.name.includes("trade case")) {
+        // Check if it's a trade cash account
+        if (account.name.includes("Trade Cash")) {
           hasInvestmentAccounts = true;
           break;
         }
@@ -130,15 +130,15 @@ class InvestmentService {
   }
 
   /**
-   * Get all accounts in a portfolio, separated into trade case and security accounts.
+   * Get all accounts in a portfolio, separated into trade cash and security accounts.
    * 
    * @param portfolioId - ID of the portfolio AccountGroup
-   * @returns Object containing trade case account and array of security accounts with investment properties
+   * @returns Object containing trade cash account and array of security accounts with investment properties
    * 
    * Requirements: 1.4, 1.5
    */
   public async getPortfolioAccounts(portfolioId: string): Promise<{
-    tradingCash: any | null;
+    tradeCash: any | null;
     securities: any[];
   }> {
     // Get the portfolio group with its accounts
@@ -148,8 +148,8 @@ class InvestmentService {
       throw new Error("Portfolio not found");
     }
 
-    // Separate trade case from security accounts
-    let tradingCash: any | null = null;
+    // Separate trade cash from security accounts
+    let tradeCash: any | null = null;
     const securities: any[] = [];
 
     for (const account of portfolio.accounts) {
@@ -162,14 +162,14 @@ class InvestmentService {
       if (accountWithProps?.investmentProperties) {
         // This is a security account
         securities.push(accountWithProps);
-      } else if (account.name.includes("trade case")) {
-        // This is the trade case account
-        tradingCash = account;
+      } else if (account.name.includes("Trade Cash")) {
+        // This is the trade cash account
+        tradeCash = account;
       }
     }
 
     return {
-      tradingCash,
+      tradeCash,
       securities,
     };
   }
@@ -277,7 +277,7 @@ class InvestmentService {
   /**
    * Record a buy transaction for a security.
    * Creates or gets the security account, creates a journal entry debiting the Security Account
-   * and crediting the trade case Account, and updates the investment properties.
+   * and crediting the Trade Cash Account, and updates the investment properties.
    * 
    * @param params - Buy transaction parameters
    * @returns The created journal entry
@@ -318,10 +318,10 @@ class InvestmentService {
     const totalCost = params.quantity * params.pricePerShare + fee;
     const roundedTotalCost = Math.round(totalCost * 100) / 100;
 
-    // Get the portfolio to find the trade case account
+    // Get the portfolio to find the trade cash account
     const portfolioAccounts = await this.getPortfolioAccounts(params.portfolioId);
-    if (!portfolioAccounts.tradingCash) {
-      throw new Error("trade case account not found in portfolio");
+    if (!portfolioAccounts.tradeCash) {
+      throw new Error("Trade Cash account not found in portfolio");
     }
 
     // Create or get security account (Requirements 2.3)
@@ -358,23 +358,23 @@ class InvestmentService {
       description: description,
     });
 
-    // Line 2: Credit trade case Account for purchase amount (without fees)
+    // Line 2: Credit Trade Cash Account for purchase amount (without fees)
     const purchaseAmount = params.quantity * params.pricePerShare;
     const roundedPurchaseAmount = Math.round(purchaseAmount * 100) / 100;
     journalLines.push({
-      accountId: portfolioAccounts.tradingCash.id,
+      accountId: portfolioAccounts.tradeCash.id,
       amount: -roundedPurchaseAmount, // Negative for credit (asset decrease)
-      currency: portfolioAccounts.tradingCash.currency,
+      currency: portfolioAccounts.tradeCash.currency,
       description: description,
     });
 
-    // Line 3: If fees exist, credit trade case Account for fee amount
+    // Line 3: If fees exist, credit Trade Cash Account for fee amount
     if (fee > 0 && investmentExpenseAccount) {
       const roundedFee = Math.round(fee * 100) / 100;
       journalLines.push({
-        accountId: portfolioAccounts.tradingCash.id,
+        accountId: portfolioAccounts.tradeCash.id,
         amount: -roundedFee, // Negative for credit (asset decrease)
-        currency: portfolioAccounts.tradingCash.currency,
+        currency: portfolioAccounts.tradeCash.currency,
         description: `Fee for ${description}`,
       });
       
@@ -382,7 +382,7 @@ class InvestmentService {
       journalLines.push({
         accountId: investmentExpenseAccount.id,
         amount: roundedFee, // Positive for debit (expense increase)
-        currency: portfolioAccounts.tradingCash.currency,
+        currency: portfolioAccounts.tradeCash.currency,
         description: `Fee for ${description}`,
       });
     }
@@ -568,10 +568,10 @@ class InvestmentService {
     const saleProceeds = params.quantity * params.pricePerShare - fee;
     const roundedSaleProceeds = Math.round(saleProceeds * 100) / 100;
 
-    // Get the portfolio to find the trade case account
+    // Get the portfolio to find the trade cash account
     const portfolioAccounts = await this.getPortfolioAccounts(params.portfolioId);
-    if (!portfolioAccounts.tradingCash) {
-      throw new Error("trade case account not found in portfolio");
+    if (!portfolioAccounts.tradeCash) {
+      throw new Error("Trade Cash account not found in portfolio");
     }
 
     // Get the security account
@@ -624,11 +624,11 @@ class InvestmentService {
       description: description,
     });
 
-    // Line 2: Debit trade case Account for sale proceeds (asset increase)
+    // Line 2: Debit Trade Cash Account for sale proceeds (asset increase)
     journalLines.push({
-      accountId: portfolioAccounts.tradingCash.id,
+      accountId: portfolioAccounts.tradeCash.id,
       amount: roundedSaleProceeds, // Positive for debit
-      currency: portfolioAccounts.tradingCash.currency,
+      currency: portfolioAccounts.tradeCash.currency,
       description: description,
     });
 
@@ -637,12 +637,12 @@ class InvestmentService {
       journalLines.push({
         accountId: realizedGainLossAccount.id,
         amount: -roundedGainLoss, // Negative if gain (credit), positive if loss (debit)
-        currency: portfolioAccounts.tradingCash.currency,
+        currency: portfolioAccounts.tradeCash.currency,
         description: `${roundedGainLoss >= 0 ? 'Gain' : 'Loss'} on ${description}`,
       });
     }
 
-    // Line 4: If fees exist, debit Investment Expense Category and credit trade case
+    // Line 4: If fees exist, debit Investment Expense Category and credit Trade Cash
     if (fee > 0 && investmentExpenseAccount) {
       const roundedFee = Math.round(fee * 100) / 100;
       
@@ -650,15 +650,15 @@ class InvestmentService {
       journalLines.push({
         accountId: investmentExpenseAccount.id,
         amount: roundedFee, // Positive for debit (expense increase)
-        currency: portfolioAccounts.tradingCash.currency,
+        currency: portfolioAccounts.tradeCash.currency,
         description: `Fee for ${description}`,
       });
       
-      // Credit trade case Account for fee
+      // Credit Trade Cash Account for fee
       journalLines.push({
-        accountId: portfolioAccounts.tradingCash.id,
+        accountId: portfolioAccounts.tradeCash.id,
         amount: -roundedFee, // Negative for credit (asset decrease)
-        currency: portfolioAccounts.tradingCash.currency,
+        currency: portfolioAccounts.tradeCash.currency,
         description: `Fee for ${description}`,
       });
     }
@@ -730,7 +730,7 @@ class InvestmentService {
 
   /**
    * Record a cash dividend payment.
-   * Creates a journal entry debiting trade case and crediting either Dividend Income Category
+   * Creates a journal entry debiting Trade Cash and crediting either Dividend Income Category
    * (if categorized as income) or Security Account (if categorized as return of capital).
    * 
    * @param params - Dividend parameters
@@ -762,10 +762,10 @@ class InvestmentService {
 
     const roundedAmount = Math.round(params.amount * 100) / 100;
 
-    // Get the portfolio to find the trade case account
+    // Get the portfolio to find the trade cash account
     const portfolioAccounts = await this.getPortfolioAccounts(params.portfolioId);
-    if (!portfolioAccounts.tradingCash) {
-      throw new Error("trade case account not found in portfolio");
+    if (!portfolioAccounts.tradeCash) {
+      throw new Error("Trade Cash account not found in portfolio");
     }
 
     // Prepare journal lines based on categorization (Requirements 4.2, 4.3, 4.4)
@@ -774,17 +774,17 @@ class InvestmentService {
 
     if (params.isReturnOfCapital) {
       description = params.description || `Dividend from ${params.tickerSymbol} (Return of Capital)`;
-      // Return of capital: debit trade case, credit Security Account (Requirements 4.4)
+      // Return of capital: debit Trade Cash, credit Security Account (Requirements 4.4)
       const securityAccount = await this.getSecurityAccount(params.portfolioId, params.tickerSymbol);
       if (!securityAccount) {
         throw new Error(`Security account for ${params.tickerSymbol} not found in portfolio`);
       }
 
-      // Line 1: Debit trade case Account (asset increase)
+      // Line 1: Debit trade cash Account (asset increase)
       journalLines.push({
-        accountId: portfolioAccounts.tradingCash.id,
+        accountId: portfolioAccounts.tradeCash.id,
         amount: roundedAmount, // Positive for debit
-        currency: portfolioAccounts.tradingCash.currency,
+        currency: portfolioAccounts.tradeCash.currency,
         description: description,
       });
 
@@ -796,7 +796,7 @@ class InvestmentService {
         description: description,
       });
     } else {
-      // Investment income: debit trade case, credit Dividend Income Category (Requirements 4.3)
+      // Investment income: debit Trade Cash, credit Dividend Income Category (Requirements 4.3)
       const dividendIncomeAccount = await databaseService.prismaClient.account.findFirst({
         where: { name: "Dividend Income", type: AccountType.Category },
       });
@@ -804,20 +804,20 @@ class InvestmentService {
         throw new Error("Dividend Income category account not found");
       }
 
-      // Line 1: Debit trade case Account (asset increase)
+      // Line 1: Debit Trade Cash Account (asset increase)
       journalLines.push({
-        accountId: portfolioAccounts.tradingCash.id,
+        accountId: portfolioAccounts.tradeCash.id,
         amount: roundedAmount, // Positive for debit
-        currency: portfolioAccounts.tradingCash.currency,
+        currency: portfolioAccounts.tradeCash.currency,
         description: description,
       });
 
       // Line 2: Credit Dividend Income Category
-      // Use the trade case account's currency for the transaction
+      // Use the trade cash account's currency for the transaction
       journalLines.push({
         accountId: dividendIncomeAccount.id,
         amount: -roundedAmount, // Negative for credit
-        currency: portfolioAccounts.tradingCash.currency,
+        currency: portfolioAccounts.tradeCash.currency,
         description: description,
       });
     }
@@ -880,10 +880,10 @@ class InvestmentService {
     const roundedShares = Math.round(sharesPurchased * 1000000) / 1000000; // Round to 6 decimal places
     const roundedAmount = Math.round(params.dividendAmount * 100) / 100;
 
-    // Get the portfolio to find the trade case account
+    // Get the portfolio to find the trade cash account
     const portfolioAccounts = await this.getPortfolioAccounts(params.portfolioId);
-    if (!portfolioAccounts.tradingCash) {
-      throw new Error("trade case account not found in portfolio");
+    if (!portfolioAccounts.tradeCash) {
+      throw new Error("Trade cash account not found in portfolio");
     }
 
     // Get or create security account
@@ -917,15 +917,15 @@ class InvestmentService {
           lines: {
             create: [
               {
-                accountId: portfolioAccounts.tradingCash.id,
+                accountId: portfolioAccounts.tradeCash.id,
                 amount: roundedAmount, // Debit cash
-                currency: portfolioAccounts.tradingCash.currency,
+                currency: portfolioAccounts.tradeCash.currency,
                 description: `${description} - Income`,
               },
               {
                 accountId: dividendIncomeAccount.id,
                 amount: -roundedAmount, // Credit income
-                currency: portfolioAccounts.tradingCash.currency,
+                currency: portfolioAccounts.tradeCash.currency,
                 description: `${description} - Income`,
               },
             ],
@@ -943,9 +943,9 @@ class InvestmentService {
           description: `${description} - Purchase`,
         },
         {
-          accountId: portfolioAccounts.tradingCash.id,
+          accountId: portfolioAccounts.tradeCash.id,
           amount: -roundedAmount, // Credit cash
-          currency: portfolioAccounts.tradingCash.currency,
+          currency: portfolioAccounts.tradeCash.currency,
           description: `${description} - Purchase`,
         },
       ];
@@ -1080,7 +1080,7 @@ class InvestmentService {
 
   /**
    * Deposit cash into an investment portfolio.
-   * Creates a journal entry debiting the trade case Account and crediting the source account.
+   * Creates a journal entry debiting the Trade Cash Account and crediting the source account.
    * Uses existing transfer transaction functionality.
    * 
    * @param portfolioId - ID of the portfolio AccountGroup
@@ -1113,10 +1113,10 @@ class InvestmentService {
       throw new Error("Transaction date is required");
     }
 
-    // Get the portfolio to find the trade case account
+    // Get the portfolio to find the trade cash account
     const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
-    if (!portfolioAccounts.tradingCash) {
-      throw new Error("trade case account not found in portfolio");
+    if (!portfolioAccounts.tradeCash) {
+      throw new Error("Trade cash account not found in portfolio");
     }
 
     // Validate that the source account exists
@@ -1128,14 +1128,14 @@ class InvestmentService {
     }
 
     // Create journal entry using existing transfer functionality (Requirements 7.5)
-    // Debit trade case Account (asset increase), Credit source account (asset decrease)
+    // Debit Trade Cash Account (asset increase), Credit source account (asset decrease)
     const desc = description || `Cash deposit to investment portfolio`;
     
     const result = await databaseService.createJournalEntry({
       date: date,
       description: desc,
       fromAccountId: fromAccountId,
-      toAccountId: portfolioAccounts.tradingCash.id,
+      toAccountId: portfolioAccounts.tradeCash.id,
       amount: amount,
       transactionType: "transfer",
     });
@@ -1158,8 +1158,8 @@ class InvestmentService {
 
   /**
    * Withdraw cash from an investment portfolio.
-   * Creates a journal entry crediting the trade case Account and debiting the destination account.
-   * Validates sufficient trade case balance before proceeding.
+   * Creates a journal entry crediting the Trade Cash Account and debiting the destination account.
+   * Validates sufficient Trade Cash balance before proceeding.
    * Uses existing transfer transaction functionality.
    * 
    * @param portfolioId - ID of the portfolio AccountGroup
@@ -1192,10 +1192,10 @@ class InvestmentService {
       throw new Error("Transaction date is required");
     }
 
-    // Get the portfolio to find the trade case account
+    // Get the portfolio to find the trade cash account
     const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
-    if (!portfolioAccounts.tradingCash) {
-      throw new Error("trade case account not found in portfolio");
+    if (!portfolioAccounts.tradeCash) {
+      throw new Error("Trade cash account not found in portfolio");
     }
 
     // Validate that the destination account exists
@@ -1206,24 +1206,24 @@ class InvestmentService {
       throw new Error("Destination account not found");
     }
 
-    // Validate sufficient trade case balance (Requirements 7.4)
-    const tradingCashBalance = await databaseService.getAccountBalance(
-      portfolioAccounts.tradingCash.id
+    // Validate sufficient Trade Cash balance (Requirements 7.4)
+    const tradeCashBalance = await databaseService.getAccountBalance(
+      portfolioAccounts.tradeCash.id
     );
-    if (tradingCashBalance < amount) {
+    if (tradeCashBalance < amount) {
       throw new Error(
-        `Insufficient trade case balance: trying to withdraw ${amount} but only ${tradingCashBalance} available`
+        `Insufficient trade cash balance: trying to withdraw ${amount} but only ${tradeCashBalance} available`
       );
     }
 
     // Create journal entry using existing transfer functionality (Requirements 7.5)
-    // Credit trade case Account (asset decrease), Debit destination account (asset increase)
+    // Credit Trade Cash Account (asset decrease), Debit destination account (asset increase)
     const desc = description || `Cash withdrawal from investment portfolio`;
     
     const result = await databaseService.createJournalEntry({
       date: date,
       description: desc,
-      fromAccountId: portfolioAccounts.tradingCash.id,
+      fromAccountId: portfolioAccounts.tradeCash.id,
       toAccountId: toAccountId,
       amount: amount,
       transactionType: "transfer",
@@ -1347,7 +1347,7 @@ class InvestmentService {
 
   /**
    * Record an investment fee.
-   * Creates a journal entry debiting the Investment Expense Category and crediting the trade case Account.
+   * Creates a journal entry debiting the Investment Expense Category and crediting the Trade Cash Account.
    * Stores fee description in journal entry metadata.
    * 
    * @param portfolioId - ID of the portfolio AccountGroup
@@ -1380,10 +1380,10 @@ class InvestmentService {
 
     const roundedAmount = Math.round(amount * 100) / 100;
 
-    // Get the portfolio to find the trade case account
+    // Get the portfolio to find the trade cash account
     const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
-    if (!portfolioAccounts.tradingCash) {
-      throw new Error("trade case account not found in portfolio");
+    if (!portfolioAccounts.tradeCash) {
+      throw new Error("Trade cash account not found in portfolio");
     }
 
     // Get the Investment Expense Category account (Requirements 11.2)
@@ -1394,18 +1394,18 @@ class InvestmentService {
       throw new Error("Investment Expenses category account not found");
     }
 
-    // Create journal entry debiting Investment Expense Category, crediting trade case Account (Requirements 11.2)
+    // Create journal entry debiting Investment Expense Category, crediting Trade Cash Account (Requirements 11.2)
     const journalLines = [
       {
         accountId: investmentExpenseAccount.id,
         amount: roundedAmount, // Positive for debit (expense increase)
-        currency: portfolioAccounts.tradingCash.currency,
+        currency: portfolioAccounts.tradeCash.currency,
         description: description,
       },
       {
-        accountId: portfolioAccounts.tradingCash.id,
+        accountId: portfolioAccounts.tradeCash.id,
         amount: -roundedAmount, // Negative for credit (asset decrease)
-        currency: portfolioAccounts.tradingCash.currency,
+        currency: portfolioAccounts.tradeCash.currency,
         description: description,
       },
     ];
@@ -1429,7 +1429,7 @@ class InvestmentService {
 
   /**
    * Record interest income.
-   * Creates a journal entry debiting the trade case Account and crediting the Interest Income Category.
+   * Creates a journal entry debiting the Trade Cash Account and crediting the Interest Income Category.
    * Stores optional ticker symbol in description.
    * 
    * @param portfolioId - ID of the portfolio AccountGroup
@@ -1459,10 +1459,10 @@ class InvestmentService {
 
     const roundedAmount = Math.round(amount * 100) / 100;
 
-    // Get the portfolio to find the trade case account
+    // Get the portfolio to find the trade cash account
     const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
-    if (!portfolioAccounts.tradingCash) {
-      throw new Error("trade case account not found in portfolio");
+    if (!portfolioAccounts.tradeCash) {
+      throw new Error("Trade cash account not found in portfolio");
     }
 
     // Get the Interest Income Category account (Requirements 14.2)
@@ -1473,20 +1473,20 @@ class InvestmentService {
       throw new Error("Interest Income category account not found");
     }
 
-    // Create journal entry debiting trade case Account, crediting Interest Income Category (Requirements 14.2)
+    // Create journal entry debiting Trade Cash Account, crediting Interest Income Category (Requirements 14.2)
     const desc = description || "Interest income";
     
     const journalLines = [
       {
-        accountId: portfolioAccounts.tradingCash.id,
+        accountId: portfolioAccounts.tradeCash.id,
         amount: roundedAmount, // Positive for debit (asset increase)
-        currency: portfolioAccounts.tradingCash.currency,
+        currency: portfolioAccounts.tradeCash.currency,
         description: desc,
       },
       {
         accountId: interestIncomeAccount.id,
         amount: -roundedAmount, // Negative for credit (income increase)
-        currency: portfolioAccounts.tradingCash.currency,
+        currency: portfolioAccounts.tradeCash.currency,
         description: desc,
       },
     ];
@@ -1868,12 +1868,12 @@ class InvestmentService {
     totalUnrealizedGainPercent: number;
     cashBalance: number;
   }> {
-    // Get trade case Account balance
+    // Get trade cash Account balance
     const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
     
     let cashBalance = 0;
-    if (portfolioAccounts.tradingCash) {
-      cashBalance = await databaseService.getAccountBalance(portfolioAccounts.tradingCash.id);
+    if (portfolioAccounts.tradeCash) {
+      cashBalance = await databaseService.getAccountBalance(portfolioAccounts.tradeCash.id);
     }
 
     // Get all Security Account balances (cost basis) and position market values
@@ -1996,7 +1996,7 @@ class InvestmentService {
     if (portfolioId) {
       const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
       const portfolioAccountIds = new Set([
-        portfolioAccounts.tradingCash?.id,
+        portfolioAccounts.tradeCash?.id,
         ...portfolioAccounts.securities.map(s => s.id),
       ].filter(Boolean));
 
@@ -2089,7 +2089,7 @@ class InvestmentService {
     if (portfolioId) {
       const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
       const portfolioAccountIds = new Set([
-        portfolioAccounts.tradingCash?.id,
+        portfolioAccounts.tradeCash?.id,
         ...portfolioAccounts.securities.map(s => s.id),
       ].filter(Boolean));
 
@@ -2174,7 +2174,7 @@ class InvestmentService {
     // Get portfolio accounts to filter
     const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
     const portfolioAccountIds = new Set([
-      portfolioAccounts.tradingCash?.id,
+      portfolioAccounts.tradeCash?.id,
       ...portfolioAccounts.securities.map(s => s.id),
     ].filter(Boolean));
 
@@ -2206,15 +2206,15 @@ class InvestmentService {
       // Find the security account line to get cost basis
       const securityLine = entry.lines.find(l => 
         l.accountId !== realizedGainLossAccount.id &&
-        l.accountId !== portfolioAccounts.tradingCash?.id &&
+        l.accountId !== portfolioAccounts.tradeCash?.id &&
         l.amount < 0 // Credit to security account
       );
 
       const costBasis = securityLine ? -securityLine.amount : 0;
 
-      // Find the trade case line to get sale proceeds
+      // Find the trade cash line to get sale proceeds
       const cashLine = entry.lines.find(l => 
-        l.accountId === portfolioAccounts.tradingCash?.id &&
+        l.accountId === portfolioAccounts.tradeCash?.id &&
         l.amount > 0 // Debit to cash
       );
 
@@ -2295,10 +2295,10 @@ class InvestmentService {
 
     // Calculate deposits (cash deposits to portfolio)
     const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
-    const tradingCashId = portfolioAccounts.tradingCash?.id;
+    const tradeCashId = portfolioAccounts.tradeCash?.id;
 
     let deposits = 0;
-    if (tradingCashId) {
+    if (tradeCashId) {
       const depositEntries = await databaseService.prismaClient.journalEntry.findMany({
         where: {
           date: {
@@ -2308,7 +2308,7 @@ class InvestmentService {
           type: InvestmentTransactionType.CASH_DEPOSIT,
           lines: {
             some: {
-              accountId: tradingCashId,
+              accountId: tradeCashId,
             },
           },
         },
@@ -2318,7 +2318,7 @@ class InvestmentService {
       });
 
       for (const entry of depositEntries) {
-        const cashLine = entry.lines.find(l => l.accountId === tradingCashId && l.amount > 0);
+        const cashLine = entry.lines.find(l => l.accountId === tradeCashId && l.amount > 0);
         if (cashLine) {
           deposits += cashLine.amount;
         }
@@ -2327,7 +2327,7 @@ class InvestmentService {
 
     // Calculate withdrawals (cash withdrawals from portfolio)
     let withdrawals = 0;
-    if (tradingCashId) {
+    if (tradeCashId) {
       const withdrawalEntries = await databaseService.prismaClient.journalEntry.findMany({
         where: {
           date: {
@@ -2337,7 +2337,7 @@ class InvestmentService {
           type: InvestmentTransactionType.CASH_WITHDRAWAL,
           lines: {
             some: {
-              accountId: tradingCashId,
+              accountId: tradeCashId,
             },
           },
         },
@@ -2347,7 +2347,7 @@ class InvestmentService {
       });
 
       for (const entry of withdrawalEntries) {
-        const cashLine = entry.lines.find(l => l.accountId === tradingCashId && l.amount < 0);
+        const cashLine = entry.lines.find(l => l.accountId === tradeCashId && l.amount < 0);
         if (cashLine) {
           withdrawals += -cashLine.amount;
         }
@@ -2396,7 +2396,7 @@ class InvestmentService {
 
       // Filter by portfolio
       const portfolioAccountIds = new Set([
-        tradingCashId,
+        tradeCashId,
         ...portfolioAccounts.securities.map(s => s.id),
       ].filter(Boolean));
 
@@ -2704,7 +2704,7 @@ class InvestmentService {
     // Get existing transactions for duplicate detection (Requirements 12.4)
     const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
     const accountIds = [
-      portfolioAccounts.tradingCash?.id,
+      portfolioAccounts.tradeCash?.id,
       ...portfolioAccounts.securities.map(s => s.id),
     ].filter(Boolean) as string[];
 

@@ -235,11 +235,11 @@ interface InvestmentService {
   // Portfolio Management
   createInvestmentPortfolio(name: string, currency?: string): Promise<{
     group: AccountGroup;
-    tradingCashAccount: Account;
+    tradeCashAccount: Account;
   }>;
   getInvestmentPortfolios(): Promise<AccountGroup[]>;
   getPortfolioAccounts(portfolioId: string): Promise<{
-    tradingCash: Account;
+    tradeCash: Account;
     securities: Array<Account & { investmentProperties: InvestmentProperties }>;
   }>;
   

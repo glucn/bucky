@@ -21,16 +21,16 @@ describe("InvestmentService - Portfolio Management", () => {
       expect(result.group.accountType).toBe("user");
 
       // Verify trade cash account was created
-      expect(result.tradingCashAccount).toBeDefined();
-      expect(result.tradingCashAccount.name).toBe("Trade Cash - Test Portfolio");
-      expect(result.tradingCashAccount.type).toBe("user");
-      expect(result.tradingCashAccount.subtype).toBe("asset");
-      expect(result.tradingCashAccount.currency).toBe("USD");
+      expect(result.tradeCashAccount).toBeDefined();
+      expect(result.tradeCashAccount.name).toBe("Trade Cash - Test Portfolio");
+      expect(result.tradeCashAccount.type).toBe("user");
+      expect(result.tradeCashAccount.subtype).toBe("asset");
+      expect(result.tradeCashAccount.currency).toBe("USD");
 
       // Verify the account is linked to the group
       const portfolio = await databaseService.getAccountGroupById(result.group.id);
       expect(portfolio?.accounts).toHaveLength(1);
-      expect(portfolio?.accounts[0].id).toBe(result.tradingCashAccount.id);
+      expect(portfolio?.accounts[0].id).toBe(result.tradeCashAccount.id);
     });
 
     it("should create portfolio with custom currency", async () => {
@@ -39,7 +39,7 @@ describe("InvestmentService - Portfolio Management", () => {
         "EUR"
       );
 
-      expect(result.tradingCashAccount.currency).toBe("EUR");
+      expect(result.tradeCashAccount.currency).toBe("EUR");
     });
 
     it("should create portfolio with default USD currency", async () => {
@@ -47,7 +47,7 @@ describe("InvestmentService - Portfolio Management", () => {
         "Default Portfolio"
       );
 
-      expect(result.tradingCashAccount.currency).toBe("USD");
+      expect(result.tradeCashAccount.currency).toBe("USD");
     });
   });
 
@@ -121,8 +121,8 @@ describe("InvestmentService - Portfolio Management", () => {
 
       const accounts = await investmentService.getPortfolioAccounts(group.id);
 
-      expect(accounts.tradingCash).toBeDefined();
-      expect(accounts.tradingCash.name).toBe("Trade Cash - Test Portfolio");
+      expect(accounts.tradeCash).toBeDefined();
+      expect(accounts.tradeCash.name).toBe("Trade Cash - Test Portfolio");
       expect(accounts.securities).toEqual([]);
     });
 
@@ -133,7 +133,7 @@ describe("InvestmentService - Portfolio Management", () => {
     });
 
     it("should separate trade cash from security accounts", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Create a security account with investment properties
       const securityAccount = await databaseService.createAccount({
@@ -158,8 +158,8 @@ describe("InvestmentService - Portfolio Management", () => {
 
       const accounts = await investmentService.getPortfolioAccounts(group.id);
 
-      expect(accounts.tradingCash).toBeDefined();
-      expect(accounts.tradingCash.id).toBe(tradingCashAccount.id);
+      expect(accounts.tradeCash).toBeDefined();
+      expect(accounts.tradeCash.id).toBe(tradeCashAccount.id);
       expect(accounts.securities).toHaveLength(1);
       expect(accounts.securities[0].id).toBe(securityAccount.id);
       expect(accounts.securities[0].investmentProperties).toBeDefined();
@@ -324,13 +324,13 @@ describe("InvestmentService - Buy Transactions", () => {
 
   describe("recordBuy", () => {
     it("should record a buy transaction and create security account if needed", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -365,13 +365,13 @@ describe("InvestmentService - Buy Transactions", () => {
     });
 
     it("should calculate total cost correctly with fees", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -401,13 +401,13 @@ describe("InvestmentService - Buy Transactions", () => {
     });
 
     it("should add to existing security account position", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -492,13 +492,13 @@ describe("InvestmentService - Buy Transactions", () => {
     });
 
     it("should handle fees correctly in journal entry", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -525,14 +525,14 @@ describe("InvestmentService - Buy Transactions", () => {
       expect(expenseLine.amount).toBe(10); // Fee amount
 
       // Verify trade cash was debited for both purchase and fee
-      const cashLines = journalEntry.lines.filter((l: any) => l.accountId === tradingCashAccount.id);
+      const cashLines = journalEntry.lines.filter((l: any) => l.accountId === tradeCashAccount.id);
       expect(cashLines).toHaveLength(2);
       const totalCashDebit = cashLines.reduce((sum: number, line: any) => sum + line.amount, 0);
       expect(totalCashDebit).toBe(-1010); // -(1000 + 10)
     });
 
     it("should use AVERAGE_COST method when specified", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Create security account with AVERAGE_COST method
       await investmentService.createSecurityAccount(group.id, "VTSAX", "mutual_fund", "AVERAGE_COST");
@@ -541,7 +541,7 @@ describe("InvestmentService - Buy Transactions", () => {
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -575,11 +575,11 @@ describe("InvestmentService - Buy Transactions", () => {
 
     it("should throw error if trade cash account not found", async () => {
       // Create a portfolio but manually remove the trade cash account
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
       
       // Archive the trade cash account to simulate it being missing
       await databaseService.prismaClient.account.update({
-        where: { id: tradingCashAccount.id },
+        where: { id: tradeCashAccount.id },
         data: { isArchived: true, groupId: null },
       });
 
@@ -604,13 +604,13 @@ describe("InvestmentService - Sell Transactions", () => {
 
   describe("recordSell", () => {
     it("should record a sell transaction with FIFO cost basis", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -650,13 +650,13 @@ describe("InvestmentService - Sell Transactions", () => {
     });
 
     it("should calculate sale proceeds correctly with fees", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -684,19 +684,19 @@ describe("InvestmentService - Sell Transactions", () => {
       expect(journalEntry.lines.length).toBeGreaterThanOrEqual(3); // At least security credit, cash debit, gain/loss
 
       // Find the trade cash line for proceeds
-      const cashLines = journalEntry.lines.filter((l: any) => l.accountId === tradingCashAccount.id);
+      const cashLines = journalEntry.lines.filter((l: any) => l.accountId === tradeCashAccount.id);
       const proceedsLine = cashLines.find((l: any) => l.amount > 0);
       expect(proceedsLine.amount).toBe(1090.01); // Sale proceeds after fee
     });
 
     it("should record realized gain when selling at profit", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -731,13 +731,13 @@ describe("InvestmentService - Sell Transactions", () => {
     });
 
     it("should record realized loss when selling at loss", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -772,13 +772,13 @@ describe("InvestmentService - Sell Transactions", () => {
     });
 
     it("should use FIFO method to select oldest lots first", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 20000,
       });
@@ -831,7 +831,7 @@ describe("InvestmentService - Sell Transactions", () => {
     });
 
     it("should use average cost method when specified", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Create security account with AVERAGE_COST method
       await investmentService.createSecurityAccount(group.id, "VTSAX", "mutual_fund", "AVERAGE_COST");
@@ -840,7 +840,7 @@ describe("InvestmentService - Sell Transactions", () => {
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 20000,
       });
@@ -956,13 +956,13 @@ describe("InvestmentService - Sell Transactions", () => {
     });
 
     it("should throw error if trying to sell more shares than owned", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -989,13 +989,13 @@ describe("InvestmentService - Sell Transactions", () => {
     });
 
     it("should handle selling entire position", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -1028,13 +1028,13 @@ describe("InvestmentService - Sell Transactions", () => {
     });
 
     it("should handle fees correctly in journal entry", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -1067,7 +1067,7 @@ describe("InvestmentService - Sell Transactions", () => {
       expect(expenseLine.amount).toBe(10); // Fee amount
 
       // Verify trade cash received proceeds minus fee
-      const cashLines = journalEntry.lines.filter((l: any) => l.accountId === tradingCashAccount.id);
+      const cashLines = journalEntry.lines.filter((l: any) => l.accountId === tradeCashAccount.id);
       const proceedsLine = cashLines.find((l: any) => l.amount > 0);
       expect(proceedsLine.amount).toBe(1090); // (5 × 220) - 10 = 1090
     });
@@ -1082,7 +1082,7 @@ describe("InvestmentService - Dividend Transactions", () => {
 
   describe("recordDividend", () => {
     it("should record a cash dividend as income", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Create a security account
       await investmentService.createSecurityAccount(group.id, "AAPL", "stock");
@@ -1104,7 +1104,7 @@ describe("InvestmentService - Dividend Transactions", () => {
       expect(journalEntry.lines).toHaveLength(2);
 
       // Verify trade cash was debited
-      const cashLine = journalEntry.lines.find((l: any) => l.accountId === tradingCashAccount.id);
+      const cashLine = journalEntry.lines.find((l: any) => l.accountId === tradeCashAccount.id);
       expect(cashLine).toBeDefined();
       expect(cashLine.amount).toBe(100); // Positive for debit
 
@@ -1118,13 +1118,13 @@ describe("InvestmentService - Dividend Transactions", () => {
     });
 
     it("should record a cash dividend as return of capital", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash and buy shares first
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -1158,7 +1158,7 @@ describe("InvestmentService - Dividend Transactions", () => {
       expect(journalEntry.lines).toHaveLength(2);
 
       // Verify trade cash was debited
-      const cashLine = journalEntry.lines.find((l: any) => l.accountId === tradingCashAccount.id);
+      const cashLine = journalEntry.lines.find((l: any) => l.accountId === tradeCashAccount.id);
       expect(cashLine).toBeDefined();
       expect(cashLine.amount).toBe(50); // Positive for debit
 
@@ -1254,7 +1254,7 @@ describe("InvestmentService - Dividend Transactions", () => {
 
   describe("recordReinvestedDividend", () => {
     it("should record reinvested dividend as income with two journal entries", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Create a security account
       await investmentService.createSecurityAccount(group.id, "AAPL", "stock");
@@ -1286,13 +1286,13 @@ describe("InvestmentService - Dividend Transactions", () => {
     });
 
     it("should record reinvested dividend as cost basis reduction", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash and buy shares first
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -1424,13 +1424,13 @@ describe("InvestmentService - Dividend Transactions", () => {
     });
 
     it("should add to existing position when reinvesting", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add cash and buy shares first
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: tradingCashAccount.id,
+        fromAccountId: tradeCashAccount.id,
         toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
         amount: 10000,
       });
@@ -1514,7 +1514,7 @@ describe("InvestmentService - Cash Management", () => {
 
   describe("depositCash", () => {
     it("should deposit cash into trading account from external account", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Create a source account (e.g., checking account)
       const checkingAccount = await databaseService.createAccount({
@@ -1550,8 +1550,8 @@ describe("InvestmentService - Cash Management", () => {
       expect(journalEntry.lines).toHaveLength(2);
 
       // Verify trade cash balance increased
-      const tradingCashBalance = await databaseService.getAccountBalance(tradingCashAccount.id);
-      expect(tradingCashBalance).toBe(5000);
+      const tradeCashBalance = await databaseService.getAccountBalance(tradeCashAccount.id);
+      expect(tradeCashBalance).toBe(5000);
 
       // Verify checking account balance decreased
       const checkingBalance = await databaseService.getAccountBalance(checkingAccount.id);
@@ -1643,7 +1643,7 @@ describe("InvestmentService - Cash Management", () => {
     });
 
     it("should throw error if trade cash account not found", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       const checkingAccount = await databaseService.createAccount({
         name: "Checking Account",
@@ -1652,19 +1652,19 @@ describe("InvestmentService - Cash Management", () => {
         currency: "USD",
       });
 
-      // Remove trade case account from portfolio
+      // Remove trade cash account from portfolio
       await databaseService.prismaClient.account.update({
-        where: { id: tradingCashAccount.id },
+        where: { id: tradeCashAccount.id },
         data: { groupId: null },
       });
 
       await expect(
         investmentService.depositCash(group.id, 1000, checkingAccount.id, "2024-01-15")
-      ).rejects.toThrow("trade case account not found in portfolio");
+      ).rejects.toThrow("trade cash account not found in portfolio");
     });
 
     it("should handle multiple deposits correctly", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       const checkingAccount = await databaseService.createAccount({
         name: "Checking Account",
@@ -1687,9 +1687,9 @@ describe("InvestmentService - Cash Management", () => {
       // Second deposit
       await investmentService.depositCash(group.id, 3000, checkingAccount.id, "2024-02-15");
 
-      // Verify trade case balance
-      const tradingCashBalance = await databaseService.getAccountBalance(tradingCashAccount.id);
-      expect(tradingCashBalance).toBe(8000);
+      // Verify trade cash balance
+      const tradeCashBalance = await databaseService.getAccountBalance(tradeCashAccount.id);
+      expect(tradeCashBalance).toBe(8000);
 
       // Verify checking account balance
       const checkingBalance = await databaseService.getAccountBalance(checkingAccount.id);
@@ -1699,14 +1699,14 @@ describe("InvestmentService - Cash Management", () => {
 
   describe("withdrawCash", () => {
     it("should withdraw cash from trading account to external account", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
-      // Add cash to trading account (debit trade case, credit opening balance equity)
+      // Add cash to trading account (debit trade cash, credit opening balance equity)
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
-        toAccountId: tradingCashAccount.id,
+        toAccountId: tradeCashAccount.id,
         amount: 10000,
       });
 
@@ -1734,9 +1734,9 @@ describe("InvestmentService - Cash Management", () => {
       expect(journalEntry.description).toBe("Withdrawal from investment account");
       expect(journalEntry.lines).toHaveLength(2);
 
-      // Verify trade case balance decreased
-      const tradingCashBalance = await databaseService.getAccountBalance(tradingCashAccount.id);
-      expect(tradingCashBalance).toBe(7000); // 10000 - 3000
+      // Verify trade cash balance decreased
+      const tradeCashBalance = await databaseService.getAccountBalance(tradeCashAccount.id);
+      expect(tradeCashBalance).toBe(7000); // 10000 - 3000
 
       // Verify checking account balance increased
       const checkingBalance = await databaseService.getAccountBalance(checkingAccount.id);
@@ -1744,13 +1744,13 @@ describe("InvestmentService - Cash Management", () => {
     });
 
     it("should use default description when not provided", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
-        toAccountId: tradingCashAccount.id,
+        toAccountId: tradeCashAccount.id,
         amount: 10000,
       });
 
@@ -1771,15 +1771,15 @@ describe("InvestmentService - Cash Management", () => {
       expect(journalEntry.description).toBe("Cash withdrawal from investment portfolio");
     });
 
-    it("should validate sufficient trade case balance", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+    it("should validate sufficient trade cash balance", async () => {
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       // Add only $5000 to trading account
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
-        toAccountId: tradingCashAccount.id,
+        toAccountId: tradeCashAccount.id,
         amount: 5000,
       });
 
@@ -1793,17 +1793,17 @@ describe("InvestmentService - Cash Management", () => {
       // Try to withdraw more than available
       await expect(
         investmentService.withdrawCash(group.id, 6000, checkingAccount.id, "2024-01-15")
-      ).rejects.toThrow("Insufficient trade case balance: trying to withdraw 6000 but only 5000 available");
+      ).rejects.toThrow("Insufficient trade cash balance: trying to withdraw 6000 but only 5000 available");
     });
 
     it("should validate required fields", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
-        toAccountId: tradingCashAccount.id,
+        toAccountId: tradeCashAccount.id,
         amount: 10000,
       });
 
@@ -1853,13 +1853,13 @@ describe("InvestmentService - Cash Management", () => {
     });
 
     it("should throw error if destination account does not exist", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
-        toAccountId: tradingCashAccount.id,
+        toAccountId: tradeCashAccount.id,
         amount: 10000,
       });
 
@@ -1868,8 +1868,8 @@ describe("InvestmentService - Cash Management", () => {
       ).rejects.toThrow("Destination account not found");
     });
 
-    it("should throw error if trade case account not found", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+    it("should throw error if trade cash account not found", async () => {
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       const checkingAccount = await databaseService.createAccount({
         name: "Checking Account",
@@ -1878,25 +1878,25 @@ describe("InvestmentService - Cash Management", () => {
         currency: "USD",
       });
 
-      // Remove trade case account from portfolio
+      // Remove trade cash account from portfolio
       await databaseService.prismaClient.account.update({
-        where: { id: tradingCashAccount.id },
+        where: { id: tradeCashAccount.id },
         data: { groupId: null },
       });
 
       await expect(
         investmentService.withdrawCash(group.id, 1000, checkingAccount.id, "2024-01-15")
-      ).rejects.toThrow("trade case account not found in portfolio");
+      ).rejects.toThrow("trade cash account not found in portfolio");
     });
 
     it("should handle multiple withdrawals correctly", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
-        toAccountId: tradingCashAccount.id,
+        toAccountId: tradeCashAccount.id,
         amount: 20000,
       });
 
@@ -1913,9 +1913,9 @@ describe("InvestmentService - Cash Management", () => {
       // Second withdrawal
       await investmentService.withdrawCash(group.id, 3000, checkingAccount.id, "2024-02-15");
 
-      // Verify trade case balance
-      const tradingCashBalance = await databaseService.getAccountBalance(tradingCashAccount.id);
-      expect(tradingCashBalance).toBe(12000); // 20000 - 5000 - 3000
+      // Verify trade cash balance
+      const tradeCashBalance = await databaseService.getAccountBalance(tradeCashAccount.id);
+      expect(tradeCashBalance).toBe(12000); // 20000 - 5000 - 3000
 
       // Verify checking account balance
       const checkingBalance = await databaseService.getAccountBalance(checkingAccount.id);
@@ -1923,13 +1923,13 @@ describe("InvestmentService - Cash Management", () => {
     });
 
     it("should prevent withdrawal when balance becomes insufficient after previous transactions", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
-        toAccountId: tradingCashAccount.id,
+        toAccountId: tradeCashAccount.id,
         amount: 10000,
       });
 
@@ -1946,11 +1946,11 @@ describe("InvestmentService - Cash Management", () => {
       // Try to withdraw more than remaining balance
       await expect(
         investmentService.withdrawCash(group.id, 4000, checkingAccount.id, "2024-01-16")
-      ).rejects.toThrow("Insufficient trade case balance: trying to withdraw 4000 but only 3000 available");
+      ).rejects.toThrow("Insufficient trade cash balance: trying to withdraw 4000 but only 3000 available");
     });
 
     it("should work correctly with deposits and withdrawals combined", async () => {
-      const { group, tradingCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
+      const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Test Portfolio");
 
       const checkingAccount = await databaseService.createAccount({
         name: "Checking Account",
@@ -1978,8 +1978,8 @@ describe("InvestmentService - Cash Management", () => {
       await investmentService.depositCash(group.id, 5000, checkingAccount.id, "2024-03-15");
 
       // Verify final balances
-      const tradingCashBalance = await databaseService.getAccountBalance(tradingCashAccount.id);
-      expect(tradingCashBalance).toBe(12000); // 10000 - 3000 + 5000
+      const tradeCashBalance = await databaseService.getAccountBalance(tradeCashAccount.id);
+      expect(tradeCashBalance).toBe(12000); // 10000 - 3000 + 5000
 
       const checkingBalance = await databaseService.getAccountBalance(checkingAccount.id);
       expect(checkingBalance).toBe(8000); // 20000 - 10000 + 3000 - 5000
