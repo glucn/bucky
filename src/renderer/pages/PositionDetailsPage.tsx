@@ -70,15 +70,20 @@ export const PositionDetailsPage: React.FC = () => {
             setPosition(positionResult.position);
           }
 
-          // Get transaction history for this account
-          const transactionsResult = await window.electron.ipcRenderer.invoke(
+          // Get transaction history for this security
+          // For now, we only show transactions that directly affect the security account
+          // (buy, sell, reinvested dividends, stock splits)
+          // Cash dividends don't affect the security account, so they won't appear here
+          // TODO: Add a way to link dividend transactions to specific securities
+          // (perhaps by adding a tickerSymbol field to JournalEntry)
+          
+          const securityTxns = await window.electron.ipcRenderer.invoke(
             "get-transactions",
             securityAccount.id
           );
           
-          if (transactionsResult && Array.isArray(transactionsResult)) {
-            // Transform journal entries into transactions
-            const txns = transactionsResult.map((entry: any) => ({
+          if (securityTxns && Array.isArray(securityTxns)) {
+            const txns = securityTxns.map((entry: any) => ({
               id: entry.entry.id,
               date: entry.entry.date,
               type: entry.entry.type || 'unknown',

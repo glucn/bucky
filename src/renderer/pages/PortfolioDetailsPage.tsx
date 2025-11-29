@@ -31,6 +31,8 @@ export const PortfolioDetailsPage: React.FC = () => {
   const [portfolio, setPortfolio] = useState<any>(null);
   const [portfolioValue, setPortfolioValue] = useState<PortfolioValue | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [realizedGains, setRealizedGains] = useState<number>(0);
+  const [dividendIncome, setDividendIncome] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [selectedTransactionType, setSelectedTransactionType] = useState<TransactionType>('buy');
@@ -66,6 +68,27 @@ export const PortfolioDetailsPage: React.FC = () => {
       );
       if (positionsResult.success) {
         setPositions(positionsResult.positions);
+      }
+
+      // Fetch realized gains (all-time)
+      const startDate = '1970-01-01'; // Beginning of time
+      const endDate = new Date().toISOString().split('T')[0];
+      const gainsResult = await window.electron.ipcRenderer.invoke(
+        "get-realized-gains",
+        { portfolioId, startDate, endDate }
+      );
+      if (gainsResult.success && gainsResult.gains) {
+        const totalGains = gainsResult.gains.reduce((sum: number, g: any) => sum + g.realizedGain, 0);
+        setRealizedGains(totalGains);
+      }
+
+      // Fetch dividend income (all-time)
+      const dividendResult = await window.electron.ipcRenderer.invoke(
+        "get-dividend-income",
+        { portfolioId, startDate, endDate }
+      );
+      if (dividendResult.success && dividendResult.income) {
+        setDividendIncome(dividendResult.income.total);
       }
     } catch (error) {
       console.error("Error fetching portfolio data:", error);
@@ -135,37 +158,57 @@ export const PortfolioDetailsPage: React.FC = () => {
 
         {/* Portfolio Summary */}
         {portfolioValue && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
-            <div>
-              <p className="text-sm text-gray-500">Total Value</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {formatCurrency(totalValue)}
-              </p>
+          <div className="space-y-4 mt-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <p className="text-sm text-gray-500">Total Value</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {formatCurrency(totalValue)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Cash Balance</p>
+                <p className="text-xl font-semibold text-gray-900">
+                  {formatCurrency(portfolioValue.cashBalance)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Securities Value</p>
+                <p className="text-xl font-semibold text-gray-900">
+                  {formatCurrency(portfolioValue.totalMarketValue)}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-gray-500">Cash Balance</p>
-              <p className="text-xl font-semibold text-gray-900">
-                {formatCurrency(portfolioValue.cashBalance)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Securities Value</p>
-              <p className="text-xl font-semibold text-gray-900">
-                {formatCurrency(portfolioValue.totalMarketValue)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Unrealized Gain/Loss</p>
-              <p className={`text-xl font-semibold ${
-                portfolioValue.totalUnrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
-              }`}>
-                {formatCurrency(portfolioValue.totalUnrealizedGain)}
-              </p>
-              <p className={`text-sm ${
-                portfolioValue.totalUnrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
-              }`}>
-                {formatPercent(portfolioValue.totalUnrealizedGainPercent)}
-              </p>
+            <div className="border-t pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <p className="text-sm text-gray-500">Unrealized Gain/Loss</p>
+                  <p className={`text-xl font-semibold ${
+                    portfolioValue.totalUnrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {formatCurrency(portfolioValue.totalUnrealizedGain)}
+                  </p>
+                  <p className={`text-sm ${
+                    portfolioValue.totalUnrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {formatPercent(portfolioValue.totalUnrealizedGainPercent)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Realized Gain/Loss</p>
+                  <p className={`text-xl font-semibold ${
+                    realizedGains >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {formatCurrency(realizedGains)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Dividend Income</p>
+                  <p className="text-xl font-semibold text-green-600">
+                    {formatCurrency(dividendIncome)}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -212,7 +255,7 @@ export const PortfolioDetailsPage: React.FC = () => {
                   <tr
                     key={position.tickerSymbol}
                     className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => navigate(`/investments/${portfolioId}/position/${position.tickerSymbol}`)}
+                    onClick={() => navigate(`/investments/${portfolioId}/position/${encodeURIComponent(position.tickerSymbol)}`)}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
@@ -220,7 +263,7 @@ export const PortfolioDetailsPage: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                      {position.quantity.toFixed(6)}
+                      {position.quantity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
                       {formatCurrency(position.costBasis)}

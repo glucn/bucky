@@ -21,6 +21,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
 }) => {
   const [transactionType, setTransactionType] = useState<TransactionType>(initialTransactionType);
   const [tickerSymbol, setTickerSymbol] = useState('');
+  const [availableTickers, setAvailableTickers] = useState<string[]>([]);
   const [quantity, setQuantity] = useState('');
   const [pricePerShare, setPricePerShare] = useState('');
   const [amount, setAmount] = useState('');
@@ -29,6 +30,13 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Fetch available ticker symbols when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchAvailableTickers();
+    }
+  }, [isOpen, portfolioId]);
 
   // Reset transaction type and ticker when modal opens
   useEffect(() => {
@@ -39,6 +47,24 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
       }
     }
   }, [isOpen, initialTransactionType, initialTickerSymbol]);
+
+  const fetchAvailableTickers = async () => {
+    try {
+      const result = await window.electron.ipcRenderer.invoke(
+        "get-portfolio-accounts",
+        portfolioId
+      );
+      
+      if (result.success && result.accounts.securities) {
+        const tickers = result.accounts.securities
+          .map((sec: any) => sec.investmentProperties?.tickerSymbol)
+          .filter((ticker: string) => ticker);
+        setAvailableTickers(tickers);
+      }
+    } catch (error) {
+      console.error("Error fetching tickers:", error);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -194,12 +220,18 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
               </label>
               <input
                 type="text"
+                list="ticker-symbols"
                 value={tickerSymbol}
                 onChange={(e) => setTickerSymbol(e.target.value.toUpperCase())}
                 placeholder="e.g., AAPL"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 required
               />
+              <datalist id="ticker-symbols">
+                {availableTickers.map((ticker) => (
+                  <option key={ticker} value={ticker} />
+                ))}
+              </datalist>
             </div>
           )}
 

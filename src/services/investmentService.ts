@@ -382,7 +382,7 @@ class InvestmentService {
       journalLines.push({
         accountId: investmentExpenseAccount.id,
         amount: roundedFee, // Positive for debit (expense increase)
-        currency: investmentExpenseAccount.currency,
+        currency: portfolioAccounts.tradingCash.currency,
         description: `Fee for ${description}`,
       });
     }
@@ -637,7 +637,7 @@ class InvestmentService {
       journalLines.push({
         accountId: realizedGainLossAccount.id,
         amount: -roundedGainLoss, // Negative if gain (credit), positive if loss (debit)
-        currency: realizedGainLossAccount.currency,
+        currency: portfolioAccounts.tradingCash.currency,
         description: `${roundedGainLoss >= 0 ? 'Gain' : 'Loss'} on ${description}`,
       });
     }
@@ -650,7 +650,7 @@ class InvestmentService {
       journalLines.push({
         accountId: investmentExpenseAccount.id,
         amount: roundedFee, // Positive for debit (expense increase)
-        currency: investmentExpenseAccount.currency,
+        currency: portfolioAccounts.tradingCash.currency,
         description: `Fee for ${description}`,
       });
       
@@ -813,10 +813,11 @@ class InvestmentService {
       });
 
       // Line 2: Credit Dividend Income Category
+      // Use the trading cash account's currency for the transaction
       journalLines.push({
         accountId: dividendIncomeAccount.id,
         amount: -roundedAmount, // Negative for credit
-        currency: dividendIncomeAccount.currency,
+        currency: portfolioAccounts.tradingCash.currency,
         description: description,
       });
     }
@@ -924,7 +925,7 @@ class InvestmentService {
               {
                 accountId: dividendIncomeAccount.id,
                 amount: -roundedAmount, // Credit income
-                currency: dividendIncomeAccount.currency,
+                currency: portfolioAccounts.tradingCash.currency,
                 description: `${description} - Income`,
               },
             ],
@@ -1398,7 +1399,7 @@ class InvestmentService {
       {
         accountId: investmentExpenseAccount.id,
         amount: roundedAmount, // Positive for debit (expense increase)
-        currency: investmentExpenseAccount.currency,
+        currency: portfolioAccounts.tradingCash.currency,
         description: description,
       },
       {
@@ -1485,7 +1486,7 @@ class InvestmentService {
       {
         accountId: interestIncomeAccount.id,
         amount: -roundedAmount, // Negative for credit (income increase)
-        currency: interestIncomeAccount.currency,
+        currency: portfolioAccounts.tradingCash.currency,
         description: desc,
       },
     ];
