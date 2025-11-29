@@ -22,8 +22,8 @@
 - [x] 2. Implement core investment service - portfolio management
 - [x] 2.1 Implement createInvestmentPortfolio function
   - Create AccountGroup with accountType "user"
-  - Create Trading Cash Account linked to the group
-  - Return both group and trading cash account
+  - Create Trade Cash Account linked to the group
+  - Return both group and trade cash account
   - _Requirements: 1.1, 1.2, 1.3_
 
 - [ ]* 2.2 Write property test for portfolio creation
@@ -37,7 +37,7 @@
 
 - [x] 2.4 Implement getPortfolioAccounts function
   - Query all accounts in a portfolio group
-  - Separate trading cash from security accounts
+  - Separate trade cash from security accounts
   - Include investment properties for security accounts
   - _Requirements: 1.4, 1.5_
 
@@ -66,7 +66,7 @@
   - Validate required fields (ticker, quantity, price, date)
   - Calculate total cost: (quantity × price) + fees
   - Create or get security account
-  - Create journal entry debiting Security Account and crediting Trading Cash Account
+  - Create journal entry debiting Security Account and crediting Trade Cash Account
   - If fees exist, add journal line debiting Investment Expense Category
   - Update InvestmentProperties quantity and lots (for FIFO)
   - Set journal entry type to InvestmentTransactionType.BUY
@@ -99,7 +99,7 @@
   - Validate required fields (ticker, quantity, price, date)
   - Calculate sale proceeds: (quantity × price) - fees
   - Calculate cost basis using portfolio's cost basis method
-  - Create journal entry crediting Security Account for cost basis, debiting Trading Cash for proceeds
+  - Create journal entry crediting Security Account for cost basis, debiting Trade Cash for proceeds
   - Calculate realized gain/loss: proceeds - cost basis
   - If gain/loss exists, add journal line to Realized Gain/Loss Category
   - Update InvestmentProperties quantity and lots (for FIFO)
@@ -117,8 +117,8 @@
 - [x] 6. Implement dividend recording
 - [x] 6.1 Implement recordDividend function for cash dividends
   - Validate required fields (ticker, amount, date)
-  - If categorized as income: create journal entry debiting Trading Cash, crediting Dividend Income Category
-  - If categorized as return of capital: create journal entry debiting Trading Cash, crediting Security Account
+  - If categorized as income: create journal entry debiting Trade Cash, crediting Dividend Income Category
+  - If categorized as return of capital: create journal entry debiting Trade Cash, crediting Security Account
   - Store ticker symbol in journal entry description
   - Set journal entry type to InvestmentTransactionType.DIVIDEND_CASH
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
@@ -143,15 +143,15 @@
 - [x] 7. Implement cash management
 - [x] 7.1 Implement depositCash function
   - Validate required fields (amount, date, source account)
-  - Create journal entry debiting Trading Cash Account, crediting source account
+  - Create journal entry debiting Trade Cash Account, crediting source account
   - Use existing transfer transaction functionality
   - Set journal entry type to InvestmentTransactionType.CASH_DEPOSIT
   - _Requirements: 7.1, 7.3, 7.5_
 
 - [x] 7.2 Implement withdrawCash function
   - Validate required fields (amount, date, destination account)
-  - Validate sufficient Trading Cash balance
-  - Create journal entry crediting Trading Cash Account, debiting destination account
+  - Validate sufficient Trade Cash balance
+  - Create journal entry crediting Trade Cash Account, debiting destination account
   - Use existing transfer transaction functionality
   - Set journal entry type to InvestmentTransactionType.CASH_WITHDRAWAL
   - _Requirements: 7.2, 7.3, 7.4, 7.5_
@@ -181,14 +181,14 @@
 
 - [x] 8.4 Implement recordFee function
   - Validate required fields (amount, description, date)
-  - Create journal entry debiting Investment Expense Category, crediting Trading Cash Account
+  - Create journal entry debiting Investment Expense Category, crediting Trade Cash Account
   - Store fee description in journal entry metadata
   - Set journal entry type to InvestmentTransactionType.FEE
   - _Requirements: 11.1, 11.2, 11.4, 11.5_
 
 - [x] 8.5 Implement recordInterest function
   - Validate required fields (amount, date)
-  - Create journal entry debiting Trading Cash Account, crediting Interest Income Category
+  - Create journal entry debiting Trade Cash Account, crediting Interest Income Category
   - Store optional ticker symbol in description
   - Set journal entry type to InvestmentTransactionType.INTEREST
   - _Requirements: 14.1, 14.2, 14.3_
@@ -242,7 +242,7 @@
   - _Requirements: 8.1, 8.5_
 
 - [x] 10.4 Implement getPortfolioValue function
-  - Get Trading Cash Account balance
+  - Get Trade Cash Account balance
   - Get all Security Account balances (cost basis)
   - Get all position market values
   - Calculate total unrealized gain
@@ -330,7 +330,7 @@
 - [x] 12.2 Create PortfolioDetailsPage component
   - Display portfolio summary (total value, cash, securities value)
   - List all positions with current values and gains/losses
-  - Show trading cash balance
+  - Show trade cash balance
   - Quick transaction entry buttons
   - _Requirements: 1.4, 8.1, 8.5_
 

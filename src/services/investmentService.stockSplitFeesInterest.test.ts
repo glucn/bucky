@@ -112,7 +112,7 @@ describe("InvestmentService - Stock Splits, Fees, and Interest", () => {
       expect(expenseLine).toBeDefined();
       expect(expenseLine.amount).toBe(25);
 
-      // Verify trading cash was credited
+      // Verify trade cash was credited
       const cashLine = journalEntry.lines.find((l: any) => l.accountId === tradingCashAccount.id);
       expect(cashLine).toBeDefined();
       expect(cashLine.amount).toBe(-25);
@@ -153,7 +153,7 @@ describe("InvestmentService - Stock Splits, Fees, and Interest", () => {
       expect(journalEntry.description).toBe("Interest from bond holdings");
       expect(journalEntry.lines).toHaveLength(2);
 
-      // Verify trading cash was debited
+      // Verify trade cash was debited
       const cashLine = journalEntry.lines.find((l: any) => l.accountId === tradingCashAccount.id);
       expect(cashLine).toBeDefined();
       expect(cashLine.amount).toBe(15.50);

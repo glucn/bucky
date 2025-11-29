@@ -8,7 +8,7 @@ The Investment Account Management system extends Bucky's existing account and ac
 
 ### System Integration
 The investment management system integrates with existing Bucky components:
-- **Account System**: Uses existing Account model for Trading Cash and Security positions
+- **Account System**: Uses existing Account model for Trade Cash and Security positions
 - **AccountGroup System**: Uses existing AccountGroup to organize investment portfolios
 - **Journal Entry System**: Uses existing JournalEntry and JournalLine for all transactions
 - **Category Accounts**: Uses existing category accounts for income and expenses
@@ -16,10 +16,10 @@ The investment management system integrates with existing Bucky components:
 - **UI Components**: New investment-specific pages and enhanced existing components
 
 ### Data Flow
-1. **Portfolio Creation**: User creates an AccountGroup for the investment portfolio and a Trading Cash Account
-2. **Security Purchase**: Creates Security Account (if new) and journal entry transferring value from Trading Cash to Security Account
-3. **Security Sale**: Creates journal entry transferring cost basis from Security Account to Trading Cash, with gain/loss to category account
-4. **Dividend Receipt**: Creates journal entry from Dividend Income category to Trading Cash (or directly to Security Account for reinvestment)
+1. **Portfolio Creation**: User creates an AccountGroup for the investment portfolio and a Trade Cash Account
+2. **Security Purchase**: Creates Security Account (if new) and journal entry transferring value from Trade Cash to Security Account
+3. **Security Sale**: Creates journal entry transferring cost basis from Security Account to Trade Cash, with gain/loss to category account
+4. **Dividend Receipt**: Creates journal entry from Dividend Income category to Trade Cash (or directly to Security Account for reinvestment)
 5. **Balance Calculation**: All balances derived from summing journal line amounts for each account
 6. **Performance Metrics**: Calculated from account balances, journal entries, and stored market prices
 
@@ -40,7 +40,7 @@ The existing Account model needs one new relation field:
 ```prisma
 model Account {
   id        String      @id @default(uuid())
-  name      String      // e.g., "Trading Cash - Fidelity" or "AAPL Stock"
+  name      String      // e.g., "Trade Cash - Fidelity" or "AAPL Stock"
   type      AccountType // "user" for both cash and securities
   subtype   AccountSubtype @default(asset) // "asset" for investments
   currency  String      @default("USD")
@@ -476,7 +476,7 @@ interface ColumnMapping {
 #### PortfolioDetailsPage
 - Detailed view of a single investment portfolio
 - List of all positions with current values and gains/losses
-- Trading cash balance
+- Trade cash balance
 - Performance charts and metrics
 - Quick transaction entry
 
@@ -578,13 +578,13 @@ interface PortfolioSummary {
 - Price per share must be positive number
 - Transaction date cannot be in the future
 - Sell quantity cannot exceed current position quantity
-- Withdrawal amount cannot exceed trading cash balance
+- Withdrawal amount cannot exceed trade cash balance
 - Split ratio must be positive number
 - Cost basis method must be 'FIFO' or 'AVERAGE_COST'
 
 ### Error Scenarios
 - **Insufficient Shares**: Attempting to sell more shares than owned
-- **Insufficient Cash**: Attempting to buy with insufficient trading cash
+- **Insufficient Cash**: Attempting to buy with insufficient trade cash
 - **Invalid Ticker**: Ticker symbol not found or invalid format
 - **Duplicate Security Account**: Attempting to create security account that already exists
 - **Missing Market Price**: Calculating unrealized gains without market price
@@ -606,7 +606,7 @@ interface PortfolioSummary {
 - Transaction validation logic
 
 ### Integration Tests
-- Portfolio creation with trading cash account
+- Portfolio creation with trade cash account
 - Buy transaction creating security account and journal entries
 - Sell transaction with gain/loss calculation
 - Dividend recording (cash and reinvested)
