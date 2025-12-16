@@ -394,7 +394,8 @@ class CreditCardService {
       toAccountId: accountId,
       amount: amount,
       postingDate: postingDate,
-      transactionType: "transfer"
+      transactionType: "transfer",
+      skipDuplicateCheck: false, // Allow manual credit card payments even if they look like duplicates
     }, tx);
   }
 
@@ -426,7 +427,8 @@ class CreditCardService {
       toAccountId: categoryAccountId,
       amount: amount,
       postingDate: postingDate,
-      transactionType: "expense"
+      transactionType: "expense",
+      skipDuplicateCheck: false, // Allow manual credit card transactions even if they look like duplicates
     }, tx);
   }
 

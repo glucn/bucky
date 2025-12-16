@@ -1138,6 +1138,7 @@ class InvestmentService {
       toAccountId: portfolioAccounts.tradeCash.id,
       amount: amount,
       transactionType: "transfer",
+      skipDuplicateCheck: false, // Allow manual cash deposits even if they look like duplicates
     });
 
     if (result.skipped) {
@@ -1227,6 +1228,7 @@ class InvestmentService {
       toAccountId: toAccountId,
       amount: amount,
       transactionType: "transfer",
+      skipDuplicateCheck: false, // Allow manual cash withdrawals even if they look like duplicates
     });
 
     if (result.skipped) {

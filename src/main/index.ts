@@ -140,7 +140,11 @@ function setupIpcHandlers() {
   ipcMain.handle("add-transaction", async (_, transaction) => {
     console.log("Handling add-transaction request:", transaction);
     // transaction should include: date, amount, description, fromAccountId, toAccountId
-    return databaseService.createJournalEntry(transaction);
+    // For manual transactions from UI, skip duplicate checking to allow legitimate duplicates
+    return databaseService.createJournalEntry({
+      ...transaction,
+      skipDuplicateCheck: false
+    });
   });
 
   ipcMain.handle("delete-transaction", async (_, entryId: string) => {

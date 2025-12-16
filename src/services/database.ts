@@ -826,6 +826,7 @@ class DatabaseService {
       transactionType?: "income" | "expense" | "transfer";
       forceDuplicate?: boolean; // If true, allow duplicate creation
       postingDate?: string | Date; // Date posted to account (YYYY-MM-DD)
+      skipDuplicateCheck?: boolean; // If false, skip duplicate checking (for manual entries)
     },
     tx?: TransactionClient
   ): Promise<{ skipped: boolean; reason?: string; entry?: any; existing?: any }> {
@@ -891,70 +892,78 @@ class DatabaseService {
       }
       const roundedAmount = Math.round(Math.abs(data.amount) * 100) / 100;
 
-      // Deduplication (same as before, but with currency)
-      console.log("[createJournalEntry] Deduplication check values:", {
-        date: dateStr,
-        description: data.description,
-        fromAccountId: data.fromAccountId,
-        toAccountId: data.toAccountId,
-      });
-      const existing = await prisma.journalEntry.findFirst({
-        where: {
+      // Improved deduplication logic
+      // Only check for duplicates if this is an import operation or if explicitly requested
+      // Manual transactions (without skipDuplicateCheck flag) should be allowed
+      if (data.skipDuplicateCheck !== false) {
+        console.log("[createJournalEntry] Deduplication check values:", {
           date: dateStr,
           description: data.description,
-          type: null,
-          AND: [
-            {
-              lines: {
-                some: {
-                  accountId: data.fromAccountId,
-                  amount: fromAccount.subtype === AccountSubtype.Asset
-                    ? -Math.abs(roundedAmount)
-                    : Math.abs(roundedAmount),
-                  currency: fromAccount.currency,
-                },
-              },
-            },
-            {
-              lines: {
-                some: {
-                  accountId: data.toAccountId,
-                  amount: toAccount.subtype === AccountSubtype.Asset
-                    ? Math.abs(roundedAmount)
-                    : -Math.abs(roundedAmount),
-                  currency: toAccount.currency,
-                },
-              },
-            },
-          ],
-        },
-        include: { lines: true },
-      });
-      if (existing && !data.forceDuplicate) {
-        console.warn("[createJournalEntry] Potential duplicate detected (strict match on accounts, amounts, currency)", {
-          deduplicationInput: {
+          fromAccountId: data.fromAccountId,
+          toAccountId: data.toAccountId,
+        });
+
+        // Look for potential duplicates within a narrow time window (same day)
+        // and with exact same details - this catches obvious import duplicates
+        const existing = await prisma.journalEntry.findFirst({
+          where: {
             date: dateStr,
             description: data.description,
-            fromAccountId: data.fromAccountId,
-            toAccountId: data.toAccountId,
-            amount: roundedAmount,
-            currency: fromAccount.currency,
+            type: null,
+            AND: [
+              {
+                lines: {
+                  some: {
+                    accountId: data.fromAccountId,
+                    amount: fromAccount.subtype === AccountSubtype.Asset
+                      ? -Math.abs(roundedAmount)
+                      : Math.abs(roundedAmount),
+                    currency: fromAccount.currency,
+                  },
+                },
+              },
+              {
+                lines: {
+                  some: {
+                    accountId: data.toAccountId,
+                    amount: toAccount.subtype === AccountSubtype.Asset
+                      ? Math.abs(roundedAmount)
+                      : -Math.abs(roundedAmount),
+                    currency: toAccount.currency,
+                  },
+                },
+              },
+            ],
           },
-          existing: {
-            id: existing.id,
-            date: existing.date,
-            description: existing.description,
-            type: existing.type,
-            lines: existing.lines.map(l => ({
-              id: l.id,
-              accountId: l.accountId,
-              amount: l.amount,
-              currency: l.currency,
-            })),
-          }
+          include: { lines: true },
         });
-        // Instead of skipping, return a warning and the existing entry for user confirmation
-        return { skipped: true, reason: "potential_duplicate", existing };
+
+        if (existing && !data.forceDuplicate) {
+          console.warn("[createJournalEntry] Potential duplicate detected (strict match on accounts, amounts, currency)", {
+            deduplicationInput: {
+              date: dateStr,
+              description: data.description,
+              fromAccountId: data.fromAccountId,
+              toAccountId: data.toAccountId,
+              amount: roundedAmount,
+              currency: fromAccount.currency,
+            },
+            existing: {
+              id: existing.id,
+              date: existing.date,
+              description: existing.description,
+              type: existing.type,
+              lines: existing.lines.map(l => ({
+                id: l.id,
+                accountId: l.accountId,
+                amount: l.amount,
+                currency: l.currency,
+              })),
+            }
+          });
+          // Return a warning with the existing entry for user confirmation
+          return { skipped: true, reason: "potential_duplicate", existing };
+        }
       }
 
       // Use new logic for journal lines
@@ -1042,35 +1051,38 @@ class DatabaseService {
         return { skipped: true, reason: "Amounts and exchange rate are inconsistent" };
       }
 
-      const existing = await prisma.journalEntry.findFirst({
-        where: {
-          date: dateStr,
-          description: data.description,
-          type: "currency_transfer",
-          lines: {
-            some: {
-              accountId: data.fromAccountId,
-              amount: -(amountFrom!),
-              currency: currencyFrom,
-            },
-          },
-          AND: [
-            {
-              lines: {
-                some: {
-                  accountId: data.toAccountId,
-                  amount: amountTo,
-                  currency: currencyTo,
-                },
+      // Apply same improved deduplication logic for currency transfers
+      if (data.skipDuplicateCheck !== false) {
+        const existing = await prisma.journalEntry.findFirst({
+          where: {
+            date: dateStr,
+            description: data.description,
+            type: "currency_transfer",
+            lines: {
+              some: {
+                accountId: data.fromAccountId,
+                amount: -(amountFrom!),
+                currency: currencyFrom,
               },
             },
-          ],
-        },
-        include: { lines: true },
-      });
-      if (existing) {
-        console.warn("[createJournalEntry] Skipped: duplicate (currency_transfer)", { existing });
-        return { skipped: true, reason: "duplicate" };
+            AND: [
+              {
+                lines: {
+                  some: {
+                    accountId: data.toAccountId,
+                    amount: amountTo,
+                    currency: currencyTo,
+                  },
+                },
+              },
+            ],
+          },
+          include: { lines: true },
+        });
+        if (existing && !data.forceDuplicate) {
+          console.warn("[createJournalEntry] Potential duplicate detected (currency_transfer)", { existing });
+          return { skipped: true, reason: "potential_duplicate", existing };
+        }
       }
 
       const entry = await prisma.journalEntry.create({
