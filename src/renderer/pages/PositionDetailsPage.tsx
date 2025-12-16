@@ -110,10 +110,15 @@ export const PositionDetailsPage: React.FC = () => {
   };
 
   const formatCurrency = (amount: number): string => {
+    // Fix floating-point precision issues: treat very small numbers as zero
+    // This prevents "-0.00" display for balances like -6.7302587114515e-13
+    const threshold = 0.0001; // 0.01^2 for 2 decimal places
+    const normalizedAmount = Math.abs(amount) < threshold ? 0 : amount;
+    
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-    }).format(amount);
+    }).format(normalizedAmount);
   };
 
   const formatPercent = (percent: number): string => {

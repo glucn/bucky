@@ -1806,15 +1806,22 @@ class InvestmentService {
       ? (unrealizedGain / costBasis) * 100
       : null;
 
+    // Fix floating-point precision issues: treat very small numbers as zero
+    // This prevents "-0.00" display for balances like -6.7302587114515e-13
+    const fixPrecision = (value: number): number => {
+      const rounded = Math.round(value * 100) / 100;
+      return Math.abs(rounded) < 0.0001 ? 0 : rounded;
+    };
+
     return {
       tickerSymbol: investmentProps.tickerSymbol,
       quantity: investmentProps.quantity,
-      costBasis: Math.round(costBasis * 100) / 100,
-      costPerShare: Math.round(costPerShare * 100) / 100,
-      marketPrice: marketPrice !== null ? Math.round(marketPrice * 100) / 100 : null,
-      marketValue: marketValue !== null ? Math.round(marketValue * 100) / 100 : null,
-      unrealizedGain: unrealizedGain !== null ? Math.round(unrealizedGain * 100) / 100 : null,
-      unrealizedGainPercent: unrealizedGainPercent !== null ? Math.round(unrealizedGainPercent * 100) / 100 : null,
+      costBasis: fixPrecision(costBasis),
+      costPerShare: fixPrecision(costPerShare),
+      marketPrice: marketPrice !== null ? fixPrecision(marketPrice) : null,
+      marketValue: marketValue !== null ? fixPrecision(marketValue) : null,
+      unrealizedGain: unrealizedGain !== null ? fixPrecision(unrealizedGain) : null,
+      unrealizedGainPercent: unrealizedGainPercent !== null ? fixPrecision(unrealizedGainPercent) : null,
     };
   }
 
@@ -1902,12 +1909,19 @@ class InvestmentService {
       ? (totalUnrealizedGain / totalCostBasis) * 100
       : 0;
 
+    // Fix floating-point precision issues: treat very small numbers as zero
+    // This prevents "-0.00" display for balances like -6.7302587114515e-13
+    const fixPrecision = (value: number): number => {
+      const rounded = Math.round(value * 100) / 100;
+      return Math.abs(rounded) < 0.0001 ? 0 : rounded;
+    };
+
     return {
-      totalCostBasis: Math.round(totalCostBasis * 100) / 100,
-      totalMarketValue: Math.round(totalMarketValue * 100) / 100,
-      totalUnrealizedGain: Math.round(totalUnrealizedGain * 100) / 100,
-      totalUnrealizedGainPercent: Math.round(totalUnrealizedGainPercent * 100) / 100,
-      cashBalance: Math.round(cashBalance * 100) / 100,
+      totalCostBasis: fixPrecision(totalCostBasis),
+      totalMarketValue: fixPrecision(totalMarketValue),
+      totalUnrealizedGain: fixPrecision(totalUnrealizedGain),
+      totalUnrealizedGainPercent: fixPrecision(totalUnrealizedGainPercent),
+      cashBalance: fixPrecision(cashBalance),
     };
   }
 

@@ -72,6 +72,12 @@ export function normalizeTransactionAmount(
     return 0;
   }
 
+  // Fix floating-point precision issues: treat very small numbers as zero
+  // This prevents "-0.00" display for balances like -6.7302587114515e-13
+  if (Math.abs(amount) < 0.0001) {
+    return 0;
+  }
+
   // Zero amounts display as zero regardless of account type
   if (amount === 0) {
     return 0;
@@ -120,6 +126,12 @@ export function normalizeAccountBalance(
 ): number {
   // Handle null/undefined as zero
   if (balance == null) {
+    return 0;
+  }
+
+  // Fix floating-point precision issues: treat very small numbers as zero
+  // This prevents "-0.00" display for balances like -6.7302587114515e-13
+  if (Math.abs(balance) < 0.0001) {
     return 0;
   }
 

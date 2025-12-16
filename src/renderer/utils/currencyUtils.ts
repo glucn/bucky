@@ -66,8 +66,13 @@ export function formatCurrencyAmount(
     useGrouping = true,
   } = options;
 
+  // Fix floating-point precision issues: treat very small numbers as zero
+  // This prevents "-0.00" display for balances like -6.7302587114515e-13
+  const threshold = Math.pow(10, -(decimals + 2)); // e.g., 0.0001 for 2 decimals
+  const normalizedAmount = Math.abs(amount) < threshold ? 0 : amount;
+
   // Format the number with proper decimals and grouping
-  const formattedAmount = amount.toLocaleString('en-US', {
+  const formattedAmount = normalizedAmount.toLocaleString('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
     useGrouping,
