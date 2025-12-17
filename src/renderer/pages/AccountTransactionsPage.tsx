@@ -352,6 +352,7 @@ export interface JournalEntry {
   date: string;
   postingDate?: string;
   description?: string;
+  type?: string; // e.g., 'regular', 'currency_transfer'
   lines: JournalLine[];
 }
 
@@ -361,6 +362,7 @@ export interface JournalLine {
   accountId: string;
   amount: number;
   currency: string;
+  exchangeRate?: number; // Optional, for currency-transfer transactions
   description?: string;
   entry: JournalEntry;
   account: Account;
@@ -377,7 +379,7 @@ interface CreditCardMetrics {
 
 export const AccountTransactionsPage: React.FC = () => {
   const { accountId } = useParams<{ accountId: string }>();
-  const { refreshAccounts } = useAccounts();
+  const { refreshAccounts, accounts } = useAccounts();
   const [transactions, setTransactions] = useState<JournalLine[]>([]);
   const [account, setAccount] = useState<Account | null>(null);
   const [showManualModal, setShowManualModal] = useState(false);
@@ -388,6 +390,57 @@ export const AccountTransactionsPage: React.FC = () => {
   const [editTransaction, setEditTransaction] = useState<JournalLine | null>(
     null
   );
+  const [editTransferTransaction, setEditTransferTransaction] = useState<any>(null);
+
+  // Helper function to detect if a transaction is a transfer (between two user accounts)
+  const isTransferTransaction = (line: JournalLine): boolean => {
+    if (!line.entry?.lines || line.entry.lines.length !== 2) return false;
+    
+    const allAccountIds = line.entry.lines.map((l: any) => l.accountId);
+    const involvedAccounts = accounts.filter(acc => allAccountIds.includes(acc.id));
+    
+    // Transfer if both accounts are user accounts
+    return involvedAccounts.length === 2 && 
+           involvedAccounts.every(acc => acc.type === AccountType.User);
+  };
+
+  // Helper function to prepare transfer data for editing
+  const prepareTransferEditData = (line: JournalLine) => {
+    if (!line.entry?.lines) return null;
+    
+    const otherLine = line.entry.lines.find((l: any) => l.accountId !== line.accountId);
+    if (!otherLine) return null;
+
+    const fromAccountId = line.amount < 0 ? line.accountId : otherLine.accountId;
+    const toAccountId = line.amount < 0 ? otherLine.accountId : line.accountId;
+    const amount = Math.abs(line.amount);
+
+    return {
+      id: line.id,
+      entryId: line.entry.id,
+      fromAccountId,
+      toAccountId,
+      amount,
+      date: line.entry.date,
+      description: line.description || line.entry.description || "",
+      type: line.entry.type,
+      amountFrom: line.entry.type === "currency_transfer" ? Math.abs(line.amount) : undefined,
+      amountTo: line.entry.type === "currency_transfer" ? Math.abs(otherLine.amount) : undefined,
+      exchangeRate: line.exchangeRate || otherLine.exchangeRate,
+    };
+  };
+
+  // Handle edit transaction click
+  const handleEditTransaction = (line: JournalLine) => {
+    if (isTransferTransaction(line)) {
+      const transferData = prepareTransferEditData(line);
+      if (transferData) {
+        setEditTransferTransaction(transferData);
+      }
+    } else {
+      setEditTransaction(line);
+    }
+  };
   
   // Credit card state
   const [creditCardMetrics, setCreditCardMetrics] = useState<CreditCardMetrics | null>(null);
@@ -1027,7 +1080,7 @@ export const AccountTransactionsPage: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <button
                           className="text-primary-600 hover:underline"
-                          onClick={() => setEditTransaction(line)}
+                          onClick={() => handleEditTransaction(line)}
                           type="button"
                           aria-label="Edit transaction"
                         >
@@ -1141,6 +1194,18 @@ export const AccountTransactionsPage: React.FC = () => {
           fromAccountId={accountId}
           onClose={() => setShowTransferModal(false)}
           onSuccess={async () => {
+            await fetchTransactions();
+            await fetchAccount();
+            await refreshAccounts();
+          }}
+        />
+      )}
+      {editTransferTransaction && (
+        <TransferModal
+          editTransaction={editTransferTransaction}
+          onClose={() => setEditTransferTransaction(null)}
+          onSuccess={async () => {
+            setEditTransferTransaction(null);
             await fetchTransactions();
             await fetchAccount();
             await refreshAccounts();

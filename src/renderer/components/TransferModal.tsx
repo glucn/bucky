@@ -8,6 +8,19 @@ interface TransferModalProps {
   onClose: () => void;
   onSuccess: () => void;
   fromAccountId?: string; // Optional: pre-select the "from" account
+  editTransaction?: {
+    id: string;
+    entryId: string;
+    amount: number;
+    date: string;
+    description: string;
+    fromAccountId: string;
+    toAccountId: string;
+    type?: string;
+    amountFrom?: number;
+    amountTo?: number;
+    exchangeRate?: number;
+  }; // Optional: for editing existing transfers
 }
 
 interface TransferData {
@@ -22,26 +35,27 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   onClose,
   onSuccess,
   fromAccountId,
+  editTransaction,
 }) => {
   const { accounts, refreshAccounts } = useAccounts();
   const [transferData, setTransferData] = useState<TransferData>({
-    fromAccountId: fromAccountId || "",
-    toAccountId: "",
-    amount: 0,
-    date: (() => {
+    fromAccountId: editTransaction?.fromAccountId || fromAccountId || "",
+    toAccountId: editTransaction?.toAccountId || "",
+    amount: editTransaction?.amountFrom || editTransaction?.amount || 0,
+    date: editTransaction?.date || (() => {
       const now = new Date();
       const yyyy = now.getFullYear();
       const mm = String(now.getMonth() + 1).padStart(2, "0");
       const dd = String(now.getDate()).padStart(2, "0");
       return `${yyyy}-${mm}-${dd}`;
     })(),
-    description: "",
+    description: editTransaction?.description || "",
   });
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Multi-currency state
-  const [targetAmount, setTargetAmount] = useState<number>(0);
-  const [exchangeRate, setExchangeRate] = useState<number>(1);
+  const [targetAmount, setTargetAmount] = useState<number>(editTransaction?.amountTo || 0);
+  const [exchangeRate, setExchangeRate] = useState<number>(editTransaction?.exchangeRate || 1);
   const [exchangeError, setExchangeError] = useState<string | null>(null);
 
   // Lookup source and target accounts
@@ -126,45 +140,62 @@ export const TransferModal: React.FC<TransferModalProps> = ({
         return;
       }
 
-      // Add transaction with transfer type
-      let result = await window.electron.ipcRenderer.invoke("add-transaction", {
-        fromAccountId: transferData.fromAccountId,
-        toAccountId: transferData.toAccountId,
-        amount: transferData.amount,
-        date: transferData.date,
-        description: transferData.description,
-        transactionType: "transfer",
-        type: isMultiCurrency ? "currency_transfer" : undefined,
-        amountFrom: isMultiCurrency ? transferData.amount : undefined,
-        amountTo: isMultiCurrency ? targetAmount : undefined,
-        exchangeRate: isMultiCurrency ? exchangeRate : undefined,
-      });
+      if (editTransaction) {
+        // Update existing transfer
+        await window.electron.ipcRenderer.invoke("update-transaction", {
+          lineId: editTransaction.id,
+          fromAccountId: transferData.fromAccountId,
+          toAccountId: transferData.toAccountId,
+          amount: transferData.amount,
+          date: transferData.date,
+          description: transferData.description,
+          transactionType: "transfer",
+          type: isMultiCurrency ? "currency_transfer" : undefined,
+          amountFrom: isMultiCurrency ? transferData.amount : undefined,
+          amountTo: isMultiCurrency ? targetAmount : undefined,
+          exchangeRate: isMultiCurrency ? exchangeRate : undefined,
+        });
+      } else {
+        // Add new transaction with transfer type
+        let result = await window.electron.ipcRenderer.invoke("add-transaction", {
+          fromAccountId: transferData.fromAccountId,
+          toAccountId: transferData.toAccountId,
+          amount: transferData.amount,
+          date: transferData.date,
+          description: transferData.description,
+          transactionType: "transfer",
+          type: isMultiCurrency ? "currency_transfer" : undefined,
+          amountFrom: isMultiCurrency ? transferData.amount : undefined,
+          amountTo: isMultiCurrency ? targetAmount : undefined,
+          exchangeRate: isMultiCurrency ? exchangeRate : undefined,
+        });
 
-      if (result && result.skipped && result.reason === "potential_duplicate") {
-        // Show warning and ask for confirmation
-        const confirmMsg =
-          "A transfer with the same date, accounts, amount, and description already exists.\n\n" +
-          "Existing transfer:\n" +
-          JSON.stringify(result.existing, null, 2) +
-          "\n\nDo you want to add this transfer anyway?";
-        if (window.confirm(confirmMsg)) {
-          // Retry with forceDuplicate
-          result = await window.electron.ipcRenderer.invoke("add-transaction", {
-            fromAccountId: transferData.fromAccountId,
-            toAccountId: transferData.toAccountId,
-            amount: transferData.amount,
-            date: transferData.date,
-            description: transferData.description,
-            transactionType: "transfer",
-            type: isMultiCurrency ? "currency_transfer" : undefined,
-            amountFrom: isMultiCurrency ? transferData.amount : undefined,
-            amountTo: isMultiCurrency ? targetAmount : undefined,
-            exchangeRate: isMultiCurrency ? exchangeRate : undefined,
-            forceDuplicate: true,
-          });
-        } else {
-          setIsSubmitting(false);
-          return;
+        if (result && result.skipped && result.reason === "potential_duplicate") {
+          // Show warning and ask for confirmation
+          const confirmMsg =
+            "A transfer with the same date, accounts, amount, and description already exists.\n\n" +
+            "Existing transfer:\n" +
+            JSON.stringify(result.existing, null, 2) +
+            "\n\nDo you want to add this transfer anyway?";
+          if (window.confirm(confirmMsg)) {
+            // Retry with forceDuplicate
+            result = await window.electron.ipcRenderer.invoke("add-transaction", {
+              fromAccountId: transferData.fromAccountId,
+              toAccountId: transferData.toAccountId,
+              amount: transferData.amount,
+              date: transferData.date,
+              description: transferData.description,
+              transactionType: "transfer",
+              type: isMultiCurrency ? "currency_transfer" : undefined,
+              amountFrom: isMultiCurrency ? transferData.amount : undefined,
+              amountTo: isMultiCurrency ? targetAmount : undefined,
+              exchangeRate: isMultiCurrency ? exchangeRate : undefined,
+              forceDuplicate: true,
+            });
+          } else {
+            setIsSubmitting(false);
+            return;
+          }
         }
       }
 
@@ -189,7 +220,9 @@ export const TransferModal: React.FC<TransferModalProps> = ({
         >
           ×
         </button>
-        <h2 className="text-xl font-bold mb-4">Transfer Between Accounts</h2>
+        <h2 className="text-xl font-bold mb-4">
+          {editTransaction ? "Edit Transfer" : "Transfer Between Accounts"}
+        </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
@@ -487,7 +520,10 @@ export const TransferModal: React.FC<TransferModalProps> = ({
             className="w-full py-2 px-4 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:bg-gray-400"
             disabled={isButtonDisabled}
           >
-            {isSubmitting ? "Creating Transfer..." : "Create Transfer"}
+            {isSubmitting 
+              ? (editTransaction ? "Updating Transfer..." : "Creating Transfer...")
+              : (editTransaction ? "Update Transfer" : "Create Transfer")
+            }
           </button>
         </form>
       </div>
