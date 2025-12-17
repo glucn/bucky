@@ -53,8 +53,8 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
             fromAccount.subtype as AccountSubtype,
             true
           );
-          // Always show as positive in the input field
-          return Math.abs(normalizedAmount);
+          // Show the actual normalized amount (can be negative for refunds)
+          return normalizedAmount;
         })()
       : 0,
     date: isEdit
@@ -85,7 +85,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
             fromAccount.subtype as AccountSubtype,
             true
           );
-          return Math.abs(normalizedAmount).toString();
+          return normalizedAmount.toString();
         })()
       : ""
   );
@@ -251,14 +251,14 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
               }}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
               required
-              min="0"
               step="0.01"
             />
             {fromAccount && (
               <p className="mt-1 text-xs text-gray-500">
+                Enter positive amounts for expenses/payments, negative amounts for refunds/returns.
                 {fromAccount.subtype === 'asset'
-                  ? 'Enter the amount as a positive number. It will be deducted from this account.'
-                  : 'Enter the amount as a positive number. It will be added to this account\'s balance.'}
+                  ? ' Positive amounts will be deducted from this account.'
+                  : ' Positive amounts will be added to this account\'s balance.'}
               </p>
             )}
           </div>
@@ -332,7 +332,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
           </div>
 
           {/* Transaction Preview with Normalized Amounts */}
-          {fromAccount && toAccount && newTransaction.amount > 0 && (() => {
+          {fromAccount && toAccount && newTransaction.amount !== 0 && (() => {
             // Determine transaction type for preview
             let transactionType: "income" | "expense" | "transfer" = "transfer";
             if (fromAccount.type === AccountType.User && toAccount.type === AccountType.Category) {

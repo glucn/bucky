@@ -441,6 +441,31 @@ export const AccountTransactionsPage: React.FC = () => {
       setEditTransaction(line);
     }
   };
+
+  // Handle delete transaction click
+  const handleDeleteTransaction = async (line: JournalLine) => {
+    const confirmMessage = `Are you sure you want to delete this transaction?\n\nDate: ${line.entry.date}\nDescription: ${line.description || line.entry.description || 'No description'}\nAmount: ${formatTransactionCurrency(line.amount, line.currency)}\n\nThis action cannot be undone.`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      const result = await window.electron.ipcRenderer.invoke("delete-transaction", line.entry.id);
+      
+      if (result.success) {
+        // Refresh the transactions and account data
+        await fetchTransactions();
+        await fetchAccount();
+        await refreshAccounts();
+      } else {
+        alert(`Failed to delete transaction: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error deleting transaction:", error);
+      alert("Failed to delete transaction. Please try again.");
+    }
+  };
   
   // Credit card state
   const [creditCardMetrics, setCreditCardMetrics] = useState<CreditCardMetrics | null>(null);
@@ -1085,6 +1110,14 @@ export const AccountTransactionsPage: React.FC = () => {
                           aria-label="Edit transaction"
                         >
                           Edit
+                        </button>
+                        <button
+                          className="text-red-600 hover:underline"
+                          onClick={() => handleDeleteTransaction(line)}
+                          type="button"
+                          aria-label="Delete transaction"
+                        >
+                          Delete
                         </button>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button

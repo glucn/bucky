@@ -774,36 +774,38 @@ class DatabaseService {
     // Income
     if (transactionType === "income") {
       if (userAccountSubtype === AccountSubtype.Asset) {
-        userLine.amount = Math.abs(amount); // Debit asset (increase)
-        counterpartyLine.amount = -Math.abs(amount); // Credit counterparty
+        userLine.amount = amount; // Debit asset (increase) - positive amount increases asset
+        counterpartyLine.amount = -amount; // Credit counterparty
       } else {
-        userLine.amount = -Math.abs(amount); // Credit liability (decrease)
-        counterpartyLine.amount = Math.abs(amount); // Debit counterparty
+        userLine.amount = -amount; // Credit liability (decrease) - positive amount decreases liability
+        counterpartyLine.amount = amount; // Debit counterparty
       }
     }
     // Expense
     else if (transactionType === "expense") {
       if (userAccountSubtype === AccountSubtype.Asset) {
-        userLine.amount = -Math.abs(amount); // Credit asset (decrease)
-        counterpartyLine.amount = Math.abs(amount); // Debit counterparty
+        userLine.amount = -amount; // Credit asset (decrease) - positive amount decreases asset, negative amount (refund) increases asset
+        counterpartyLine.amount = amount; // Debit counterparty - positive amount increases expense, negative amount (refund) decreases expense
       } else {
-        userLine.amount = Math.abs(amount); // Debit liability (increase)
-        counterpartyLine.amount = -Math.abs(amount); // Credit counterparty
+        userLine.amount = amount; // Debit liability (increase) - positive amount increases liability, negative amount (refund) decreases liability
+        counterpartyLine.amount = -amount; // Credit counterparty
       }
     }
     // Transfer
     else if (transactionType === "transfer") {
       // Asset to Asset, Asset to Liability, Liability to Asset, Liability to Liability
       // Outflow from user account, inflow to counterparty
+      // For transfers, we always use absolute value since direction is determined by from/to accounts
+      const absAmount = Math.abs(amount);
       if (userAccountSubtype === AccountSubtype.Asset) {
-        userLine.amount = -Math.abs(amount); // Credit asset (decrease)
+        userLine.amount = -absAmount; // Credit asset (decrease)
       } else {
-        userLine.amount = Math.abs(amount); // Debit liability (increase)
+        userLine.amount = absAmount; // Debit liability (increase)
       }
       if (counterpartyAccountSubtype === AccountSubtype.Asset) {
-        counterpartyLine.amount = Math.abs(amount); // Debit asset (increase)
+        counterpartyLine.amount = absAmount; // Debit asset (increase)
       } else {
-        counterpartyLine.amount = -Math.abs(amount); // Credit liability (decrease)
+        counterpartyLine.amount = -absAmount; // Credit liability (decrease)
       }
     }
 
@@ -890,7 +892,7 @@ class DatabaseService {
         console.warn("[createJournalEntry] Skipped: Amount is required for regular transactions", { amount: data.amount });
         return { skipped: true, reason: "Amount is required for regular transactions" };
       }
-      const roundedAmount = Math.round(Math.abs(data.amount) * 100) / 100;
+      const roundedAmount = Math.round(data.amount * 100) / 100;
 
       // Improved deduplication logic
       // Only check for duplicates if this is an import operation or if explicitly requested
@@ -2258,7 +2260,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
 
     if (!fromLine || !toLine) throw new Error("Could not find both sides of transaction");
 
-    const roundedAmount = Math.round(Math.abs(data.amount) * 100) / 100;
+    const roundedAmount = Math.round(data.amount * 100) / 100;
 
     // Fetch both accounts to get subtypes and currency
     const [fromAccount, toAccount] = await Promise.all([
