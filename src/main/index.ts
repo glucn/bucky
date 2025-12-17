@@ -451,6 +451,21 @@ function setupIpcHandlers() {
         }
 
         try {
+          // Determine transaction type based on account types
+          const fromAccount = allAccounts.find(acc => acc.id === fromAccountId);
+          const toAccount = allAccounts.find(acc => acc.id === toAccountId);
+          
+          let transactionType: "income" | "expense" | "transfer" = "transfer";
+          
+          if (fromAccount && toAccount) {
+            if (fromAccount.type === "user" && toAccount.type === "category") {
+              transactionType = toAccount.subtype === "asset" ? "income" : "expense";
+            } else if (fromAccount.type === "category" && toAccount.type === "user") {
+              transactionType = fromAccount.subtype === "asset" ? "expense" : "income";
+            }
+            // If both are user accounts, it remains "transfer"
+          }
+
           const result = await databaseService.createJournalEntry({
             date: tx.date,
             postingDate: tx.postingDate,
@@ -458,6 +473,7 @@ function setupIpcHandlers() {
             description: tx.description,
             fromAccountId,
             toAccountId,
+            transactionType,
           });
 
           if (result.skipped) {
@@ -796,18 +812,22 @@ function setupIpcHandlers() {
           return { success: false, error: "No credit card properties found" };
         }
 
-        const [availableCredit, utilization, minimumPayment, balance] = await Promise.all([
+        const [availableCredit, utilization, minimumPayment, rawBalance] = await Promise.all([
           creditCardService.getAvailableCredit(accountId),
           creditCardService.getCreditUtilization(accountId),
           creditCardService.getMinimumPayment(accountId),
           databaseService.getAccountBalance(accountId),
         ]);
 
+        // For liability accounts, negate the balance for user-friendly display
+        // (negative database balance = debt owed, should display as positive)
+        const displayBalance = -rawBalance;
+
         return {
           success: true,
           metrics: {
             accountId,
-            currentBalance: balance,
+            currentBalance: displayBalance,
             availableCredit,
             creditUtilization: utilization,
             minimumPayment,

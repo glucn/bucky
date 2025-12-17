@@ -787,25 +787,28 @@ class DatabaseService {
         userLine.amount = -amount; // Credit asset (decrease) - positive amount decreases asset, negative amount (refund) increases asset
         counterpartyLine.amount = amount; // Debit counterparty - positive amount increases expense, negative amount (refund) decreases expense
       } else {
-        userLine.amount = amount; // Debit liability (increase) - positive amount increases liability, negative amount (refund) decreases liability
-        counterpartyLine.amount = -amount; // Credit counterparty
+        userLine.amount = -amount; // Credit liability (increase debt) - positive amount increases debt, negative amount (refund) decreases debt
+        counterpartyLine.amount = amount; // Debit counterparty
       }
     }
     // Transfer
     else if (transactionType === "transfer") {
-      // Asset to Asset, Asset to Liability, Liability to Asset, Liability to Liability
-      // Outflow from user account, inflow to counterparty
-      // For transfers, we always use absolute value since direction is determined by from/to accounts
+      // For transfers, the "user" account is the FROM account, "counterparty" is the TO account
+      // Money flows FROM user account TO counterparty account
       const absAmount = Math.abs(amount);
+      
+      // FROM account (user account) - money going out
       if (userAccountSubtype === AccountSubtype.Asset) {
-        userLine.amount = -absAmount; // Credit asset (decrease)
+        userLine.amount = -absAmount; // Credit asset (decrease balance)
       } else {
-        userLine.amount = absAmount; // Debit liability (increase)
+        userLine.amount = absAmount; // Debit liability (increase debt - borrowing money)
       }
+      
+      // TO account (counterparty account) - money coming in  
       if (counterpartyAccountSubtype === AccountSubtype.Asset) {
-        counterpartyLine.amount = absAmount; // Debit asset (increase)
+        counterpartyLine.amount = absAmount; // Debit asset (increase balance)
       } else {
-        counterpartyLine.amount = -absAmount; // Credit liability (decrease)
+        counterpartyLine.amount = absAmount; // Debit liability (decrease debt - receiving payment)
       }
     }
 

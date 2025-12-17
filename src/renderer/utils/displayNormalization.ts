@@ -97,8 +97,10 @@ export function normalizeTransactionAmount(
       // Asset accounts: preserve sign (negative = spending, positive = income)
       return amount;
     } else if (accountSubtype === AccountSubtype.Liability) {
-      // Liability accounts: preserve sign (positive = spending, negative = payment)
-      return amount;
+      // Liability accounts: invert sign for user-friendly display
+      // Database: negative = spending (credit), positive = payment (debit)
+      // Display: positive = spending, negative = payment (like bank statements)
+      return -amount;
     }
   }
 
@@ -187,9 +189,10 @@ export function isIncomeTransaction(
     return amount > 0;
   }
 
-  // For liability accounts (credit cards): negative amounts are payments (income to the account)
+  // For liability accounts (credit cards): positive amounts are payments (debt reduction)
+  // Note: Database stores expenses as negative, payments as positive for liability accounts
   if (accountType === AccountType.User && accountSubtype === AccountSubtype.Liability) {
-    return amount < 0;
+    return amount > 0;
   }
 
   // For income categories: all amounts are income
@@ -222,9 +225,10 @@ export function isExpenseTransaction(
     return amount < 0;
   }
 
-  // For liability accounts (credit cards): positive amounts are spending (expenses)
+  // For liability accounts (credit cards): negative amounts are spending (expenses)
+  // Note: Database stores expenses as negative, payments as positive for liability accounts
   if (accountType === AccountType.User && accountSubtype === AccountSubtype.Liability) {
-    return amount > 0;
+    return amount < 0;
   }
 
   // For expense categories: all amounts are expenses

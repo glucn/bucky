@@ -411,9 +411,49 @@ export const AccountTransactionsPage: React.FC = () => {
     const otherLine = line.entry.lines.find((l: any) => l.accountId !== line.accountId);
     if (!otherLine) return null;
 
-    const fromAccountId = line.amount < 0 ? line.accountId : otherLine.accountId;
-    const toAccountId = line.amount < 0 ? otherLine.accountId : line.accountId;
-    const amount = Math.abs(line.amount);
+    // Get account information to determine transfer direction correctly
+    const currentAccount = accounts.find(acc => acc.id === line.accountId);
+    const otherAccount = accounts.find(acc => acc.id === otherLine.accountId);
+    
+    if (!currentAccount || !otherAccount) return null;
+
+    // Determine the actual transfer direction based on account types and amounts
+    // For transfers, the "from" account should be the one that decreases (loses money)
+    // and the "to" account should be the one that increases (receives money)
+    
+    let fromAccountId: string;
+    let toAccountId: string;
+    let amount: number;
+    
+    // For asset accounts: negative amount means money going out (from), positive means money coming in (to)
+    // For liability accounts: positive amount means debt increasing (money coming in), negative means debt decreasing (money going out)
+    
+    if (currentAccount.subtype === 'asset') {
+      if (line.amount < 0) {
+        // Current asset account is losing money (from account)
+        fromAccountId = line.accountId;
+        toAccountId = otherLine.accountId;
+        amount = Math.abs(line.amount);
+      } else {
+        // Current asset account is receiving money (to account)
+        fromAccountId = otherLine.accountId;
+        toAccountId = line.accountId;
+        amount = Math.abs(line.amount);
+      }
+    } else {
+      // For liability accounts (like credit cards), the logic is different
+      if (line.amount > 0) {
+        // Liability increasing (debt going up) means money was received/spent (current account is receiving)
+        fromAccountId = otherLine.accountId;
+        toAccountId = line.accountId;
+        amount = Math.abs(line.amount);
+      } else {
+        // Liability decreasing (debt going down) means payment was made (current account is paying)
+        fromAccountId = line.accountId;
+        toAccountId = otherLine.accountId;
+        amount = Math.abs(line.amount);
+      }
+    }
 
     return {
       id: line.id,
@@ -759,7 +799,7 @@ export const AccountTransactionsPage: React.FC = () => {
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="text-sm font-medium text-gray-500 mb-1">Current Balance</div>
               <div className="text-2xl font-bold text-gray-900">
-                {formatTransactionCurrency(Math.abs(creditCardMetrics.currentBalance), account?.currency || "USD")}
+                {formatTransactionCurrency(creditCardMetrics.currentBalance, account?.currency || "USD")}
               </div>
             </div>
             
