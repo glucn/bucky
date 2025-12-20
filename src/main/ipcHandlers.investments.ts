@@ -32,6 +32,8 @@ export function setupInvestmentIpcHandlers() {
   ipcMain.removeHandler("get-portfolio-performance");
   ipcMain.removeHandler("validate-import-data");
   ipcMain.removeHandler("import-investment-transactions");
+  ipcMain.removeHandler("add-trade-cash-account");
+  ipcMain.removeHandler("get-trade-cash-account");
 
   // Portfolio Management
   ipcMain.handle("get-investment-portfolios", async () => {
@@ -475,6 +477,41 @@ export function setupInvestmentIpcHandlers() {
         return { success: true, ...result };
       } catch (error) {
         console.error("Error importing investment transactions:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  // Multi-currency trade cash management
+  ipcMain.handle(
+    "add-trade-cash-account",
+    async (_, { portfolioId, currency }: { portfolioId: string; currency: string }) => {
+      console.log("Handling add-trade-cash-account request:", { portfolioId, currency });
+      try {
+        const account = await investmentService.addTradeCashAccount(portfolioId, currency);
+        return { success: true, account };
+      } catch (error) {
+        console.error("Error adding trade cash account:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "get-trade-cash-account",
+    async (_, { portfolioId, currency }: { portfolioId: string; currency: string }) => {
+      console.log("Handling get-trade-cash-account request:", { portfolioId, currency });
+      try {
+        const account = await investmentService.getTradeCashAccount(portfolioId, currency);
+        return { success: true, account };
+      } catch (error) {
+        console.error("Error getting trade cash account:", error);
         return {
           success: false,
           error: error instanceof Error ? error.message : "Unknown error",

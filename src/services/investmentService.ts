@@ -79,6 +79,73 @@ class InvestmentService {
   }
 
   /**
+   * Add an additional trade cash account to an existing investment portfolio.
+   * Creates a new trade cash Account in the specified currency and links it to the portfolio.
+   * 
+   * @param portfolioId - ID of the portfolio AccountGroup
+   * @param currency - Currency for the new trade cash account
+   * @returns The created trade cash account
+   * 
+   * Requirements: Multi-currency support
+   */
+  public async addTradeCashAccount(
+    portfolioId: string,
+    currency: string
+  ): Promise<any> {
+    // Validate that the portfolio exists
+    const portfolio = await databaseService.getAccountGroupById(portfolioId);
+    if (!portfolio) {
+      throw new Error("Portfolio not found");
+    }
+
+    // Check if a trade cash account for this currency already exists in the portfolio
+    const existingTradeCash = await this.getTradeCashAccount(portfolioId, currency);
+    if (existingTradeCash) {
+      throw new Error(`Trade cash account for ${currency} already exists in this portfolio`);
+    }
+
+    // Create the trade cash Account
+    const tradeCashAccount = await databaseService.createAccount({
+      name: `Trade Cash - ${portfolio.name} (${currency})`,
+      type: AccountType.User,
+      subtype: AccountSubtype.Asset,
+      currency,
+    });
+
+    // Link the trade cash account to the group
+    await databaseService.addAccountToGroup(tradeCashAccount.id, portfolioId);
+
+    return tradeCashAccount;
+  }
+
+  /**
+   * Get a specific trade cash account by portfolio and currency.
+   * 
+   * @param portfolioId - ID of the portfolio AccountGroup
+   * @param currency - Currency code to search for
+   * @returns The trade cash account, or null if not found
+   */
+  public async getTradeCashAccount(
+    portfolioId: string,
+    currency: string
+  ): Promise<any | null> {
+    // Get the portfolio group with its accounts
+    const portfolio = await databaseService.getAccountGroupById(portfolioId);
+    if (!portfolio) {
+      throw new Error("Portfolio not found");
+    }
+
+    // Search through the portfolio's accounts for a trade cash account with matching currency
+    for (const account of portfolio.accounts) {
+      if (account.name.includes("Trade Cash") && account.currency === currency) {
+        return account;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Get all investment portfolios.
    * Returns all AccountGroups with accountType "user" that contain investment-related accounts.
    * An account group is considered an investment portfolio if it contains:
@@ -133,12 +200,13 @@ class InvestmentService {
    * Get all accounts in a portfolio, separated into trade cash and security accounts.
    * 
    * @param portfolioId - ID of the portfolio AccountGroup
-   * @returns Object containing trade cash account and array of security accounts with investment properties
+   * @returns Object containing trade cash accounts and array of security accounts with investment properties
    * 
-   * Requirements: 1.4, 1.5
+   * Requirements: 1.4, 1.5, Multi-currency support
    */
   public async getPortfolioAccounts(portfolioId: string): Promise<{
-    tradeCash: any | null;
+    tradeCash: any | null; // Legacy: first trade cash account for backward compatibility
+    tradeCashAccounts: any[]; // New: all trade cash accounts
     securities: any[];
   }> {
     // Get the portfolio group with its accounts
@@ -149,7 +217,7 @@ class InvestmentService {
     }
 
     // Separate trade cash from security accounts
-    let tradeCash: any | null = null;
+    const tradeCashAccounts: any[] = [];
     const securities: any[] = [];
 
     for (const account of portfolio.accounts) {
@@ -163,13 +231,14 @@ class InvestmentService {
         // This is a security account
         securities.push(accountWithProps);
       } else if (account.name.includes("Trade Cash")) {
-        // This is the trade cash account
-        tradeCash = account;
+        // This is a trade cash account
+        tradeCashAccounts.push(account);
       }
     }
 
     return {
-      tradeCash,
+      tradeCash: tradeCashAccounts.length > 0 ? tradeCashAccounts[0] : null, // Legacy compatibility
+      tradeCashAccounts,
       securities,
     };
   }
@@ -1866,7 +1935,7 @@ class InvestmentService {
    * @param portfolioId - ID of the portfolio AccountGroup
    * @returns Portfolio value summary
    * 
-   * Requirements: 13.2, 15.3
+   * Requirements: 13.2, 15.3, Multi-currency support
    */
   public async getPortfolioValue(
     portfolioId: string
@@ -1876,13 +1945,18 @@ class InvestmentService {
     totalUnrealizedGain: number;
     totalUnrealizedGainPercent: number;
     cashBalance: number;
+    cashBalancesByCurrency: Record<string, number>;
   }> {
-    // Get trade cash Account balance
+    // Get all trade cash Account balances
     const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
     
     let cashBalance = 0;
-    if (portfolioAccounts.tradeCash) {
-      cashBalance = await databaseService.getAccountBalance(portfolioAccounts.tradeCash.id);
+    const cashBalancesByCurrency: Record<string, number> = {};
+    
+    for (const tradeCashAccount of portfolioAccounts.tradeCashAccounts) {
+      const balance = await databaseService.getAccountBalance(tradeCashAccount.id);
+      cashBalance += balance; // Note: This assumes all currencies have same value, which is not ideal
+      cashBalancesByCurrency[tradeCashAccount.currency] = balance;
     }
 
     // Get all Security Account balances (cost basis) and position market values
@@ -1922,6 +1996,7 @@ class InvestmentService {
       totalUnrealizedGain: fixPrecision(totalUnrealizedGain),
       totalUnrealizedGainPercent: fixPrecision(totalUnrealizedGainPercent),
       cashBalance: fixPrecision(cashBalance),
+      cashBalancesByCurrency,
     };
   }
 

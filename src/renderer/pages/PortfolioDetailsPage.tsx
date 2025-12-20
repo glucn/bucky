@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { TransactionEntryModal } from "../components/TransactionEntryModal";
 import { useAccounts } from "../context/AccountsContext";
+import { formatMultiCurrencyBalances } from "../utils/currencyUtils";
 
 interface Position {
   tickerSymbol: string;
@@ -20,6 +21,7 @@ interface PortfolioValue {
   totalUnrealizedGain: number;
   totalUnrealizedGainPercent: number;
   cashBalance: number;
+  cashBalancesByCurrency: Record<string, number>;
 }
 
 type TransactionType = 'buy' | 'sell' | 'dividend' | 'dividend_reinvest' | 'interest' | 'fee' | 'cash_deposit' | 'cash_withdrawal';
@@ -36,6 +38,9 @@ export const PortfolioDetailsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [selectedTransactionType, setSelectedTransactionType] = useState<TransactionType>('buy');
+  const [showAddCashModal, setShowAddCashModal] = useState(false);
+  const [newCashCurrency, setNewCashCurrency] = useState("USD");
+  const [addingCash, setAddingCash] = useState(false);
 
   useEffect(() => {
     if (portfolioId) {
@@ -101,6 +106,32 @@ export const PortfolioDetailsPage: React.FC = () => {
     await fetchPortfolioData();
     // Refresh accounts context so sidebar and other components update
     await refreshAccounts();
+  };
+
+  const handleAddTradeCashAccount = async () => {
+    if (!portfolioId) return;
+
+    setAddingCash(true);
+    try {
+      const result = await window.electron.ipcRenderer.invoke(
+        "add-trade-cash-account",
+        { portfolioId, currency: newCashCurrency }
+      );
+      
+      if (result.success) {
+        setShowAddCashModal(false);
+        setNewCashCurrency("USD");
+        await fetchPortfolioData();
+        await refreshAccounts();
+      } else {
+        alert(`Failed to add trade cash account: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error adding trade cash account:", error);
+      alert("Failed to add trade cash account");
+    } finally {
+      setAddingCash(false);
+    }
   };
 
   const formatCurrency = (amount: number): string => {
@@ -173,9 +204,18 @@ export const PortfolioDetailsPage: React.FC = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Cash Balance</p>
-                <p className="text-xl font-semibold text-gray-900">
-                  {formatCurrency(portfolioValue.cashBalance)}
-                </p>
+                <div className="text-xl font-semibold text-gray-900">
+                  {portfolioValue.cashBalancesByCurrency && Object.keys(portfolioValue.cashBalancesByCurrency).length > 1 ? (
+                    <div>
+                      <div>{formatCurrency(portfolioValue.cashBalance)}</div>
+                      <div className="text-sm text-gray-600 font-normal">
+                        {formatMultiCurrencyBalances(portfolioValue.cashBalancesByCurrency)}
+                      </div>
+                    </div>
+                  ) : (
+                    formatCurrency(portfolioValue.cashBalance)
+                  )}
+                </div>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Securities Value</p>
@@ -308,7 +348,7 @@ export const PortfolioDetailsPage: React.FC = () => {
       {/* Quick Actions */}
       <div className="bg-white shadow rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <button
             onClick={() => {
               setSelectedTransactionType('buy');
@@ -345,6 +385,12 @@ export const PortfolioDetailsPage: React.FC = () => {
           >
             Deposit/Withdraw Cash
           </button>
+          <button
+            onClick={() => setShowAddCashModal(true)}
+            className="px-4 py-3 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Add Currency
+          </button>
         </div>
       </div>
 
@@ -356,6 +402,73 @@ export const PortfolioDetailsPage: React.FC = () => {
         onTransactionCreated={handleTransactionCreated}
         initialTransactionType={selectedTransactionType}
       />
+
+      {/* Add Trade Cash Account Modal */}
+      {showAddCashModal && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Add Trade Cash Account
+            </h3>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Currency
+              </label>
+              <select
+                value={newCashCurrency}
+                onChange={(e) => setNewCashCurrency(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                autoFocus
+              >
+                <option value="USD">USD - US Dollar</option>
+                <option value="EUR">EUR - Euro</option>
+                <option value="GBP">GBP - British Pound</option>
+                <option value="JPY">JPY - Japanese Yen</option>
+                <option value="CAD">CAD - Canadian Dollar</option>
+                <option value="AUD">AUD - Australian Dollar</option>
+                <option value="CHF">CHF - Swiss Franc</option>
+                <option value="CNY">CNY - Chinese Yuan</option>
+                <option value="INR">INR - Indian Rupee</option>
+                <option value="KRW">KRW - South Korean Won</option>
+                <option value="BRL">BRL - Brazilian Real</option>
+                <option value="MXN">MXN - Mexican Peso</option>
+                <option value="SEK">SEK - Swedish Krona</option>
+                <option value="NOK">NOK - Norwegian Krone</option>
+                <option value="DKK">DKK - Danish Krone</option>
+                <option value="PLN">PLN - Polish Zloty</option>
+                <option value="TRY">TRY - Turkish Lira</option>
+                <option value="THB">THB - Thai Baht</option>
+                <option value="ZAR">ZAR - South African Rand</option>
+                <option value="RUB">RUB - Russian Ruble</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                This will create a new trade cash account in the selected currency for this portfolio.
+              </p>
+            </div>
+            
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowAddCashModal(false);
+                  setNewCashCurrency("USD");
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                disabled={addingCash}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddTradeCashAccount}
+                className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+                disabled={addingCash}
+              >
+                {addingCash ? "Adding..." : "Add Account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

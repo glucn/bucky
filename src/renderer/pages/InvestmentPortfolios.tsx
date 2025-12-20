@@ -25,6 +25,7 @@ export const InvestmentPortfolios: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPortfolioName, setNewPortfolioName] = useState("");
+  const [newPortfolioCurrency, setNewPortfolioCurrency] = useState("USD");
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -68,12 +69,13 @@ export const InvestmentPortfolios: React.FC = () => {
     try {
       const result = await window.electron.ipcRenderer.invoke(
         "create-investment-portfolio",
-        { name: newPortfolioName, currency: "USD" }
+        { name: newPortfolioName, currency: newPortfolioCurrency }
       );
       
       if (result.success) {
         setShowCreateModal(false);
         setNewPortfolioName("");
+        setNewPortfolioCurrency("USD");
         await fetchPortfolios();
         // Refresh accounts context so sidebar and other components update
         await refreshAccounts();
@@ -216,11 +218,47 @@ export const InvestmentPortfolios: React.FC = () => {
               />
             </div>
             
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Trade Cash Currency
+              </label>
+              <select
+                value={newPortfolioCurrency}
+                onChange={(e) => setNewPortfolioCurrency(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="USD">USD - US Dollar</option>
+                <option value="EUR">EUR - Euro</option>
+                <option value="GBP">GBP - British Pound</option>
+                <option value="JPY">JPY - Japanese Yen</option>
+                <option value="CAD">CAD - Canadian Dollar</option>
+                <option value="AUD">AUD - Australian Dollar</option>
+                <option value="CHF">CHF - Swiss Franc</option>
+                <option value="CNY">CNY - Chinese Yuan</option>
+                <option value="INR">INR - Indian Rupee</option>
+                <option value="KRW">KRW - South Korean Won</option>
+                <option value="BRL">BRL - Brazilian Real</option>
+                <option value="MXN">MXN - Mexican Peso</option>
+                <option value="SEK">SEK - Swedish Krona</option>
+                <option value="NOK">NOK - Norwegian Krone</option>
+                <option value="DKK">DKK - Danish Krone</option>
+                <option value="PLN">PLN - Polish Zloty</option>
+                <option value="TRY">TRY - Turkish Lira</option>
+                <option value="THB">THB - Thai Baht</option>
+                <option value="ZAR">ZAR - South African Rand</option>
+                <option value="RUB">RUB - Russian Ruble</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                This will be the currency for the initial trade cash account. You can add additional trade cash accounts in different currencies later.
+              </p>
+            </div>
+            
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
                   setShowCreateModal(false);
                   setNewPortfolioName("");
+                  setNewPortfolioCurrency("USD");
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
                 disabled={creating}

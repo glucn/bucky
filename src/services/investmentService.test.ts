@@ -591,7 +591,7 @@ describe("InvestmentService - Buy Transactions", () => {
           pricePerShare: 150,
           date: "2024-01-15",
         })
-      ).rejects.toThrow("Trade cash account not found in portfolio");
+      ).rejects.toThrow("Trade Cash account not found in portfolio");
     });
   });
 });
@@ -1660,7 +1660,7 @@ describe("InvestmentService - Cash Management", () => {
 
       await expect(
         investmentService.depositCash(group.id, 1000, checkingAccount.id, "2024-01-15")
-      ).rejects.toThrow("trade cash account not found in portfolio");
+      ).rejects.toThrow("Trade cash account not found in portfolio");
     });
 
     it("should handle multiple deposits correctly", async () => {
@@ -1886,7 +1886,7 @@ describe("InvestmentService - Cash Management", () => {
 
       await expect(
         investmentService.withdrawCash(group.id, 1000, checkingAccount.id, "2024-01-15")
-      ).rejects.toThrow("trade cash account not found in portfolio");
+      ).rejects.toThrow("Trade cash account not found in portfolio");
     });
 
     it("should handle multiple withdrawals correctly", async () => {
