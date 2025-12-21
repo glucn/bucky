@@ -372,7 +372,7 @@ class InvestmentService {
     if (typeof params.quantity !== "number" || params.quantity <= 0) {
       throw new Error("Quantity must be a positive number");
     }
-    if (typeof params.pricePerShare !== "number" || params.pricePerShare <= 0) {
+    if (typeof params.pricePerShare !== "number" || params.pricePerShare < 0) {
       throw new Error("Price per share must be a positive number");
     }
     if (!params.date || params.date.trim() === "") {
@@ -622,7 +622,7 @@ class InvestmentService {
     if (typeof params.quantity !== "number" || params.quantity <= 0) {
       throw new Error("Quantity must be a positive number");
     }
-    if (typeof params.pricePerShare !== "number" || params.pricePerShare <= 0) {
+    if (typeof params.pricePerShare !== "number" || params.pricePerShare < 0) {
       throw new Error("Price per share must be a positive number");
     }
     if (!params.date || params.date.trim() === "") {

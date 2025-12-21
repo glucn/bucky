@@ -474,7 +474,7 @@ describe("InvestmentService - Buy Transactions", () => {
           portfolioId: group.id,
           tickerSymbol: "AAPL",
           quantity: 10,
-          pricePerShare: 0,
+          pricePerShare: -1,
           date: "2024-01-15",
         })
       ).rejects.toThrow("Price per share must be a positive number");
@@ -924,7 +924,7 @@ describe("InvestmentService - Sell Transactions", () => {
           portfolioId: group.id,
           tickerSymbol: "AAPL",
           quantity: 10,
-          pricePerShare: 0,
+          pricePerShare: -1,
           date: "2024-01-15",
         })
       ).rejects.toThrow("Price per share must be a positive number");
