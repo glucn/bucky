@@ -1,0 +1,56 @@
+# Bucky Agent Handoff Guide
+
+## Project Summary
+
+Bucky is a personal bookkeeping desktop app built with Electron, React, and Prisma on SQLite. It follows double-entry accounting rules in the data layer while presenting user-friendly balances and transactions in the UI.
+
+## Architecture Overview
+
+- **Electron main process**: IPC handlers live in `src/main/index.ts` and domain-specific handler modules (e.g. `src/main/ipcHandlers.investments.ts`).
+- **Renderer (React)**: UI in `src/renderer/pages` and reusable components in `src/renderer/components`.
+- **Services**: Business logic in `src/services/*.ts` (e.g. `database.ts`, `investmentService.ts`, `creditCardService.ts`).
+- **Shared types/utilities**: `src/shared` and `src/renderer/utils`.
+- **Database**: Prisma schema in `prisma/schema.prisma`, SQLite databases in `prisma/dev.db` and `prisma/test.db`.
+
+## Key Workflows
+
+- **Database access**: Always go through `databaseService` (`src/services/database.ts`) unless you need raw Prisma access.
+- **IPC**: Renderer calls `window.electron.*` methods defined in `src/preload.ts`; handlers registered in `src/main/index.ts`.
+- **Transactions**: Stored as `JournalEntry` + `JournalLine`. UI uses display normalization utilities to render intuitive signs.
+
+## Environment & Database Separation
+
+- Test vs dev databases are selected automatically:
+  - Test: `VITEST=true` or `NODE_ENV=test` -> `prisma/test.db`
+  - Dev: `NODE_ENV=development` or unset -> `prisma/dev.db`
+- Database initialization and resets are handled in `src/services/database.test.setup.ts` and `src/services/database.test.utils.ts`.
+
+## Commands
+
+- Dev app: `npm run dev`
+- Tests: `npm test`
+- Test DB reset: `npm run test:db:reset`
+- Test DB schema sync: `npm run test:db:push`
+- Dev DB reset: `npm run dev:db:reset`
+
+## Feature Entry Points
+
+- **Account grouping**: `src/services/database.ts`, `src/main/index.ts`, `src/renderer/components/GroupedAccountsList.tsx`
+- **Category management**: `src/renderer/pages/Categories.tsx`, `src/renderer/components/CategoryModal.tsx`
+- **Credit cards**: `src/services/creditCardService.ts`, `src/renderer/components/CreditCardSetupModal.tsx`
+- **Investments**: `src/services/investmentService.ts`, `src/main/ipcHandlers.investments.ts`, `src/renderer/pages/InvestmentPortfolios.tsx`
+- **Transaction display normalization**: `src/renderer/utils/displayNormalization.ts`
+- **Transaction display order**: `src/services/database.ts` (move up/down), `src/renderer/pages/AccountTransactionsPage.tsx`
+
+## Testing
+
+- Unit/property tests live in `src/**/*.test.ts(x)`.
+- Investment features are covered by multiple service tests (e.g. `src/services/investmentService.*.test.ts`).
+- Database isolation and transaction ordering have dedicated tests.
+
+## Conventions
+
+- Use `AccountType`/`AccountSubtype` enums from `src/shared/accountTypes.ts`.
+- Use `parseToStandardDate` from `src/shared/dateUtils.ts` for date normalization.
+- Normalize display amounts with `normalizeTransactionAmount` and `normalizeAccountBalance`.
+- Keep changes in sync across service, IPC, and UI layers when introducing new features.
