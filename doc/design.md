@@ -16,6 +16,8 @@ Prisma provides typed access to a SQLite database. The renderer communicates via
 - **Presentation normalization**: Display transformations are handled in `src/renderer/utils/displayNormalization.ts` without mutating stored values.
 - **Service-first logic**: Complex domain flows are centralized in services (investment, credit card, database).
 - **Environment-aware database**: `databaseService` chooses `dev.db` vs `test.db` automatically.
+- **Offline-first UX**: Data entry and imports never require online connections to banks.
+- **User-controlled enrichment**: External metadata is fetched on demand and cached locally.
 
 ## Data Model Highlights
 
@@ -30,6 +32,32 @@ Prisma provides typed access to a SQLite database. The renderer communicates via
 - Renderer calls `window.electron.*` APIs defined in `src/preload.ts`.
 - Main process handlers are registered in `src/main/index.ts` (and feature modules).
 - Services perform validation, persistence, and domain calculations.
+
+## MVP UX Principles
+
+- **Simple onboarding**: Wizard is skippable and never blocks basic app usage.
+- **Account-based opening balances**: Opening balances are set per account and recorded as explicit entries.
+- **Backfill-safe imports**: Older transactions adjust opening balances automatically to keep current balances intact.
+- **Transparent categorization**: Auto-categorization only applies on exact matches and is always visible.
+- **Placeholder-friendly imports**: A single placeholder account captures unmapped counterparts for later cleanup.
+
+## Data Enrichment Strategy
+
+- Use read-only external APIs for asset metadata, price history, and FX rates.
+- Cache enrichment data locally for historical reporting and offline use.
+- MVP uses manual, on-demand refresh; background sync is a post-MVP enhancement.
+
+## Security & Privacy
+
+- App lock is required at every launch.
+- Database encryption at rest is mandatory for MVP readiness.
+- Hybrid key management: OS keychain by default with optional user passphrase.
+
+## Reporting & Insights
+
+- MVP provides a simple overview: net worth, income/expense trend, investment allocation.
+- Drilldowns use preset ranges plus custom date pickers.
+- Placeholder transactions are included in reports as "Unassigned" for MVP.
 
 ## Testing Strategy
 
