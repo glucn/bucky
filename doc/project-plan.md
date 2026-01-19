@@ -18,7 +18,7 @@
 
 ## MVP Scope
 
-- [ ] F-008 offline-import-foundation (CSV import with mapping, preview, duplicate detection, placeholder account)
+- [ ] F-008 offline-import-foundation (CSV import with mapping, preview, duplicate detection, uncategorized fallback)
 - [ ] F-009 opening-balance-workflow (per-account opening balance + backfill adjustment)
 - [ ] F-010 placeholder-cleanup (inline reassignment with original account name display)
 - [ ] F-011 auto-categorization (rule inference with exact-match transparency)
@@ -44,6 +44,7 @@
 - Background metadata refresh for asset class, price history, and FX rates.
 - Portfolio allocation drilldowns with filters (portfolio/asset class/currency).
 - Optional CSV mapping suggestions and saved mappings.
+- System placeholder account for unmatched counter-accounts.
 - App Store readiness (signing, notarization, sandbox compliance).
 
 ### Phase 2 - Mid-Term Enhancements
