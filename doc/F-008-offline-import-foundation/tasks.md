@@ -20,7 +20,7 @@
   - Acceptance: asset account inflow uses `Uncategorized Income`.
   - Acceptance: asset account outflow uses `Uncategorized Expense`.
   - Acceptance: liability account polarity routes correctly.
-- [ ] 4. Service tests: credit/debit mapping amount calculation
+- [x] 4. Service tests: credit/debit mapping amount calculation
   - Acceptance: credit/debit columns map to amount = credit - debit.
   - Acceptance: single amount column maps directly.
 - [ ] 5. Renderer tests: mapping validation with optional description

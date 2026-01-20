@@ -4,6 +4,7 @@ import { useAccounts } from "../context/AccountsContext";
 import { normalizeTransactionAmount } from "../utils/displayNormalization";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { formatCurrencyAmount } from "../utils/currencyUtils";
+import { resolveImportAmount } from "../utils/importMapping";
 
 interface ImportTransactionsWizardProps {
   accountId: string;
@@ -162,34 +163,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
           }
         });
 
-        // Calculate merged amount
-        let amount: number | string = "";
-        const creditField = fieldMap["credit"];
-        const debitField = fieldMap["debit"];
-        const amountField = fieldMap["amount"];
-
-        // Try to parse credit/debit if mapped
-        let creditVal: number | null = null;
-        let debitVal: number | null = null;
-        if (creditField && row[creditField] !== undefined && row[creditField] !== "") {
-          const v = parseFloat((row[creditField] + "").replace(/,/g, ""));
-          if (!isNaN(v)) creditVal = v;
-        }
-        if (debitField && row[debitField] !== undefined && row[debitField] !== "") {
-          const v = parseFloat((row[debitField] + "").replace(/,/g, ""));
-          if (!isNaN(v)) debitVal = v;
-        }
-
-        if (creditVal !== null || debitVal !== null) {
-          // If both present, subtract debit from credit
-          amount = (creditVal || 0) - (debitVal || 0);
-        } else if (amountField && row[amountField] !== undefined && row[amountField] !== "") {
-          // Fallback to single amount column
-          const v = parseFloat((row[amountField] + "").replace(/,/g, ""));
-          amount = !isNaN(v) ? v : row[amountField];
-        } else {
-          amount = "";
-        }
+        const amount = resolveImportAmount(row, fieldMap);
 
         mapped["amount"] = amount;
         mapped["fromAccountId"] = accountId;
