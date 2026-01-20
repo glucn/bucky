@@ -54,3 +54,11 @@ Bucky is a personal bookkeeping desktop app built with Electron, React, and Pris
 - Use `parseToStandardDate` from `src/shared/dateUtils.ts` for date normalization.
 - Normalize display amounts with `normalizeTransactionAmount` and `normalizeAccountBalance`.
 - Keep changes in sync across service, IPC, and UI layers when introducing new features.
+
+## Notes
+- Avoid runtime failures by keeping server-only code (for example, Prisma, filesystem) out of client components; use server actions or API routes.
+- Before starting a task, think through all required changes and tests. If the scope is large, pause and align on breaking it down; otherwise complete the task end-to-end.
+- If a file grows large (e.g., a monolithic page component), consider breaking it into smaller modules or components.
+- For tasks tracked in docs, commit when done without asking; for ad-hoc investigations/fixes, confirm outcome before committing.
+- Verify changes (build/test or relevant check) before stating work is done.
+- After completing a task, run required tests and commit changes without requesting confirmation.
