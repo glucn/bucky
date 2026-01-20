@@ -6,6 +6,30 @@ export const isImportMappingValid = (fieldMap: Record<string, string>): boolean 
   return Boolean(fieldMap["date"]) && hasAmountMapping(fieldMap);
 };
 
+export const updateImportPreviewRow = <T extends Record<string, unknown>>(
+  rows: T[],
+  rowIndex: number,
+  field: string,
+  value: string
+): T[] => {
+  return rows.map((row, index) => {
+    if (index !== rowIndex) return row;
+
+    if (field === "amount") {
+      const parsed = value === "" ? "" : Number(value);
+      return {
+        ...row,
+        [field]: Number.isNaN(parsed) ? value : parsed,
+      };
+    }
+
+    return {
+      ...row,
+      [field]: value,
+    };
+  });
+};
+
 export const resolveImportAmount = (
   row: Record<string, unknown>,
   fieldMap: Record<string, string>

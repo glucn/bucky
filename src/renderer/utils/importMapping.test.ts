@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { resolveImportAmount, isImportMappingValid } from "./importMapping";
+import {
+  resolveImportAmount,
+  isImportMappingValid,
+  updateImportPreviewRow,
+} from "./importMapping";
 
 describe("isImportMappingValid", () => {
   it("requires date and amount mapping", () => {
@@ -23,6 +27,26 @@ describe("isImportMappingValid", () => {
       })
     ).toBe(true);
     expect(isImportMappingValid({ date: "Date", amount: "Amount" })).toBe(true);
+  });
+});
+
+describe("updateImportPreviewRow", () => {
+  it("updates a specific row field", () => {
+    const rows = [{ date: "2025-01-01" }, { date: "2025-01-02" }];
+
+    const updated = updateImportPreviewRow(rows, 1, "date", "2025-01-03");
+
+    expect(updated).toHaveLength(2);
+    expect(updated[0].date).toBe("2025-01-01");
+    expect(updated[1].date).toBe("2025-01-03");
+  });
+
+  it("coerces amount values to numbers", () => {
+    const rows = [{ amount: "" }];
+
+    const updated = updateImportPreviewRow(rows, 0, "amount", "12.50");
+
+    expect(updated[0].amount).toBe(12.5);
   });
 });
 

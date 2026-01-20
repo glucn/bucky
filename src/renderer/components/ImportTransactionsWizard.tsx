@@ -1,10 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Papa from "papaparse";
 import { useAccounts } from "../context/AccountsContext";
 import { normalizeTransactionAmount } from "../utils/displayNormalization";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { formatCurrencyAmount } from "../utils/currencyUtils";
-import { resolveImportAmount, isImportMappingValid } from "../utils/importMapping";
+import {
+  resolveImportAmount,
+  isImportMappingValid,
+  updateImportPreviewRow,
+} from "../utils/importMapping";
 
 interface ImportTransactionsWizardProps {
   accountId: string;
@@ -98,6 +102,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
 
   // Step 3: Preview
   const [importPreview, setImportPreview] = useState<any[]>([]);
+  const previewEditableFields = ["date", "amount", "description", "toAccountId", "category"];
 
   // Step 4: Confirm
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -166,6 +171,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
 
         mapped["amount"] = amount;
         mapped["fromAccountId"] = accountId;
+        mapped["category"] = "";
         return mapped;
       });
       setImportPreview(preview);
@@ -186,7 +192,16 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
     try {
       // Assume backend returns { imported: number, skipped: number, usedDefaultAccountDetails: [], autoCreatedCategories: [] }
       const result = await window.electron.ipcRenderer.invoke("import-transactions", {
-        transactions: importPreview,
+        transactions: importPreview.map((row) => {
+          if (!row.category) {
+            return row;
+          }
+
+          return {
+            ...row,
+            toAccountId: row.category,
+          };
+        }),
       });
       console.log("[ImportTransactionsWizard] Import result:", result);
       setIsSubmitting(false);
@@ -408,19 +423,20 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
               <table className="min-w-full text-xs">
                 <thead>
                   <tr>
-                    {/* Only show preview for date, postingDate, amount, description, toAccountId */}
-                    {["date", "postingDate", "amount", "description", "toAccountId"].map((field) => (
+                    {/* Only show preview for date, postingDate, amount, description, toAccountId, category */}
+                    {["date", "postingDate", "amount", "description", "toAccountId", "category"].map((field) => (
                       <th key={field} className="px-2 py-1 border-b">
                         {systemFieldMeta[field]?.label || field}
                       </th>
                     ))}
+
                   </tr>
                 </thead>
                 <tbody>
                   {importPreview.map((row, i) => {
                     // Normalize the amount for display
-                    const rawAmount = typeof row.amount === 'number' ? row.amount : parseFloat(row.amount);
-                    const normalizedAmount = !isNaN(rawAmount) 
+                    const rawAmount = typeof row.amount === "number" ? row.amount : parseFloat(row.amount);
+                    const normalizedAmount = !isNaN(rawAmount)
                       ? normalizeTransactionAmount(
                           rawAmount,
                           accountType,
@@ -428,16 +444,38 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                           true
                         )
                       : rawAmount;
-                    
+
                     return (
                       <tr key={i}>
-                        {["date", "postingDate", "amount", "description", "toAccountId"].map((field) => (
-                          <td key={field} className="px-2 py-1 border-b">
-                            {field === "amount" && !isNaN(rawAmount)
-                              ? formatCurrencyAmount(normalizedAmount, currentAccount?.currency || 'USD')
-                              : row[field]}
-                          </td>
-                        ))}
+                        {["date", "postingDate", "amount", "description", "toAccountId", "category"].map(
+                          (field) => (
+                            <td key={field} className="px-2 py-1 border-b">
+                              {previewEditableFields.includes(field) ? (
+                                <input
+                                  className="w-full border border-gray-200 rounded px-1 py-0.5 text-xs"
+                                  value={row[field] ?? ""}
+                                  onChange={(event) => {
+                                    setImportPreview((prev) =>
+                                      updateImportPreviewRow(
+                                        prev,
+                                        i,
+                                        field,
+                                        event.target.value
+                                      )
+                                    );
+                                  }}
+                                />
+                              ) : field === "amount" && !isNaN(rawAmount) ? (
+                                formatCurrencyAmount(
+                                  normalizedAmount,
+                                  currentAccount?.currency || "USD"
+                                )
+                              ) : (
+                                row[field]
+                              )}
+                            </td>
+                          )
+                        )}
                       </tr>
                     );
                   })}

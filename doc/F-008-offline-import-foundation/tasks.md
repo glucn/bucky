@@ -26,7 +26,7 @@
 - [x] 5. Renderer tests: mapping validation with optional description
   - Acceptance: mapping step allows missing description.
   - Acceptance: preview renders without description mapped.
-- [ ] 6. Renderer tests: preview editability
+- [x] 6. Renderer tests: preview editability
   - Acceptance: edits to Date/Amount/Description/Category/Counter-account update payload.
 - [ ] 7. Renderer tests: duplicate flagging and confirm flow
   - Acceptance: duplicate rows are flagged prior to import.
