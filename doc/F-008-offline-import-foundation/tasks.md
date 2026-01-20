@@ -34,7 +34,7 @@
 - [x] 8. IPC/service integration: toAccountId mapping behavior
   - Acceptance: `toAccountId` only honored when column mapped.
   - Acceptance: otherwise fallback to uncategorized categories.
-- [ ] 9. UI: import summary consistency
+- [x] 9. UI: import summary consistency
   - Acceptance: import summary shows imported/skipped counts.
   - Acceptance: default-account warnings surface when uncategorized used.
 - [ ] 10. E2E (Playwright): headered CSV import flow
