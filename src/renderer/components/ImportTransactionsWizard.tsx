@@ -8,6 +8,10 @@ import {
   resolveImportAmount,
   isImportMappingValid,
   updateImportPreviewRow,
+  getImportDuplicateKey,
+  applyDuplicateFlags,
+  applyForceDuplicate,
+  filterOutDuplicateRows,
 } from "../utils/importMapping";
 
 interface ImportTransactionsWizardProps {
@@ -87,6 +91,9 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<{ imported: number; skipped: number } | null>(null);
+  const [duplicateRows, setDuplicateRows] = useState<number[]>([]);
+  const [duplicatePreview, setDuplicatePreview] = useState<any[]>([]);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
 
   // Step 1: Upload
   const [csvRows, setCsvRows] = useState<any[]>([]);
@@ -149,6 +156,28 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
     setFieldMap((prev) => ({ ...prev, [systemField]: csvField }));
   };
 
+  const computeDuplicates = (rows: any[]) => {
+    const duplicates: number[] = [];
+    const seen = new Map<string, number>();
+
+    rows.forEach((row, index) => {
+      const key = getImportDuplicateKey(row);
+      if (!key.trim()) {
+        return;
+      }
+
+      const existingIndex = seen.get(key);
+      if (existingIndex !== undefined) {
+        duplicates.push(index, existingIndex);
+        return;
+      }
+
+      seen.set(key, index);
+    });
+
+    return Array.from(new Set(duplicates));
+  };
+
   // Generate preview when mapping or rows change
   useEffect(() => {
     if (csvRows.length && Object.keys(fieldMap).length) {
@@ -175,6 +204,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
         return mapped;
       });
       setImportPreview(preview);
+      setDuplicateRows(computeDuplicates(preview));
     }
   }, [csvRows, fieldMap, accountId]);
 
@@ -184,7 +214,24 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
   const canProceedFromPreview = importPreview.length > 0;
 
   // Import transactions
-  const handleImport = async () => {
+  const buildImportPayload = (rows: any[]) =>
+    rows.map((row, index) => {
+      const base = {
+        ...row,
+        index,
+      };
+
+      if (!row.category) {
+        return base;
+      }
+
+      return {
+        ...base,
+        toAccountId: row.category,
+      };
+    });
+
+  const handleImport = async (rows: any[] = importPreview) => {
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -192,16 +239,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
     try {
       // Assume backend returns { imported: number, skipped: number, usedDefaultAccountDetails: [], autoCreatedCategories: [] }
       const result = await window.electron.ipcRenderer.invoke("import-transactions", {
-        transactions: importPreview.map((row) => {
-          if (!row.category) {
-            return row;
-          }
-
-          return {
-            ...row,
-            toAccountId: row.category,
-          };
-        }),
+        transactions: buildImportPayload(rows),
       });
       console.log("[ImportTransactionsWizard] Import result:", result);
       setIsSubmitting(false);
@@ -219,7 +257,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
       if (result && typeof result.imported === "number" && typeof result.skipped === "number") {
         setImportSummary({ imported: result.imported, skipped: result.skipped });
       } else {
-        setImportSummary({ imported: importPreview.length, skipped: 0 });
+        setImportSummary({ imported: rows.length, skipped: 0 });
       }
       if (result && Array.isArray(result.usedDefaultAccountDetails)) {
         setUsedDefaultAccountDetails(result.usedDefaultAccountDetails);
@@ -231,6 +269,17 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
       } else {
         setAutoCreatedCategories([]);
       }
+      if (result && Array.isArray(result.skippedDetails)) {
+        const duplicates = result.skippedDetails
+          .filter((detail: any) => detail.reason === "potential_duplicate")
+          .map((detail: any) => detail.index)
+          .filter((index: any) => typeof index === "number");
+        if (duplicates.length > 0) {
+          setDuplicateRows(duplicates);
+          setDuplicatePreview(rows);
+          setShowDuplicateDialog(true);
+        }
+      }
       // Do not close immediately; let user see summary
       // onSuccess();
       // onClose();
@@ -238,12 +287,11 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
       setIsSubmitting(false);
       // Show backend error if available
       if (err && err.error) {
-        setError(`Import failed: ${err.error}`);
-      } else if (err && err.message) {
-        setError(`Failed to import transactions: ${err.message}`);
+        setError(err.error);
       } else {
-        setError("Failed to import transactions");
+        setError("Import failed. Please check your data and try again.");
       }
+      console.error("[ImportTransactionsWizard] Import error:", err);
     }
   };
 
@@ -685,6 +733,38 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                     </div>
                   </div>
                 )}
+                {showDuplicateDialog && (
+                  <div className="mt-4 p-3 border-2 border-orange-500 bg-orange-50 rounded shadow">
+                    <div className="font-bold text-orange-900 mb-2">
+                      Potential duplicates detected
+                    </div>
+                    <div className="text-orange-900 mb-2 text-sm">
+                      We detected {duplicateRows.length} potential duplicates. Choose how you want to proceed.
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        className="px-3 py-1 text-sm bg-orange-600 text-white rounded"
+                        onClick={() => {
+                          const rowsToImport = applyForceDuplicate(duplicatePreview, duplicateRows);
+                          setShowDuplicateDialog(false);
+                          handleImport(rowsToImport);
+                        }}
+                      >
+                        Import duplicates
+                      </button>
+                      <button
+                        className="px-3 py-1 text-sm bg-white border border-orange-400 text-orange-700 rounded"
+                        onClick={() => {
+                          const rowsToImport = filterOutDuplicateRows(duplicatePreview, duplicateRows);
+                          setShowDuplicateDialog(false);
+                          handleImport(rowsToImport);
+                        }}
+                      >
+                        Skip duplicates
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="mt-2">
                   <button
                     className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"
@@ -725,7 +805,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
               {!success && (
                 <button
                   className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"
-                  onClick={handleImport}
+                  onClick={() => handleImport()}
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? "Importing..." : "Confirm & Import"}

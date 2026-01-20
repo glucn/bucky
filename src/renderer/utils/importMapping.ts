@@ -6,6 +6,44 @@ export const isImportMappingValid = (fieldMap: Record<string, string>): boolean 
   return Boolean(fieldMap["date"]) && hasAmountMapping(fieldMap);
 };
 
+export const getImportDuplicateKey = (row: Record<string, unknown>): string => {
+  return `${row.date ?? ""}|${row.amount ?? ""}|${row.description ?? ""}`;
+};
+
+export const applyDuplicateFlags = <T extends Record<string, unknown>>(
+  rows: T[],
+  duplicateIndexes: number[]
+): Array<T & { isDuplicate: boolean }> => {
+  const duplicates = new Set(duplicateIndexes);
+  return rows.map((row, index) => ({
+    ...row,
+    isDuplicate: duplicates.has(index),
+  }));
+};
+
+export const applyForceDuplicate = <T extends Record<string, unknown>>(
+  rows: T[],
+  duplicateIndexes: number[]
+): T[] => {
+  const duplicates = new Set(duplicateIndexes);
+  return rows.map((row, index) =>
+    duplicates.has(index)
+      ? {
+          ...row,
+          forceDuplicate: true,
+        }
+      : row
+  );
+};
+
+export const filterOutDuplicateRows = <T extends Record<string, unknown>>(
+  rows: T[],
+  duplicateIndexes: number[]
+): T[] => {
+  const duplicates = new Set(duplicateIndexes);
+  return rows.filter((_, index) => !duplicates.has(index));
+};
+
 export const updateImportPreviewRow = <T extends Record<string, unknown>>(
   rows: T[],
   rowIndex: number,

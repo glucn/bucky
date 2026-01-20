@@ -3,6 +3,10 @@ import {
   resolveImportAmount,
   isImportMappingValid,
   updateImportPreviewRow,
+  getImportDuplicateKey,
+  applyDuplicateFlags,
+  applyForceDuplicate,
+  filterOutDuplicateRows,
 } from "./importMapping";
 
 describe("isImportMappingValid", () => {
@@ -47,6 +51,47 @@ describe("updateImportPreviewRow", () => {
     const updated = updateImportPreviewRow(rows, 0, "amount", "12.50");
 
     expect(updated[0].amount).toBe(12.5);
+  });
+});
+
+describe("getImportDuplicateKey", () => {
+  it("builds a stable key from date amount description", () => {
+    const row = { date: "2025-02-01", amount: 10, description: "Coffee" };
+
+    expect(getImportDuplicateKey(row)).toBe("2025-02-01|10|Coffee");
+  });
+});
+
+describe("applyDuplicateFlags", () => {
+  it("marks duplicates based on indexes", () => {
+    const rows = [{ id: 1 }, { id: 2 }];
+
+    const flagged = applyDuplicateFlags(rows, [1]);
+
+    expect(flagged[0].isDuplicate).toBe(false);
+    expect(flagged[1].isDuplicate).toBe(true);
+  });
+});
+
+describe("applyForceDuplicate", () => {
+  it("adds forceDuplicate for selected indexes", () => {
+    const rows = [{ id: 1 }, { id: 2 }];
+
+    const updated = applyForceDuplicate(rows, [0]);
+
+    expect("forceDuplicate" in updated[0]).toBe(true);
+    expect("forceDuplicate" in updated[1]).toBe(false);
+  });
+});
+
+describe("filterOutDuplicateRows", () => {
+  it("removes rows by duplicate index", () => {
+    const rows = [{ id: 1 }, { id: 2 }];
+
+    const filtered = filterOutDuplicateRows(rows, [1]);
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].id).toBe(1);
   });
 });
 

@@ -407,6 +407,7 @@ function setupIpcHandlers() {
             fromAccountId,
             toAccountId,
             transactionType,
+            forceDuplicate: tx.forceDuplicate,
           });
 
           if (result.skipped) {
@@ -418,6 +419,8 @@ function setupIpcHandlers() {
               fromAccountId,
               toAccountId,
               reason: result.reason,
+              index: typeof tx.index === "number" ? tx.index : undefined,
+              existing: result.existing,
             });
             console.log("[IMPORT] Skipped transaction (reason):", result.reason, tx);
           } else {

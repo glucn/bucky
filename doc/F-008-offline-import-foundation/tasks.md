@@ -28,7 +28,7 @@
   - Acceptance: preview renders without description mapped.
 - [x] 6. Renderer tests: preview editability
   - Acceptance: edits to Date/Amount/Description/Category/Counter-account update payload.
-- [ ] 7. Renderer tests: duplicate flagging and confirm flow
+- [x] 7. Renderer tests: duplicate flagging and confirm flow
   - Acceptance: duplicate rows are flagged prior to import.
   - Acceptance: confirm flow retries import with `forceDuplicate`.
 - [ ] 8. IPC/service integration: toAccountId mapping behavior
