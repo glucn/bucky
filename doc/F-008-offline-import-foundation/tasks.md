@@ -16,7 +16,7 @@
   - Acceptance: posting date before transaction date is rejected.
   - Acceptance: posting date same or after is accepted.
   - Acceptance: empty posting date is accepted.
-- [ ] 3. Service tests: uncategorized fallback routing
+- [x] 3. Service tests: uncategorized fallback routing
   - Acceptance: asset account inflow uses `Uncategorized Income`.
   - Acceptance: asset account outflow uses `Uncategorized Expense`.
   - Acceptance: liability account polarity routes correctly.

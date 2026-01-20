@@ -200,7 +200,7 @@ describe('Transaction Import - Date Format Support', () => {
     expect(lines?.[1].currency).toBe('CAD');
   });
 
-  it('should skip strict duplicates during import', async () => {
+  it('should flag strict duplicates and allow explicit import', async () => {
     const accounts = await databaseService.getAccounts();
     const cashAccount = accounts.find(acc => acc.name === 'Cash');
     const bankAccount = accounts.find(acc => acc.name === 'Bank');
@@ -228,6 +228,18 @@ describe('Transaction Import - Date Format Support', () => {
 
     expect(second.skipped).toBe(true);
     expect(second.reason).toBe('potential_duplicate');
+
+    const third = await databaseService.createJournalEntry({
+      date: '2025-10-26',
+      description: 'Duplicate test',
+      fromAccountId: cashAccount!.id,
+      toAccountId: bankAccount!.id,
+      amount: 100,
+      forceDuplicate: true,
+    });
+
+    expect(third.skipped).toBe(false);
+    expect(third.entry).toBeDefined();
   });
 
   it('should allow non-exact matches during import', async () => {
