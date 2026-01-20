@@ -23,7 +23,7 @@
 - [x] 4. Service tests: credit/debit mapping amount calculation
   - Acceptance: credit/debit columns map to amount = credit - debit.
   - Acceptance: single amount column maps directly.
-- [ ] 5. Renderer tests: mapping validation with optional description
+- [x] 5. Renderer tests: mapping validation with optional description
   - Acceptance: mapping step allows missing description.
   - Acceptance: preview renders without description mapped.
 - [ ] 6. Renderer tests: preview editability

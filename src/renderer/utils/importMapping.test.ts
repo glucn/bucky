@@ -1,5 +1,30 @@
 import { describe, it, expect } from "vitest";
-import { resolveImportAmount } from "./importMapping";
+import { resolveImportAmount, isImportMappingValid } from "./importMapping";
+
+describe("isImportMappingValid", () => {
+  it("requires date and amount mapping", () => {
+    expect(isImportMappingValid({})).toBe(false);
+    expect(isImportMappingValid({ date: "Date" })).toBe(false);
+    expect(isImportMappingValid({ amount: "Amount" })).toBe(false);
+    expect(isImportMappingValid({ date: "Date", amount: "Amount" })).toBe(true);
+  });
+
+  it("accepts credit or debit mapping as amount", () => {
+    expect(isImportMappingValid({ date: "Date", credit: "Credit" })).toBe(true);
+    expect(isImportMappingValid({ date: "Date", debit: "Debit" })).toBe(true);
+  });
+
+  it("does not require description", () => {
+    expect(
+      isImportMappingValid({
+        date: "Date",
+        amount: "Amount",
+        description: "Description",
+      })
+    ).toBe(true);
+    expect(isImportMappingValid({ date: "Date", amount: "Amount" })).toBe(true);
+  });
+});
 
 describe("resolveImportAmount", () => {
   it("uses credit minus debit when both provided", () => {

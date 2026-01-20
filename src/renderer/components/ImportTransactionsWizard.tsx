@@ -4,7 +4,7 @@ import { useAccounts } from "../context/AccountsContext";
 import { normalizeTransactionAmount } from "../utils/displayNormalization";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { formatCurrencyAmount } from "../utils/currencyUtils";
-import { resolveImportAmount } from "../utils/importMapping";
+import { resolveImportAmount, isImportMappingValid } from "../utils/importMapping";
 
 interface ImportTransactionsWizardProps {
   accountId: string;
@@ -24,7 +24,6 @@ const systemFields = [
 const requiredFields = [
   "date",
   "amount",
-  "description",
 ];
 
 // User-friendly labels and help text for each system field
@@ -175,16 +174,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
 
   // Validation for navigation
   const canProceedFromUpload = csvRows.length > 0 && csvHeaders.length > 0;
-  // Only require mapping for requiredFields, not toAccountId
-  // For amount, allow either "amount" or ("credit" or "debit") to be mapped
-  const hasAmountMapping =
-    !!fieldMap["amount"] ||
-    !!fieldMap["credit"] ||
-    !!fieldMap["debit"];
-  const canProceedFromMap =
-    requiredFields.every((field) =>
-      field === "amount" ? hasAmountMapping : !!fieldMap[field]
-    );
+  const canProceedFromMap = isImportMappingValid(fieldMap);
   const canProceedFromPreview = importPreview.length > 0;
 
   // Import transactions

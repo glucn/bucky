@@ -1,3 +1,11 @@
+export const hasAmountMapping = (fieldMap: Record<string, string>): boolean => {
+  return Boolean(fieldMap["amount"] || fieldMap["credit"] || fieldMap["debit"]);
+};
+
+export const isImportMappingValid = (fieldMap: Record<string, string>): boolean => {
+  return Boolean(fieldMap["date"]) && hasAmountMapping(fieldMap);
+};
+
 export const resolveImportAmount = (
   row: Record<string, unknown>,
   fieldMap: Record<string, string>
