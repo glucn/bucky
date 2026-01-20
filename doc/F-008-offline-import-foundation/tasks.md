@@ -9,9 +9,10 @@
 ## Tasks
 
 - [x] 1. Service tests: duplicate detection strict match
-  - Acceptance: exact date+description+accounts+amount+currency skips with reason `potential_duplicate`.
+  - Acceptance: exact date+description+accounts+amount+currency flags `potential_duplicate`.
   - Acceptance: non-exact match imports successfully.
-- [ ] 2. Service tests: posting date validation
+  - Acceptance: duplicate can be imported with `forceDuplicate`.
+- [x] 2. Service tests: posting date validation
   - Acceptance: posting date before transaction date is rejected.
   - Acceptance: posting date same or after is accepted.
   - Acceptance: empty posting date is accepted.
@@ -27,8 +28,9 @@
   - Acceptance: preview renders without description mapped.
 - [ ] 6. Renderer tests: preview editability
   - Acceptance: edits to Date/Amount/Description/Category/Counter-account update payload.
-- [ ] 7. Renderer tests: duplicate flagging in preview
+- [ ] 7. Renderer tests: duplicate flagging and confirm flow
   - Acceptance: duplicate rows are flagged prior to import.
+  - Acceptance: confirm flow retries import with `forceDuplicate`.
 - [ ] 8. IPC/service integration: toAccountId mapping behavior
   - Acceptance: `toAccountId` only honored when column mapped.
   - Acceptance: otherwise fallback to uncategorized categories.

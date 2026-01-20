@@ -39,7 +39,8 @@
 
 - Implemented in `createJournalEntry`.
 - Strict match: transaction date + description + from/to accounts + amounts + currency.
-- Skips duplicates unless `forceDuplicate` is used.
+- Service returns `potential_duplicate` unless `forceDuplicate` is used.
+- Import UI should mirror `TransferModal` by surfacing the duplicate and letting users confirm a retry with `forceDuplicate`.
 
 ## MVP Design Decisions
 
@@ -69,7 +70,7 @@
 
 - Import date parsing (existing coverage in `src/services/database.import.test.ts`).
 - Posting date must be >= transaction date (existing coverage).
-- Duplicate detection should skip strict duplicates and allow non-matches.
+- Duplicate detection flags strict duplicates and allows explicit overrides.
 - Credit/debit mapping results in correct amount sign.
 - Missing counter-account uses `Uncategorized Income/Expense` categories.
 
