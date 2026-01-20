@@ -8,7 +8,7 @@
 
 ## Tasks
 
-- [ ] 1. Service tests: duplicate detection strict match
+- [x] 1. Service tests: duplicate detection strict match
   - Acceptance: exact date+description+accounts+amount+currency skips with reason `potential_duplicate`.
   - Acceptance: non-exact match imports successfully.
 - [ ] 2. Service tests: posting date validation

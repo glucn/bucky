@@ -199,4 +199,64 @@ describe('Transaction Import - Date Format Support', () => {
     expect(lines?.[0].currency).toBe('CAD');
     expect(lines?.[1].currency).toBe('CAD');
   });
+
+  it('should skip strict duplicates during import', async () => {
+    const accounts = await databaseService.getAccounts();
+    const cashAccount = accounts.find(acc => acc.name === 'Cash');
+    const bankAccount = accounts.find(acc => acc.name === 'Bank');
+
+    expect(cashAccount).toBeDefined();
+    expect(bankAccount).toBeDefined();
+
+    const first = await databaseService.createJournalEntry({
+      date: '2025-10-26',
+      description: 'Duplicate test',
+      fromAccountId: cashAccount!.id,
+      toAccountId: bankAccount!.id,
+      amount: 100,
+    });
+
+    expect(first.skipped).toBe(false);
+
+    const second = await databaseService.createJournalEntry({
+      date: '2025-10-26',
+      description: 'Duplicate test',
+      fromAccountId: cashAccount!.id,
+      toAccountId: bankAccount!.id,
+      amount: 100,
+    });
+
+    expect(second.skipped).toBe(true);
+    expect(second.reason).toBe('potential_duplicate');
+  });
+
+  it('should allow non-exact matches during import', async () => {
+    const accounts = await databaseService.getAccounts();
+    const cashAccount = accounts.find(acc => acc.name === 'Cash');
+    const bankAccount = accounts.find(acc => acc.name === 'Bank');
+
+    expect(cashAccount).toBeDefined();
+    expect(bankAccount).toBeDefined();
+
+    const first = await databaseService.createJournalEntry({
+      date: '2025-10-26',
+      description: 'Duplicate test',
+      fromAccountId: cashAccount!.id,
+      toAccountId: bankAccount!.id,
+      amount: 100,
+    });
+
+    expect(first.skipped).toBe(false);
+
+    const second = await databaseService.createJournalEntry({
+      date: '2025-10-26',
+      description: 'Duplicate test',
+      fromAccountId: cashAccount!.id,
+      toAccountId: bankAccount!.id,
+      amount: 101,
+    });
+
+    expect(second.skipped).toBe(false);
+    expect(second.entry).toBeDefined();
+  });
 });
