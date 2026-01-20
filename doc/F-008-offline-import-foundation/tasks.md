@@ -31,7 +31,7 @@
 - [x] 7. Renderer tests: duplicate flagging and confirm flow
   - Acceptance: duplicate rows are flagged prior to import.
   - Acceptance: confirm flow retries import with `forceDuplicate`.
-- [ ] 8. IPC/service integration: toAccountId mapping behavior
+- [x] 8. IPC/service integration: toAccountId mapping behavior
   - Acceptance: `toAccountId` only honored when column mapped.
   - Acceptance: otherwise fallback to uncategorized categories.
 - [ ] 9. UI: import summary consistency

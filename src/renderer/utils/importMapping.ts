@@ -44,6 +44,43 @@ export const filterOutDuplicateRows = <T extends Record<string, unknown>>(
   return rows.filter((_, index) => !duplicates.has(index));
 };
 
+export const buildImportPayload = <T extends Record<string, unknown>>(
+  rows: T[]
+): Array<T & { index: number }> =>
+  rows.map((row, index) => {
+    const payload: T & { index: number } = {
+      ...row,
+      index,
+    };
+
+    if (row.category) {
+      return {
+        ...payload,
+        toAccountId: row.category,
+      };
+    }
+
+    return payload;
+  });
+
+export const resolveImportSummary = (
+  result: { imported?: number; skipped?: number } | null,
+  fallbackCount: number
+): { imported: number; skipped: number } => {
+  if (result && typeof result.imported === "number" && typeof result.skipped === "number") {
+    return {
+      imported: result.imported,
+      skipped: result.skipped,
+    };
+  }
+
+  return { imported: fallbackCount, skipped: 0 };
+};
+
+export const shouldShowDefaultAccountWarning = (details: unknown[]): boolean => {
+  return Array.isArray(details) && details.length > 0;
+};
+
 export const updateImportPreviewRow = <T extends Record<string, unknown>>(
   rows: T[],
   rowIndex: number,

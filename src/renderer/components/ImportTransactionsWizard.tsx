@@ -12,6 +12,9 @@ import {
   applyDuplicateFlags,
   applyForceDuplicate,
   filterOutDuplicateRows,
+  buildImportPayload,
+  resolveImportSummary,
+  shouldShowDefaultAccountWarning,
 } from "../utils/importMapping";
 
 interface ImportTransactionsWizardProps {
@@ -214,23 +217,6 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
   const canProceedFromPreview = importPreview.length > 0;
 
   // Import transactions
-  const buildImportPayload = (rows: any[]) =>
-    rows.map((row, index) => {
-      const base = {
-        ...row,
-        index,
-      };
-
-      if (!row.category) {
-        return base;
-      }
-
-      return {
-        ...base,
-        toAccountId: row.category,
-      };
-    });
-
   const handleImport = async (rows: any[] = importPreview) => {
     setIsSubmitting(true);
     setError(null);
@@ -254,11 +240,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
         setSuccess(null);
         setError("Import failed. Please check your data and try again.");
       }
-      if (result && typeof result.imported === "number" && typeof result.skipped === "number") {
-        setImportSummary({ imported: result.imported, skipped: result.skipped });
-      } else {
-        setImportSummary({ imported: rows.length, skipped: 0 });
-      }
+      setImportSummary(resolveImportSummary(result, rows.length));
       if (result && Array.isArray(result.usedDefaultAccountDetails)) {
         setUsedDefaultAccountDetails(result.usedDefaultAccountDetails);
       } else {
@@ -693,7 +675,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                     </div>
                   </div>
                 )}
-                {usedDefaultAccountDetails && usedDefaultAccountDetails.length > 0 && (
+                {shouldShowDefaultAccountWarning(usedDefaultAccountDetails) && (
                   <div className="mt-4 p-3 border-2 border-yellow-500 bg-yellow-50 rounded shadow">
                     <div className="font-bold text-yellow-900 mb-2 flex items-center gap-2">
                       <span role="img" aria-label="Warning">⚠️</span>

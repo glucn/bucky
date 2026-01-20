@@ -7,6 +7,9 @@ import {
   applyDuplicateFlags,
   applyForceDuplicate,
   filterOutDuplicateRows,
+  buildImportPayload,
+  resolveImportSummary,
+  shouldShowDefaultAccountWarning,
 } from "./importMapping";
 
 describe("isImportMappingValid", () => {
@@ -92,6 +95,49 @@ describe("filterOutDuplicateRows", () => {
 
     expect(filtered).toHaveLength(1);
     expect(filtered[0].id).toBe(1);
+  });
+});
+
+describe("buildImportPayload", () => {
+  it("injects index and preserves category mapping", () => {
+    const rows = [
+      { date: "2025-01-01", amount: 5, category: "Groceries" },
+      { date: "2025-01-02", amount: 3 },
+    ];
+
+    const payload = buildImportPayload(rows);
+
+    const firstPayload = payload[0] as { index: number; toAccountId?: string };
+    const secondPayload = payload[1] as { index: number; toAccountId?: string };
+
+    expect(firstPayload.index).toBe(0);
+    expect(firstPayload.toAccountId).toBe("Groceries");
+    expect(secondPayload.index).toBe(1);
+    expect(secondPayload.toAccountId).toBeUndefined();
+  });
+});
+
+describe("resolveImportSummary", () => {
+  it("prefers explicit summary values", () => {
+    const summary = resolveImportSummary({ imported: 2, skipped: 1 }, 3);
+
+    expect(summary).toEqual({ imported: 2, skipped: 1 });
+  });
+
+  it("falls back to default counts", () => {
+    const summary = resolveImportSummary(null, 4);
+
+    expect(summary).toEqual({ imported: 4, skipped: 0 });
+  });
+});
+
+describe("shouldShowDefaultAccountWarning", () => {
+  it("returns true when details exist", () => {
+    expect(shouldShowDefaultAccountWarning([{ id: 1 }])).toBe(true);
+  });
+
+  it("returns false for empty details", () => {
+    expect(shouldShowDefaultAccountWarning([])).toBe(false);
   });
 });
 
