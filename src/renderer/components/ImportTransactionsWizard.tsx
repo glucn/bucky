@@ -121,9 +121,22 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
   const autoMapFields = (headers: string[]) => {
     const map: { [key: string]: string } = {};
     systemFields.forEach((field) => {
-      const match = headers.find((h) =>
-        h.toLowerCase().includes(field.toLowerCase())
-      );
+      // Convert camelCase to space-separated words for better matching
+      const fieldWords = field.replace(/([A-Z])/g, ' $1').toLowerCase().trim();
+      const match = headers.find((h) => {
+        const headerLower = h.toLowerCase();
+        // Try exact field name match first
+        if (headerLower.includes(field.toLowerCase())) {
+          return true;
+        }
+        // Try space-separated words match
+        if (headerLower.includes(fieldWords)) {
+          return true;
+        }
+        // Try individual words
+        const words = fieldWords.split(' ');
+        return words.every(word => headerLower.includes(word));
+      });
       if (match) map[field] = match;
     });
     return map;
