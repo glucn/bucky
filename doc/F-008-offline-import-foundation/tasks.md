@@ -40,7 +40,7 @@
 - [x] 10. E2E (Playwright): headered CSV import flow
   - Acceptance: import wizard completes end-to-end.
   - Acceptance: edited preview values persist in transactions list.
-- [ ] 11. E2E (Playwright): headerless CSV mapping
+- [x] 11. E2E (Playwright): headerless CSV mapping
   - Acceptance: manual mapping with generated headers works and import succeeds.
 - [ ] 12. E2E (Playwright): duplicate warning
   - Acceptance: second import surfaces duplicates and skipped count > 0.

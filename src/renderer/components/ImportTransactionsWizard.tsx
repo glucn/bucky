@@ -288,6 +288,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
             <div className="flex items-center mt-4">
               <input
                 id="csv-has-header-row"
+                data-testid="csv-has-header-row"
                 type="checkbox"
                 checked={csvHasHeaderRow}
                 onChange={(e) => setCsvHasHeaderRow(e.target.checked)}
