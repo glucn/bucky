@@ -37,7 +37,7 @@
 - [x] 9. UI: import summary consistency
   - Acceptance: import summary shows imported/skipped counts.
   - Acceptance: default-account warnings surface when uncategorized used.
-- [ ] 10. E2E (Playwright): headered CSV import flow
+- [x] 10. E2E (Playwright): headered CSV import flow
   - Acceptance: import wizard completes end-to-end.
   - Acceptance: edited preview values persist in transactions list.
 - [ ] 11. E2E (Playwright): headerless CSV mapping
