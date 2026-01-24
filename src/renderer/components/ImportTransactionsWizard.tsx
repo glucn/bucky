@@ -811,7 +811,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
         >
           ×
         </button>
-        <h2 className="text-xl font-bold mb-4">Import Transactions from CSV</h2>
+        <h2 className="text-xl font-bold mb-4" data-testid="import-wizard-title">Import Transactions from CSV</h2>
         {/* Stepper */}
         <div className="flex items-center justify-between mb-6">
           {["Upload", "Map & Preview", "Confirm"].map((label, idx) => {

@@ -708,7 +708,7 @@ export const AccountTransactionsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="transactions-page">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">
           Transactions for {account?.name || "Account"}
@@ -775,6 +775,7 @@ export const AccountTransactionsPage: React.FC = () => {
             className="px-4 py-2 bg-primary-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
             onClick={() => setShowImportModal(true)}
             type="button"
+            data-testid="import-transactions-button"
           >
             Import Transactions
           </button>

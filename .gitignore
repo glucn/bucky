@@ -103,3 +103,6 @@ prisma/generated/
 # Test database files
 prisma/test.db
 prisma/test.db-journal
+# Playwright test results
+test-results/
+test-debug*.png
