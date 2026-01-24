@@ -29,6 +29,8 @@ Bucky is a personal bookkeeping desktop app built with Electron, React, and Pris
 
 - Dev app: `npm run dev`
 - Tests: `npm test`
+- E2E tests: `npx playwright test`
+- E2E tests (headed): `npx playwright test --headed`
 - Test DB reset: `npm run test:db:reset`
 - Test DB schema sync: `npm run test:db:push`
 - Dev DB reset: `npm run dev:db:reset`
@@ -45,6 +47,7 @@ Bucky is a personal bookkeeping desktop app built with Electron, React, and Pris
 ## Testing
 
 - Unit/property tests live in `src/**/*.test.ts(x)`.
+- E2E tests live in `tests/e2e/*.spec.ts` using Playwright (see `doc/e2e-testing-guide.md`).
 - Investment features are covered by multiple service tests (e.g. `src/services/investmentService.*.test.ts`).
 - Database isolation and transaction ordering have dedicated tests.
 
@@ -54,6 +57,8 @@ Bucky is a personal bookkeeping desktop app built with Electron, React, and Pris
 - Use `parseToStandardDate` from `src/shared/dateUtils.ts` for date normalization.
 - Normalize display amounts with `normalizeTransactionAmount` and `normalizeAccountBalance`.
 - Keep changes in sync across service, IPC, and UI layers when introducing new features.
+- Add `data-testid` attributes to UI elements that need E2E test targeting.
+- Use descriptive test IDs like `import-wizard-title`, `transactions-page`, `import-transactions-button`.
 
 ## Notes
 - Avoid runtime failures by keeping server-only code (for example, Prisma, filesystem) out of client components; use server actions or API routes.
