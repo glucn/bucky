@@ -21,7 +21,7 @@ module.exports = {
         {
           from: path.join(
             __dirname,
-            "node_modules/@prisma/client/libquery_engine-darwin-arm64.dylib.node"
+            "node_modules/@prisma/engines/libquery_engine-darwin-arm64.dylib.node"
           ),
           to: path.join(
             __dirname,
@@ -29,10 +29,7 @@ module.exports = {
           ),
         },
         {
-          from: path.join(
-            __dirname,
-            "node_modules/@prisma/client/schema.prisma"
-          ),
+          from: path.join(__dirname, "prisma/schema.prisma"),
           to: path.join(__dirname, ".webpack/main/schema.prisma"),
         },
       ],
@@ -40,6 +37,15 @@ module.exports = {
   ],
   externals: {
     "@prisma/client": "commonjs @prisma/client",
+    "electron": "commonjs electron",
+    "fs": "commonjs fs",
+    "path": "commonjs path",
+    "crypto": "commonjs crypto",
+    "os": "commonjs os",
+    "util": "commonjs util",
+    "events": "commonjs events",
+    "stream": "commonjs stream",
+    "buffer": "commonjs buffer",
   },
   output: {
     path: path.join(__dirname, ".webpack/main"),
