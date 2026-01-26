@@ -1,4 +1,4 @@
-import React, { Fragment, useEffect, useState } from "react";
+import React, { Fragment, useEffect, useMemo, useState } from "react";
 import Papa from "papaparse";
 import { useAccounts } from "../context/AccountsContext";
 import { normalizeTransactionAmount } from "../utils/displayNormalization";
@@ -8,7 +8,6 @@ import {
   resolveImportAmount,
   isImportMappingValid,
   getImportDuplicateKey,
-  applyDuplicateFlags,
   applyForceDuplicate,
   filterOutDuplicateRows,
   buildImportPayload,
@@ -66,8 +65,8 @@ const systemFieldMeta: {
     help: "A brief description or memo for the transaction.",
   },
   toAccountId: {
-    label: "To Account",
-    help: "The destination account for transfers. Leave unmapped for non-transfer transactions.",
+    label: "Category / Counter Account",
+    help: "Optional category or counter account name. Leave unmapped for default Uncategorized behavior.",
   },
 };
 
@@ -85,6 +84,15 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
   const currentAccount = accounts.find(acc => acc.id === accountId);
   const accountType = currentAccount?.type as AccountType || AccountType.User;
   const accountSubtype = currentAccount?.subtype as AccountSubtype || AccountSubtype.Asset;
+  const categoryAccounts = accounts.filter(acc => acc.type === AccountType.Category);
+  const categoryNames = useMemo(
+    () => new Set(categoryAccounts.map(acc => acc.name)),
+    [categoryAccounts]
+  );
+  const categoryIds = useMemo(
+    () => new Set(categoryAccounts.map(acc => acc.id)),
+    [categoryAccounts]
+  );
 
   // CSV header row option
   const [csvHasHeaderRow, setCsvHasHeaderRow] = useState<boolean>(true);
@@ -94,8 +102,8 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
   const [success, setSuccess] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<{ imported: number; skipped: number } | null>(null);
   const [duplicateRows, setDuplicateRows] = useState<number[]>([]);
-  const [duplicatePreview, setDuplicatePreview] = useState<any[]>([]);
-  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [duplicateAction, setDuplicateAction] = useState<"import" | "skip" | null>(null);
+  const [skippedDetails, setSkippedDetails] = useState<any[]>([]);
 
   // Step 1: Upload
   const [csvRows, setCsvRows] = useState<any[]>([]);
@@ -108,9 +116,11 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
 
   // Step 2: Map Fields
   const [fieldMap, setFieldMap] = useState<{ [key: string]: string }>({});
+  const [suggestedFieldMap, setSuggestedFieldMap] = useState<{ [key: string]: string }>({});
 
   // Step 3: Preview
   const [importPreview, setImportPreview] = useState<any[]>([]);
+  const [allowAutoCreateCategories, setAllowAutoCreateCategories] = useState(false);
 
   // Step 4: Confirm
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -151,12 +161,16 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
     setCsvFileName("");
     setCsvFile(null);
     setFieldMap({});
+    setSuggestedFieldMap({});
     setImportPreview([]);
     setError(null);
     setSuccess(null);
     setImportSummary(null);
     setUsedDefaultAccountDetails([]);
     setAutoCreatedCategories([]);
+    setAllowAutoCreateCategories(false);
+    setDuplicateAction(null);
+    setSkippedDetails([]);
 
     const file = e.target.files?.[0];
     if (!file) return;
@@ -192,6 +206,25 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
     return Array.from(new Set(duplicates));
   };
 
+  const newCategoryNames = useMemo(() => {
+    if (!fieldMap.toAccountId) {
+      return [] as string[];
+    }
+
+    const names = new Set<string>();
+    importPreview.forEach((row) => {
+      const value = row.toAccountId;
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed && !categoryNames.has(trimmed) && !categoryIds.has(trimmed)) {
+          names.add(trimmed);
+        }
+      }
+    });
+
+    return Array.from(names);
+  }, [importPreview, fieldMap.toAccountId, categoryNames, categoryIds]);
+
   // Generate preview when mapping or rows change
   useEffect(() => {
     if (csvRows.length && Object.keys(fieldMap).length) {
@@ -214,11 +247,11 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
 
         mapped["amount"] = amount;
         mapped["fromAccountId"] = accountId;
-        mapped["category"] = "";
         return mapped;
       });
       setImportPreview(preview);
       setDuplicateRows(computeDuplicates(preview));
+      setDuplicateAction(null);
     }
   }, [csvRows, fieldMap, accountId]);
 
@@ -263,15 +296,9 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
         setAutoCreatedCategories([]);
       }
       if (result && Array.isArray(result.skippedDetails)) {
-        const duplicates = result.skippedDetails
-          .filter((detail: any) => detail.reason === "potential_duplicate")
-          .map((detail: any) => detail.index)
-          .filter((index: any) => typeof index === "number");
-        if (duplicates.length > 0) {
-          setDuplicateRows(duplicates);
-          setDuplicatePreview(rows);
-          setShowDuplicateDialog(true);
-        }
+        setSkippedDetails(result.skippedDetails);
+      } else {
+        setSkippedDetails([]);
       }
       // Do not close immediately; let user see summary
       // onSuccess();
@@ -348,7 +375,8 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                         setCsvHeaders(headers);
                         setCsvRows(results.data as any[]);
                         const autoMap = autoMapFields(headers);
-                        setFieldMap(autoMap);
+                        setSuggestedFieldMap(autoMap);
+                        setFieldMap({});
                       } else {
                         // No header: treat all rows as data, generate generic headers
                         const data = results.data as any[];
@@ -374,7 +402,8 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                         setCsvHeaders(headers);
                         setCsvRows(rowObjects);
                         const autoMap = autoMapFields(headers);
-                        setFieldMap(autoMap);
+                        setSuggestedFieldMap(autoMap);
+                        setFieldMap({});
                       }
                       setStep(1);
                     },
@@ -397,6 +426,21 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
             {!csvHasHeaderRow && (
               <div className="mb-3 p-2 bg-blue-50 border border-blue-300 text-blue-800 rounded text-sm">
                 This CSV file does not have a header row. Generic column names (<strong>Column 1</strong>, <strong>Column 2</strong>, etc.) have been generated. Please map each column to the correct field.
+              </div>
+            )}
+            {Object.keys(suggestedFieldMap).length > 0 && (
+              <div className="mb-4 p-3 border border-blue-300 bg-blue-50 text-blue-800 rounded">
+                <div className="font-semibold">Suggested mappings available</div>
+                <div className="text-sm mb-2">
+                  Review the suggested mappings and apply them if they look correct.
+                </div>
+                <button
+                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded"
+                  onClick={() => setFieldMap(suggestedFieldMap)}
+                  type="button"
+                >
+                  Apply suggested mappings
+                </button>
               </div>
             )}
             <div className="flex flex-col gap-4 mb-4">
@@ -513,49 +557,6 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                 ))}
               </div>
             </div>
-            {/* Compact Preview */}
-            <h4 className="text-md font-semibold mb-2 mt-6">Sample Preview (first 3 rows)</h4>
-            <div className="overflow-x-auto max-h-40 border rounded mb-4">
-              <table className="min-w-full text-xs">
-                <thead>
-                  <tr>
-                    {["date", "amount", "description"].map((field) => (
-                      <th key={field} className="px-2 py-1 border-b">
-                        {systemFieldMeta[field]?.label || field}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {importPreview.slice(0, 3).map((row, i) => {
-                    const rawAmount = typeof row.amount === "number" ? row.amount : parseFloat(row.amount);
-                    const normalizedAmount = !isNaN(rawAmount)
-                      ? normalizeTransactionAmount(
-                          rawAmount,
-                          accountType,
-                          accountSubtype,
-                          true
-                        )
-                      : rawAmount;
-
-                    return (
-                      <tr key={i}>
-                        <td className="px-2 py-1 border-b">{row.date}</td>
-                        <td className="px-2 py-1 border-b">
-                          {fieldMap.amount || fieldMap.credit || fieldMap.debit
-                            ? formatCurrencyAmount(
-                                normalizedAmount,
-                                currentAccount?.currency || "USD"
-                              )
-                            : ""}
-                        </td>
-                        <td className="px-2 py-1 border-b">{row.description}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
             {!canProceedFromMap && (
               <div
                 className="mb-2 text-sm text-red-600"
@@ -568,7 +569,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
             {/* Show instructional message instead of error if no mapping yet */}
             {Object.values(fieldMap).filter(Boolean).length === 0 ? (
               <div className="mb-2 text-sm text-gray-600" role="status" aria-live="polite">
-                Map the columns above to see a preview of your transactions.
+                Map the columns above to continue to preview.
               </div>
             ) : (
               !canProceedFromPreview && (
@@ -631,11 +632,19 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
         return (
           <div>
             <h3 className="text-lg font-semibold mb-2">Preview Transactions</h3>
+            <p className="text-sm text-gray-600 mb-3">
+              Review the parsed data before importing. To edit transactions, complete the import and edit them afterward.
+            </p>
+            {duplicateRows.length > 0 && (
+              <div className="mb-3 text-sm text-orange-800 bg-orange-50 border border-orange-300 rounded p-2">
+                {duplicateRows.length} potential duplicate{duplicateRows.length === 1 ? "" : "s"} found within this file.
+              </div>
+            )}
             <div className="overflow-x-auto max-h-64 border rounded mb-4">
               <table className="min-w-full text-xs">
                 <thead>
                   <tr>
-                    {["date", "postingDate", "amount", "description", "toAccountId", "category"].map((field) => (
+                    {["date", "postingDate", "amount", "description", "toAccountId"].map((field) => (
                       <th key={field} className="px-2 py-1 border-b">
                         {systemFieldMeta[field]?.label || field}
                       </th>
@@ -658,7 +667,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
 
                     return (
                       <tr key={i} className={isDuplicate ? "bg-orange-50" : undefined}>
-                        {["date", "postingDate", "amount", "description", "toAccountId", "category"].map(
+                        {["date", "postingDate", "amount", "description", "toAccountId"].map(
                           (field) => (
                             <td key={field} className="px-2 py-1 border-b">
                               {field === "amount" && !isNaN(rawAmount)
@@ -669,7 +678,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                                 : row[field]}
                               {field === "description" && isDuplicate && (
                                 <span className="ml-2 text-[10px] font-semibold text-orange-700 uppercase">
-                                  Duplicate
+                                  File duplicate
                                 </span>
                               )}
                             </td>
@@ -739,6 +748,64 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                 {systemFields.map((f) => `${f} → ${fieldMap[f] || "Not mapped"}`).join(", ")}
               </p>
             </div>
+            {duplicateRows.length > 0 && (
+              <div className="mb-4 p-3 border border-orange-300 bg-orange-50 rounded">
+                <div className="font-semibold text-orange-900 mb-2">
+                  File duplicates detected
+                </div>
+                <div className="text-sm text-orange-900 mb-2">
+                  {duplicateRows.length} potential duplicate{duplicateRows.length === 1 ? "" : "s"} found within this file.
+                  Choose how to handle them before importing.
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={`px-3 py-1 text-sm rounded ${
+                      duplicateAction === "import"
+                        ? "bg-orange-600 text-white"
+                        : "bg-white border border-orange-400 text-orange-700"
+                    }`}
+                    onClick={() => setDuplicateAction("import")}
+                  >
+                    Import duplicates
+                  </button>
+                  <button
+                    type="button"
+                    className={`px-3 py-1 text-sm rounded ${
+                      duplicateAction === "skip"
+                        ? "bg-orange-600 text-white"
+                        : "bg-white border border-orange-400 text-orange-700"
+                    }`}
+                    onClick={() => setDuplicateAction("skip")}
+                  >
+                    Skip duplicates
+                  </button>
+                </div>
+              </div>
+            )}
+            {newCategoryNames.length > 0 && (
+              <div className="mb-4 p-3 border border-purple-300 bg-purple-50 rounded">
+                <div className="font-semibold text-purple-900 mb-2">
+                  New categories will be created
+                </div>
+                <div className="text-sm text-purple-900 mb-2">
+                  The import includes category names that do not exist yet. Confirm to create them:
+                </div>
+                <ul className="list-disc list-inside text-sm text-purple-800 mb-2">
+                  {newCategoryNames.map((name) => (
+                    <li key={name}>{name}</li>
+                  ))}
+                </ul>
+                <label className="flex items-center gap-2 text-sm text-purple-900">
+                  <input
+                    type="checkbox"
+                    checked={allowAutoCreateCategories}
+                    onChange={(e) => setAllowAutoCreateCategories(e.target.checked)}
+                  />
+                  Allow creating these categories
+                </label>
+              </div>
+            )}
             {isSubmitting && (
               <div className="mb-2 text-sm text-blue-600 flex items-center gap-2" role="status" aria-live="polite">
                 <svg
@@ -779,7 +846,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                       <strong>Imported:</strong> {importSummary.imported}
                     </div>
                     <div>
-                      <strong>Skipped (duplicates):</strong> {importSummary.skipped}
+                      <strong>Skipped:</strong> {importSummary.skipped}
                     </div>
                   </div>
                 )}
@@ -855,35 +922,33 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                     </div>
                   </div>
                 )}
-                {showDuplicateDialog && (
-                  <div className="mt-4 p-3 border-2 border-orange-500 bg-orange-50 rounded shadow">
-                    <div className="font-bold text-orange-900 mb-2">
-                      Potential duplicates detected
+                {skippedDetails.length > 0 && (
+                  <div className="mt-4 p-3 border-2 border-gray-300 bg-gray-50 rounded shadow">
+                    <div className="font-bold text-gray-900 mb-2">Skipped rows</div>
+                    <div className="overflow-x-auto max-h-40 border rounded mb-2 bg-white">
+                      <table className="min-w-full text-xs">
+                        <thead>
+                          <tr>
+                            <th className="px-2 py-1 border-b text-left">Date</th>
+                            <th className="px-2 py-1 border-b text-left">Amount</th>
+                            <th className="px-2 py-1 border-b text-left">Description</th>
+                            <th className="px-2 py-1 border-b text-left">Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {skippedDetails.map((detail, i) => (
+                            <tr key={i}>
+                              <td className="px-2 py-1 border-b">{detail.date}</td>
+                              <td className="px-2 py-1 border-b">{detail.amount}</td>
+                              <td className="px-2 py-1 border-b">{detail.description}</td>
+                              <td className="px-2 py-1 border-b">{detail.reason}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                    <div className="text-orange-900 mb-2 text-sm">
-                      We detected {duplicateRows.length} potential duplicates. Choose how you want to proceed.
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        className="px-3 py-1 text-sm bg-orange-600 text-white rounded"
-                        onClick={() => {
-                          const rowsToImport = applyForceDuplicate(duplicatePreview, duplicateRows);
-                          setShowDuplicateDialog(false);
-                          handleImport(rowsToImport);
-                        }}
-                      >
-                        Import duplicates
-                      </button>
-                      <button
-                        className="px-3 py-1 text-sm bg-white border border-orange-400 text-orange-700 rounded"
-                        onClick={() => {
-                          const rowsToImport = filterOutDuplicateRows(duplicatePreview, duplicateRows);
-                          setShowDuplicateDialog(false);
-                          handleImport(rowsToImport);
-                        }}
-                      >
-                        Skip duplicates
-                      </button>
+                    <div className="text-xs text-gray-700">
+                      Review the skipped rows above and edit transactions after import if needed.
                     </div>
                   </div>
                 )}
@@ -927,8 +992,28 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
               {!success && (
                 <button
                   className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"
-                  onClick={() => handleImport()}
-                  disabled={isSubmitting}
+                  onClick={() => {
+                    if (duplicateRows.length > 0 && !duplicateAction) {
+                      setError("Please choose how to handle file duplicates before importing.");
+                      return;
+                    }
+                    if (newCategoryNames.length > 0 && !allowAutoCreateCategories) {
+                      setError("Please confirm category creation before importing.");
+                      return;
+                    }
+                    const rowsToImport =
+                      duplicateRows.length > 0 && duplicateAction === "skip"
+                        ? filterOutDuplicateRows(importPreview, duplicateRows)
+                        : duplicateRows.length > 0 && duplicateAction === "import"
+                        ? applyForceDuplicate(importPreview, duplicateRows)
+                        : importPreview;
+                    handleImport(rowsToImport);
+                  }}
+                  disabled={
+                    isSubmitting ||
+                    (duplicateRows.length > 0 && !duplicateAction) ||
+                    (newCategoryNames.length > 0 && !allowAutoCreateCategories)
+                  }
                 >
                   {isSubmitting ? "Importing..." : "Confirm & Import"}
                 </button>
@@ -983,7 +1068,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                     {label}
                   </span>
                 </div>
-                {idx < 2 && (
+                {idx < 3 && (
                   <div
                     className={`flex-1 h-0.5 mx-1 ${
                       step > idx

@@ -47,21 +47,10 @@ export const filterOutDuplicateRows = <T extends Record<string, unknown>>(
 export const buildImportPayload = <T extends Record<string, unknown>>(
   rows: T[]
 ): Array<T & { index: number }> =>
-  rows.map((row, index) => {
-    const payload: T & { index: number } = {
-      ...row,
-      index,
-    };
-
-    if (row.category) {
-      return {
-        ...payload,
-        toAccountId: row.category,
-      };
-    }
-
-    return payload;
-  });
+  rows.map((row, index) => ({
+    ...row,
+    index,
+  }));
 
 export const resolveImportSummary = (
   result: { imported?: number; skipped?: number } | null,
@@ -86,6 +75,22 @@ export const resolveImportAmount = (
   row: Record<string, unknown>,
   fieldMap: Record<string, string>
 ): number | string => {
+  const parseAmount = (value: unknown): number | null => {
+    if (value === undefined || value === null || value === "") {
+      return null;
+    }
+
+    let raw = String(value).trim();
+    const isParenNegative = raw.startsWith("(") && raw.endsWith(")");
+    raw = raw.replace(/[()]/g, "");
+    raw = raw.replace(/[^0-9.-]/g, "");
+    raw = raw.replace(/,/g, "");
+    const parsed = parseFloat(raw);
+    if (Number.isNaN(parsed)) {
+      return null;
+    }
+    return isParenNegative ? -Math.abs(parsed) : parsed;
+  };
   const creditField = fieldMap["credit"];
   const debitField = fieldMap["debit"];
   const amountField = fieldMap["amount"];
@@ -94,15 +99,13 @@ export const resolveImportAmount = (
   let debitVal: number | null = null;
 
   if (creditField && row[creditField] !== undefined && row[creditField] !== "") {
-    const raw = String(row[creditField]).replace(/,/g, "");
-    const parsed = parseFloat(raw);
-    if (!Number.isNaN(parsed)) creditVal = parsed;
+    const parsed = parseAmount(row[creditField]);
+    if (parsed !== null) creditVal = parsed;
   }
 
   if (debitField && row[debitField] !== undefined && row[debitField] !== "") {
-    const raw = String(row[debitField]).replace(/,/g, "");
-    const parsed = parseFloat(raw);
-    if (!Number.isNaN(parsed)) debitVal = parsed;
+    const parsed = parseAmount(row[debitField]);
+    if (parsed !== null) debitVal = parsed;
   }
 
   if (creditVal !== null || debitVal !== null) {
@@ -110,9 +113,8 @@ export const resolveImportAmount = (
   }
 
   if (amountField && row[amountField] !== undefined && row[amountField] !== "") {
-    const raw = String(row[amountField]).replace(/,/g, "");
-    const parsed = parseFloat(raw);
-    return Number.isNaN(parsed) ? String(row[amountField]) : parsed;
+    const parsed = parseAmount(row[amountField]);
+    return parsed === null ? String(row[amountField]) : parsed;
   }
 
   return "";

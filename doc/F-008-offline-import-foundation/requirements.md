@@ -13,7 +13,7 @@ Enable offline-first transaction imports without bank connections, using flexibl
 ## User Stories
 
 - As a user, I can import a CSV from any bank by mapping columns manually each time, with helpful suggestions.
-- As a user, I can preview and edit rows before import.
+- As a user, I can preview rows before import.
 - As a user, I can detect and decide how to handle potential duplicates.
 - As a user, I can import with unmapped counterpart accounts, then clean them up later.
 
@@ -32,28 +32,31 @@ Enable offline-first transaction imports without bank connections, using flexibl
   - Each import session targets a single primary account.
   - Transactions may reference other accounts (counter-accounts).
 - **Preview**
-  - Provide a preview table before import.
-  - Preview is read-only; users edit transactions after import.
+  - Provide a read-only preview before import.
+  - Users edit transactions after import using the existing transaction edit flow.
   - Allow bulk import from preview.
 - **Duplicate detection**
-  - Detect potential duplicates by exact match on Transaction Date + Amount + Description.
+  - Detect potential duplicates within the CSV by exact match on Transaction Date + Amount + Description.
   - Show duplicates to user; never auto-ignore or auto-delete.
-  - Allow user to decide per-row whether to import, skip, or modify.
+  - Allow a batch decision to import or skip duplicates before import.
 - **Uncategorized fallback**
   - If a counter-account is not mapped, route it to `Uncategorized Income/Expense`.
   - Only honor `toAccountId` when the user maps a column to it.
 - **Import session UI**
   - Provide a dedicated import workflow in the UI.
   - Keep one CSV file per session for MVP.
+  - Show skipped rows and reasons after import.
 - **Categorization integration**
-  - Allow category assignment after import.
+  - Allow category/counter-account mapping via the mapped column.
   - If categorization rules exist (F-011), show transparent suggestions only when exact match.
+  - Confirm before auto-creating new categories from mapped values.
 
 ## Non-Functional Requirements
 
 - Offline-first: no external connections required to import.
 - Auditability: imports are traceable in the UI session.
 - Safety: no data is removed or skipped silently.
+- Auto-mapping suggestions must be explicitly applied by the user.
 - Performance: preview handles up to ~5k rows comfortably.
 
 ## Out of Scope (for F-008)

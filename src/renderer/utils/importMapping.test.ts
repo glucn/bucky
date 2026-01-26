@@ -78,21 +78,19 @@ describe("filterOutDuplicateRows", () => {
 });
 
 describe("buildImportPayload", () => {
-  it("injects index and preserves category mapping", () => {
+  it("injects row index into payload", () => {
     const rows = [
-      { date: "2025-01-01", amount: 5, category: "Groceries" },
+      { date: "2025-01-01", amount: 5 },
       { date: "2025-01-02", amount: 3 },
     ];
 
     const payload = buildImportPayload(rows);
 
-    const firstPayload = payload[0] as { index: number; toAccountId?: string };
-    const secondPayload = payload[1] as { index: number; toAccountId?: string };
+    const firstPayload = payload[0] as { index: number };
+    const secondPayload = payload[1] as { index: number };
 
     expect(firstPayload.index).toBe(0);
-    expect(firstPayload.toAccountId).toBe("Groceries");
     expect(secondPayload.index).toBe(1);
-    expect(secondPayload.toAccountId).toBeUndefined();
   });
 });
 
@@ -133,6 +131,13 @@ describe("resolveImportAmount", () => {
     const fieldMap = { amount: "Amount" };
 
     expect(resolveImportAmount(row, fieldMap)).toBeCloseTo(-42.1, 2);
+  });
+
+  it("parses currency symbols and parentheses", () => {
+    const row = { Amount: "($1,234.50)" };
+    const fieldMap = { amount: "Amount" };
+
+    expect(resolveImportAmount(row, fieldMap)).toBeCloseTo(-1234.5, 2);
   });
 
   it("returns blank when no amount fields", () => {

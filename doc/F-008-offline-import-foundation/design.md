@@ -14,10 +14,9 @@
    - Supports header and no-header CSVs; auto-generates headers when missing.
 2. **Map Fields**
    - System fields: date, postingDate, amount, credit, debit, description, toAccountId.
-   - Auto-map headers by substring matching.
-   - Shows a compact read-only preview (first 3 rows).
+   - Suggested mappings are shown but must be explicitly applied.
 3. **Preview**
-   - Full preview table is read-only with duplicate flags.
+   - Full preview table is read-only with file-duplicate flags.
 4. **Confirm & Import**
    - Renderer sends `importPreview` to IPC.
    - IPC processes each transaction and returns import summary plus details.
@@ -42,7 +41,8 @@
 - Implemented in `createJournalEntry`.
 - Strict match: transaction date + description + from/to accounts + amounts + currency.
 - Service returns `potential_duplicate` unless `forceDuplicate` is used.
-- Import UI should mirror `TransferModal` by surfacing the duplicate and letting users confirm a retry with `forceDuplicate`.
+- Preview flags duplicates within the CSV file using date + amount + description.
+- Confirm step provides a batch choice to import or skip file duplicates.
 
 ## MVP Design Decisions
 
@@ -51,13 +51,17 @@
 - **No original account name storage**: samples do not provide a reliable account name; skip metadata storage for MVP.
 - **Import session persistence**: UI-only session, no database record.
 - **Counter-account fallback**: use existing `Uncategorized Income/Expense` categories for MVP.
+- **Category creation confirmation**: importing with new category names requires explicit confirmation.
 
 ## UX Notes
 
-- Mapping step shows a compact read-only preview (first 3 rows).
+- Mapping step is mapping-only; preview is a separate read-only step.
 - Preview step is read-only; edits happen after import.
-- Duplicate candidates should be flagged in preview (pre-import warning).
+- Duplicate candidates are flagged as file duplicates in preview.
+- Confirm step requires explicit choice for how to handle file duplicates.
+- Import summary includes skipped rows and reasons.
 - Keep CSV size target to ~5k rows for MVP responsiveness.
+- Amount parsing tolerates currency symbols and parentheses for negatives.
 
 ## Data Model
 

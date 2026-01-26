@@ -26,11 +26,12 @@
 - [x] 5. Renderer tests: mapping validation with optional description
   - Acceptance: mapping step allows missing description.
   - Acceptance: preview renders without description mapped.
-- [x] 6. Renderer tests: preview is read-only
+- [x] 6. Preview step is read-only
   - Acceptance: preview step renders without inline edit inputs.
-- [x] 7. Renderer tests: duplicate flagging and confirm flow
-  - Acceptance: duplicate rows are flagged prior to import.
-  - Acceptance: confirm flow retries import with `forceDuplicate`.
+  - Acceptance: edits happen after import via existing transaction edit flow.
+- [x] 7. Duplicate flagging and batch confirm flow
+  - Acceptance: duplicate rows are flagged as file duplicates before import.
+  - Acceptance: confirm step supports batch import or skip for duplicates.
 - [x] 8. IPC/service integration: toAccountId mapping behavior
   - Acceptance: `toAccountId` only honored when column mapped.
   - Acceptance: otherwise fallback to uncategorized categories.
@@ -43,9 +44,9 @@
 - [x] 11. E2E (Playwright): headerless CSV mapping
   - Acceptance: manual mapping with generated headers works and import succeeds.
 - [x] 12. E2E (Playwright): duplicate warning
-  - Acceptance: second import surfaces duplicates and skipped count > 0.
+  - Acceptance: second import surfaces file-duplicate decision and skipped count > 0.
 - [x] 13. E2E (Playwright): uncategorized fallback
   - Acceptance: transactions show `Uncategorized Income/Expense` when counter-account unmapped.
 - [x] 14. UI: split mapping and preview steps
-  - Acceptance: mapping step shows compact read-only preview (first 3 rows).
-  - Acceptance: full preview/editing is its own step before confirm.
+  - Acceptance: mapping step is mapping-only (no preview table).
+  - Acceptance: preview is read-only in its own step before confirm.
