@@ -81,29 +81,6 @@ export const shouldShowDefaultAccountWarning = (details: unknown[]): boolean => 
   return Array.isArray(details) && details.length > 0;
 };
 
-export const updateImportPreviewRow = <T extends Record<string, unknown>>(
-  rows: T[],
-  rowIndex: number,
-  field: string,
-  value: string
-): T[] => {
-  return rows.map((row, index) => {
-    if (index !== rowIndex) return row;
-
-    if (field === "amount") {
-      const parsed = value === "" ? "" : Number(value);
-      return {
-        ...row,
-        [field]: Number.isNaN(parsed) ? value : parsed,
-      };
-    }
-
-    return {
-      ...row,
-      [field]: value,
-    };
-  });
-};
 
 export const resolveImportAmount = (
   row: Record<string, unknown>,

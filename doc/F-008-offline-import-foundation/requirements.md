@@ -31,9 +31,9 @@ Enable offline-first transaction imports without bank connections, using flexibl
 - **Primary account scope**
   - Each import session targets a single primary account.
   - Transactions may reference other accounts (counter-accounts).
-- **Preview & edit**
+- **Preview**
   - Provide a preview table before import.
-  - Allow per-row edits for Date, Amount, Description, Category, Counter-account.
+  - Preview is read-only; users edit transactions after import.
   - Allow bulk import from preview.
 - **Duplicate detection**
   - Detect potential duplicates by exact match on Transaction Date + Amount + Description.
@@ -46,7 +46,7 @@ Enable offline-first transaction imports without bank connections, using flexibl
   - Provide a dedicated import workflow in the UI.
   - Keep one CSV file per session for MVP.
 - **Categorization integration**
-  - Allow category assignment in preview.
+  - Allow category assignment after import.
   - If categorization rules exist (F-011), show transparent suggestions only when exact match.
 
 ## Non-Functional Requirements

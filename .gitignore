@@ -103,6 +103,9 @@ prisma/generated/
 # Test database files
 prisma/test.db
 prisma/test.db-journal
+
+# Playwright artifacts
+/tests/e2e/artifacts/
 # Playwright test results
 test-results/
 test-debug*.png

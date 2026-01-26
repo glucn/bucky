@@ -12,11 +12,13 @@
 1. **Upload**
    - CSV parsing is deferred until the user clicks Next.
    - Supports header and no-header CSVs; auto-generates headers when missing.
-2. **Map & Preview**
+2. **Map Fields**
    - System fields: date, postingDate, amount, credit, debit, description, toAccountId.
    - Auto-map headers by substring matching.
-   - Preview computed from mapped rows; amounts can be derived from credit/debit or a single amount column.
-3. **Confirm & Import**
+   - Shows a compact read-only preview (first 3 rows).
+3. **Preview**
+   - Full preview table is read-only with duplicate flags.
+4. **Confirm & Import**
    - Renderer sends `importPreview` to IPC.
    - IPC processes each transaction and returns import summary plus details.
 
@@ -52,8 +54,8 @@
 
 ## UX Notes
 
-- Preview should allow inline edits for:
-  - Date, Amount, Description, Category, Counter-account.
+- Mapping step shows a compact read-only preview (first 3 rows).
+- Preview step is read-only; edits happen after import.
 - Duplicate candidates should be flagged in preview (pre-import warning).
 - Keep CSV size target to ~5k rows for MVP responsiveness.
 

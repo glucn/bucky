@@ -26,8 +26,8 @@
 - [x] 5. Renderer tests: mapping validation with optional description
   - Acceptance: mapping step allows missing description.
   - Acceptance: preview renders without description mapped.
-- [x] 6. Renderer tests: preview editability
-  - Acceptance: edits to Date/Amount/Description/Category/Counter-account update payload.
+- [x] 6. Renderer tests: preview is read-only
+  - Acceptance: preview step renders without inline edit inputs.
 - [x] 7. Renderer tests: duplicate flagging and confirm flow
   - Acceptance: duplicate rows are flagged prior to import.
   - Acceptance: confirm flow retries import with `forceDuplicate`.
@@ -39,10 +39,13 @@
   - Acceptance: default-account warnings surface when uncategorized used.
 - [x] 10. E2E (Playwright): headered CSV import flow
   - Acceptance: import wizard completes end-to-end.
-  - Acceptance: edited preview values persist in transactions list.
+  - Acceptance: preview step is read-only.
 - [x] 11. E2E (Playwright): headerless CSV mapping
   - Acceptance: manual mapping with generated headers works and import succeeds.
-- [ ] 12. E2E (Playwright): duplicate warning
+- [x] 12. E2E (Playwright): duplicate warning
   - Acceptance: second import surfaces duplicates and skipped count > 0.
-- [ ] 13. E2E (Playwright): uncategorized fallback
+- [x] 13. E2E (Playwright): uncategorized fallback
   - Acceptance: transactions show `Uncategorized Income/Expense` when counter-account unmapped.
+- [x] 14. UI: split mapping and preview steps
+  - Acceptance: mapping step shows compact read-only preview (first 3 rows).
+  - Acceptance: full preview/editing is its own step before confirm.

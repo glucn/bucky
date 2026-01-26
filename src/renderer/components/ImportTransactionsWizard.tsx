@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { Fragment, useEffect, useState } from "react";
 import Papa from "papaparse";
 import { useAccounts } from "../context/AccountsContext";
 import { normalizeTransactionAmount } from "../utils/displayNormalization";
@@ -7,7 +7,6 @@ import { formatCurrencyAmount } from "../utils/currencyUtils";
 import {
   resolveImportAmount,
   isImportMappingValid,
-  updateImportPreviewRow,
   getImportDuplicateKey,
   applyDuplicateFlags,
   applyForceDuplicate,
@@ -72,7 +71,7 @@ const systemFieldMeta: {
   },
 };
 
-type Step = 0 | 1 | 2; // 0: Upload, 1: Map Fields + Preview, 2: Confirm
+type Step = 0 | 1 | 2 | 3; // 0: Upload, 1: Map Fields, 2: Preview, 3: Confirm
 
 export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> = ({
   accountId,
@@ -112,7 +111,6 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
 
   // Step 3: Preview
   const [importPreview, setImportPreview] = useState<any[]>([]);
-  const previewEditableFields = ["date", "amount", "description", "toAccountId", "category"];
 
   // Step 4: Confirm
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -402,83 +400,134 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
               </div>
             )}
             <div className="flex flex-col gap-4 mb-4">
-              {/* Only show mapping for amount, credit, debit, date, postingDate, description, toAccountId */}
-              {["date", "postingDate", "amount", "credit", "debit", "description", "toAccountId"].map((field) => (
-                <div
-                  key={field}
-                  className="flex flex-col sm:flex-row sm:items-center gap-2 last:border-b-0 last:pb-0"
-                >
-                  <label
-                    className="w-full sm:w-48 font-medium flex items-center"
-                    htmlFor={`map-${field}`}
+              <div className="border rounded p-3">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Required</h4>
+                {["date", "amount"].map((field) => (
+                  <div
+                    key={field}
+                    className="flex flex-col sm:flex-row sm:items-center gap-2 last:border-b-0 last:pb-0"
                   >
-                    <span>
-                      {systemFieldMeta[field]?.label || field}
-                      {requiredFields.includes(field) && (
-                        <span className="text-red-500 ml-1" aria-label="Required">*</span>
-                      )}
-                    </span>
-                    <span
-                      className="ml-1 relative group"
-                      tabIndex={0}
-                      aria-label={`Help: ${systemFieldMeta[field]?.help}`}
+                    <label
+                      className="w-full sm:w-48 font-medium flex items-center"
+                      htmlFor={`map-${field}`}
                     >
-                      <svg
-                        className="w-4 h-4 text-gray-400 hover:text-primary-600 cursor-pointer"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                        focusable="false"
-                      >
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M12 16v-1m0-4a1 1 0 1 1 2 0c0 1-2 1-2 3" />
-                      </svg>
-                      <span className="absolute left-1/2 -translate-x-1/2 mt-2 w-56 bg-gray-800 text-white text-xs rounded p-2 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity z-10 pointer-events-none group-hover:pointer-events-auto group-focus:pointer-events-auto"
-                        role="tooltip"
-                      >
-                        {systemFieldMeta[field]?.help}
+                      <span>
+                        {systemFieldMeta[field]?.label || field}
+                        <span className="text-red-500 ml-1" aria-label="Required">*</span>
                       </span>
-                    </span>
-                  </label>
-                  <select
-                    id={`map-${field}`}
-                    value={fieldMap[field] || ""}
-                    onChange={(e) =>
-                      handleFieldMapChange(field, e.target.value)
-                    }
-                    className="border rounded px-2 py-1 w-full sm:w-64"
-                    aria-required={requiredFields.includes(field)}
+                      <span
+                        className="ml-1 relative group"
+                        tabIndex={0}
+                        aria-label={`Help: ${systemFieldMeta[field]?.help}`}
+                      >
+                        <svg
+                          className="w-4 h-4 text-gray-400 hover:text-primary-600 cursor-pointer"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                          focusable="false"
+                        >
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M12 16v-1m0-4a1 1 0 1 1 2 0c0 1-2 1-2 3" />
+                        </svg>
+                        <span className="absolute left-1/2 -translate-x-1/2 mt-2 w-56 bg-gray-800 text-white text-xs rounded p-2 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity z-10 pointer-events-none group-hover:pointer-events-auto group-focus:pointer-events-auto"
+                          role="tooltip"
+                        >
+                          {systemFieldMeta[field]?.help}
+                        </span>
+                      </span>
+                    </label>
+                    <select
+                      id={`map-${field}`}
+                      value={fieldMap[field] || ""}
+                      onChange={(e) =>
+                        handleFieldMapChange(field, e.target.value)
+                      }
+                      className="border rounded px-2 py-1 w-full sm:w-64"
+                      aria-required
+                    >
+                      <option value="">-- Not Mapped --</option>
+                      {csvHeaders.map((header) => (
+                        <option key={header} value={header}>
+                          {header}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+              <div className="border rounded p-3">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Optional</h4>
+                {["postingDate", "credit", "debit", "description", "toAccountId"].map((field) => (
+                  <div
+                    key={field}
+                    className="flex flex-col sm:flex-row sm:items-center gap-2 last:border-b-0 last:pb-0"
                   >
-                    <option value="">-- Not Mapped --</option>
-                    {csvHeaders.map((header) => (
-                      <option key={header} value={header}>
-                        {header}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
+                    <label
+                      className="w-full sm:w-48 font-medium flex items-center"
+                      htmlFor={`map-${field}`}
+                    >
+                      <span>{systemFieldMeta[field]?.label || field}</span>
+                      <span
+                        className="ml-1 relative group"
+                        tabIndex={0}
+                        aria-label={`Help: ${systemFieldMeta[field]?.help}`}
+                      >
+                        <svg
+                          className="w-4 h-4 text-gray-400 hover:text-primary-600 cursor-pointer"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                          focusable="false"
+                        >
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M12 16v-1m0-4a1 1 0 1 1 2 0c0 1-2 1-2 3" />
+                        </svg>
+                        <span className="absolute left-1/2 -translate-x-1/2 mt-2 w-56 bg-gray-800 text-white text-xs rounded p-2 opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity z-10 pointer-events-none group-hover:pointer-events-auto group-focus:pointer-events-auto"
+                          role="tooltip"
+                        >
+                          {systemFieldMeta[field]?.help}
+                        </span>
+                      </span>
+                    </label>
+                    <select
+                      id={`map-${field}`}
+                      value={fieldMap[field] || ""}
+                      onChange={(e) =>
+                        handleFieldMapChange(field, e.target.value)
+                      }
+                      className="border rounded px-2 py-1 w-full sm:w-64"
+                    >
+                      <option value="">-- Not Mapped --</option>
+                      {csvHeaders.map((header) => (
+                        <option key={header} value={header}>
+                          {header}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
             </div>
-            {/* Preview Table */}
-            <h4 className="text-md font-semibold mb-2 mt-6">Preview Transactions</h4>
-            <div className="overflow-x-auto max-h-64 border rounded mb-4">
+            {/* Compact Preview */}
+            <h4 className="text-md font-semibold mb-2 mt-6">Sample Preview (first 3 rows)</h4>
+            <div className="overflow-x-auto max-h-40 border rounded mb-4">
               <table className="min-w-full text-xs">
                 <thead>
                   <tr>
-                    {/* Only show preview for date, postingDate, amount, description, toAccountId, category */}
-                    {["date", "postingDate", "amount", "description", "toAccountId", "category"].map((field) => (
+                    {["date", "amount", "description"].map((field) => (
                       <th key={field} className="px-2 py-1 border-b">
                         {systemFieldMeta[field]?.label || field}
                       </th>
                     ))}
-
                   </tr>
                 </thead>
                 <tbody>
-                  {importPreview.map((row, i) => {
-                    // Normalize the amount for display
+                  {importPreview.slice(0, 3).map((row, i) => {
                     const rawAmount = typeof row.amount === "number" ? row.amount : parseFloat(row.amount);
                     const normalizedAmount = !isNaN(rawAmount)
                       ? normalizeTransactionAmount(
@@ -491,35 +540,16 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
 
                     return (
                       <tr key={i}>
-                        {["date", "postingDate", "amount", "description", "toAccountId", "category"].map(
-                          (field) => (
-                            <td key={field} className="px-2 py-1 border-b">
-                              {previewEditableFields.includes(field) ? (
-                                <input
-                                  className="w-full border border-gray-200 rounded px-1 py-0.5 text-xs"
-                                  value={row[field] ?? ""}
-                                  onChange={(event) => {
-                                    setImportPreview((prev) =>
-                                      updateImportPreviewRow(
-                                        prev,
-                                        i,
-                                        field,
-                                        event.target.value
-                                      )
-                                    );
-                                  }}
-                                />
-                              ) : field === "amount" && !isNaN(rawAmount) ? (
-                                formatCurrencyAmount(
-                                  normalizedAmount,
-                                  currentAccount?.currency || "USD"
-                                )
-                              ) : (
-                                row[field]
-                              )}
-                            </td>
-                          )
-                        )}
+                        <td className="px-2 py-1 border-b">{row.date}</td>
+                        <td className="px-2 py-1 border-b">
+                          {fieldMap.amount || fieldMap.credit || fieldMap.debit
+                            ? formatCurrencyAmount(
+                                normalizedAmount,
+                                currentAccount?.currency || "USD"
+                              )
+                            : ""}
+                        </td>
+                        <td className="px-2 py-1 border-b">{row.description}</td>
                       </tr>
                     );
                   })}
@@ -598,6 +628,102 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
           </div>
         );
       case 2:
+        return (
+          <div>
+            <h3 className="text-lg font-semibold mb-2">Preview Transactions</h3>
+            <div className="overflow-x-auto max-h-64 border rounded mb-4">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr>
+                    {["date", "postingDate", "amount", "description", "toAccountId", "category"].map((field) => (
+                      <th key={field} className="px-2 py-1 border-b">
+                        {systemFieldMeta[field]?.label || field}
+                      </th>
+                    ))}
+
+                  </tr>
+                </thead>
+                <tbody>
+                  {importPreview.map((row, i) => {
+                    const rawAmount = typeof row.amount === "number" ? row.amount : parseFloat(row.amount);
+                    const normalizedAmount = !isNaN(rawAmount)
+                      ? normalizeTransactionAmount(
+                          rawAmount,
+                          accountType,
+                          accountSubtype,
+                          true
+                        )
+                      : rawAmount;
+                    const isDuplicate = duplicateRows.includes(i);
+
+                    return (
+                      <tr key={i} className={isDuplicate ? "bg-orange-50" : undefined}>
+                        {["date", "postingDate", "amount", "description", "toAccountId", "category"].map(
+                          (field) => (
+                            <td key={field} className="px-2 py-1 border-b">
+                              {field === "amount" && !isNaN(rawAmount)
+                                ? formatCurrencyAmount(
+                                    normalizedAmount,
+                                    currentAccount?.currency || "USD"
+                                  )
+                                : row[field]}
+                              {field === "description" && isDuplicate && (
+                                <span className="ml-2 text-[10px] font-semibold text-orange-700 uppercase">
+                                  Duplicate
+                                </span>
+                              )}
+                            </td>
+                          )
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {!canProceedFromPreview && (
+              <div
+                className="mb-2 text-sm text-red-600"
+                role="alert"
+                aria-live="assertive"
+              >
+                No transactions to preview. Please check your mapping and CSV data.
+              </div>
+            )}
+            {error && (
+              <div
+                className="mb-2 text-sm text-red-600"
+                role="alert"
+                aria-live="assertive"
+              >
+                {error}
+              </div>
+            )}
+            <div className="flex justify-between mt-6">
+              <button
+                className="px-4 py-2 bg-gray-200 rounded"
+                onClick={() => setStep(1)}
+              >
+                Back
+              </button>
+              <button
+                className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"
+                onClick={() => {
+                  if (!canProceedFromPreview) {
+                    setError("No transactions to preview. Please check your mapping and CSV data.");
+                  } else {
+                    setError(null);
+                    setStep(3);
+                  }
+                }}
+                disabled={!canProceedFromPreview}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        );
+      case 3:
         return (
           <div>
             <h3 className="text-lg font-semibold mb-2">Confirm Import</h3>
@@ -792,7 +918,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                 className="px-4 py-2 bg-gray-200 rounded"
                 onClick={() => {
                   setError(null);
-                  setStep(1);
+                  setStep(2);
                 }}
                 disabled={isSubmitting}
               >
@@ -828,11 +954,11 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
         <h2 className="text-xl font-bold mb-4" data-testid="import-wizard-title">Import Transactions from CSV</h2>
         {/* Stepper */}
         <div className="flex items-center justify-between mb-6">
-          {["Upload", "Map & Preview", "Confirm"].map((label, idx) => {
+          {["Upload", "Map", "Preview", "Confirm"].map((label, idx) => {
             const isActive = step === idx;
             const isCompleted = step > idx;
             return (
-              <React.Fragment key={label}>
+              <Fragment key={label}>
                 <div className="flex flex-col items-center flex-1">
                   <div
                     className={`w-8 h-8 flex items-center justify-center rounded-full border-2 ${
@@ -866,7 +992,7 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                     }`}
                   />
                 )}
-              </React.Fragment>
+              </Fragment>
             );
           })}
         </div>
