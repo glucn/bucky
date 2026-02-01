@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { Accounts } from "./pages/Accounts";
 import { Dashboard } from "./pages/Dashboard";
 import { AccountTransactionsPage } from "./pages/AccountTransactionsPage";
-import { OpeningBalances } from "./pages/OpeningBalances";
 import { Checkpoints } from "./pages/Checkpoints";
 import { Categories } from "./pages/Categories";
 import { InvestmentPortfolios } from "./pages/InvestmentPortfolios";
@@ -27,7 +26,6 @@ const App: React.FC = () => {
               <Route path="/accounts/:accountId/transactions" element={<AccountTransactionsPage />} />
               <Route path="/accounts/manage" element={<Accounts />} />
               <Route path="/categories" element={<Categories />} />
-              <Route path="/opening-balances" element={<OpeningBalances />} />
               <Route path="/checkpoints" element={<Checkpoints />} />
               <Route path="/investments" element={<InvestmentPortfolios />} />
               <Route path="/investments/:portfolioId" element={<PortfolioDetailsPage />} />

@@ -28,13 +28,13 @@
 - [x] 6. UI: account details "Set Opening Balance" modal
   - Acceptance: modal shows current opening balance and allows edit.
   - Acceptance: saves update instead of creating new entry.
-- [ ] 7. Replace legacy opening balance flows
+- [x] 7. Replace legacy opening balance flows
   - Acceptance: bulk `OpeningBalances` page is removed or deprecated.
   - Acceptance: "Desired Opening Balance" diff-based behavior is removed.
-- [ ] 8. Service tests: opening balance creation and update
+- [x] 8. Service tests: opening balance creation and update
   - Acceptance: asset/liability sign handling is correct.
   - Acceptance: `Opening Balances` system account auto-creation works.
-- [ ] 9. Service tests: backfill adjustment
+- [x] 9. Service tests: backfill adjustment
   - Acceptance: current balance remains unchanged; opening balance entry amount adjusts.
   - Acceptance: insert/update/delete and date boundary move cases covered.
 - [ ] 10. UI tests: opening balance UX
