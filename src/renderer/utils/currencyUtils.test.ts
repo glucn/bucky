@@ -55,9 +55,9 @@ describe('currencyUtils - Normalized Formatting', () => {
 
     // Requirements 2.1, 2.2: Liability account transaction formatting
     describe('Liability account transactions', () => {
-      it('should format spending (positive) with positive sign for liability accounts', () => {
+      it('should format spending (raw negative) with positive sign for liability accounts', () => {
         const result = formatNormalizedTransactionAmount(
-          150.25,
+          -150.25,
           'USD',
           AccountType.User,
           AccountSubtype.Liability,
@@ -68,9 +68,9 @@ describe('currencyUtils - Normalized Formatting', () => {
         expect(result).toContain('$');
       });
 
-      it('should format payments (negative) with negative sign for liability accounts', () => {
+      it('should format payments (raw positive) with negative sign for liability accounts', () => {
         const result = formatNormalizedTransactionAmount(
-          -200.00,
+          200.00,
           'USD',
           AccountType.User,
           AccountSubtype.Liability,
@@ -184,7 +184,7 @@ describe('currencyUtils - Normalized Formatting', () => {
 
       it('should preserve negative sign for liability payments', () => {
         const result = formatNormalizedTransactionAmount(
-          -75.50,
+          75.50,
           'USD',
           AccountType.User,
           AccountSubtype.Liability,

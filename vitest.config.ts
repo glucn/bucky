@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import path from 'path';
 
 export default defineConfig({
@@ -10,6 +10,12 @@ export default defineConfig({
       NODE_ENV: 'test',
       VITEST: 'true',
     },
+    exclude: [
+      ...configDefaults.exclude,
+      '**/dist/**',
+      '**/.worktrees/**',
+      '**/tests/e2e/**',
+    ],
     // Run test files sequentially to avoid database conflicts
     // All tests share the same test.db file, so parallel execution causes race conditions
     fileParallelism: false,
