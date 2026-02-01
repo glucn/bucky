@@ -109,3 +109,6 @@ prisma/test.db-journal
 # Playwright test results
 test-results/
 test-debug*.png
+
+# Git worktrees
+.worktrees/
