@@ -1009,6 +1009,17 @@ class DatabaseService {
         include: { lines: true },
       });
       console.log("[createJournalEntry] Created journal entry:", entry);
+      await this.adjustOpeningBalanceForEntryChange(
+        {
+          entryDate: dateStr,
+          lines: entry.lines.map((line: any) => ({
+            accountId: line.accountId,
+            amount: line.amount,
+          })),
+          sign: 1,
+        },
+        prisma
+      );
       return { skipped: false, entry };
     } else {
       // Currency-transfer transaction (unchanged)
@@ -1119,6 +1130,17 @@ class DatabaseService {
         include: { lines: true },
       });
       console.log("[createJournalEntry] Created currency_transfer journal entry:", entry);
+      await this.adjustOpeningBalanceForEntryChange(
+        {
+          entryDate: dateStr,
+          lines: entry.lines.map((line: any) => ({
+            accountId: line.accountId,
+            amount: line.amount,
+          })),
+          sign: 1,
+        },
+        prisma
+      );
       return { skipped: false, entry };
     }
   }
@@ -1235,99 +1257,324 @@ class DatabaseService {
     tx?: TransactionClient
   ): Promise<any> {
     const prisma = tx || this.prisma;
-    const ASSET_TYPES = [AccountType.User];
-    // Liabilities have a natural credit balance.
-    // A positive balance means money you owe, which is a credit on your books.
-    // So, the amount in the journal line will be negative.
-    const LIABILITY_TYPES = [AccountType.System];
 
-    // If no transaction provided, create one
     if (!tx) {
       return this.prisma.$transaction(async (trx) => {
         return this.createOpeningBalanceEntry(balances, entryDate, trx);
       });
     }
 
-    // 1. Get or create the 'Opening Balance Equity' account
+    const results = [];
+    for (const item of balances) {
+      const result = await this.setOpeningBalance(
+        {
+          accountId: item.accountId,
+          displayAmount: item.balance,
+          asOfDate: entryDate,
+        },
+        tx
+      );
+      results.push(result);
+    }
+
+    return results;
+  }
+
+  private async getOrCreateOpeningBalancesAccount(prisma: TransactionClient) {
     let equityAccount = await prisma.account.findFirst({
-      where: { name: "Opening Balance Equity" },
+      where: { name: "Opening Balances", type: AccountType.System },
     });
+
+    if (!equityAccount) {
+      equityAccount = await prisma.account.findFirst({
+        where: { name: "Opening Balance Equity", type: AccountType.System },
+      });
+    }
 
     if (!equityAccount) {
       equityAccount = await prisma.account.create({
         data: {
-          name: "Opening Balance Equity",
+          name: "Opening Balances",
           type: AccountType.System,
+          subtype: AccountSubtype.Asset,
+          currency: "USD",
         },
+      });
+    } else if (equityAccount.name !== "Opening Balances") {
+      equityAccount = await prisma.account.update({
+        where: { id: equityAccount.id },
+        data: { name: "Opening Balances" },
       });
     }
 
-    // 2. Create the Journal Entry
-    const journalEntry = await prisma.journalEntry.create({
+    return equityAccount;
+  }
+
+  private async findOpeningBalanceEntryForAccount(
+    accountId: string,
+    prisma: TransactionClient
+  ) {
+    const entries = await prisma.journalEntry.findMany({
+      where: {
+        OR: [
+          { entryType: "opening-balance" },
+          { description: "Opening Balance" },
+        ],
+        lines: {
+          some: { accountId },
+        },
+      },
+      include: { lines: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (entries.length === 0) {
+      return null;
+    }
+
+    const [primary, ...extras] = entries;
+    if (extras.length > 0) {
+      await prisma.journalLine.deleteMany({
+        where: { entryId: { in: extras.map((entry) => entry.id) } },
+      });
+      await prisma.journalEntry.deleteMany({
+        where: { id: { in: extras.map((entry) => entry.id) } },
+      });
+    }
+
+    if (primary.entryType !== "opening-balance") {
+      return prisma.journalEntry.update({
+        where: { id: primary.id },
+        data: { entryType: "opening-balance" },
+        include: { lines: true },
+      });
+    }
+
+    return primary;
+  }
+
+  public async setOpeningBalance(
+    data: { accountId: string; displayAmount: number; asOfDate: Date | string },
+    tx?: TransactionClient
+  ): Promise<any> {
+    const prisma = tx || this.prisma;
+
+    if (!tx) {
+      return this.prisma.$transaction(async (trx) => {
+        return this.setOpeningBalance(data, trx);
+      });
+    }
+
+    const account = await prisma.account.findUnique({
+      where: { id: data.accountId },
+    });
+
+    if (!account) {
+      throw new Error(`Account with id ${data.accountId} not found.`);
+    }
+
+    if (account.type !== AccountType.User) {
+      throw new Error("Opening balances can only be set for user accounts.");
+    }
+
+    const dateStr = parseToStandardDate(data.asOfDate);
+    if (!dateStr) {
+      throw new Error("Invalid opening balance date.");
+    }
+
+    const roundedDisplay = Math.round(data.displayAmount * 100) / 100;
+    const rawAmount =
+      account.subtype === AccountSubtype.Liability
+        ? -roundedDisplay
+        : roundedDisplay;
+
+    const openingEntry = await this.findOpeningBalanceEntryForAccount(
+      data.accountId,
+      prisma
+    );
+
+    if (rawAmount === 0) {
+      if (openingEntry) {
+        await prisma.journalLine.deleteMany({
+          where: { entryId: openingEntry.id },
+        });
+        await prisma.journalEntry.delete({ where: { id: openingEntry.id } });
+      }
+      return null;
+    }
+
+    const equityAccount = await this.getOrCreateOpeningBalancesAccount(prisma);
+
+    if (!openingEntry) {
+      return prisma.journalEntry.create({
+        data: {
+          date: dateStr,
+          description: "Opening Balance",
+          entryType: "opening-balance",
+          displayOrder: Date.now(),
+          lines: {
+            create: [
+              {
+                accountId: account.id,
+                amount: rawAmount,
+                currency: account.currency,
+                description: "Opening Balance",
+              },
+              {
+                accountId: equityAccount.id,
+                amount: Math.round(-rawAmount * 100) / 100,
+                currency: equityAccount.currency || account.currency,
+                description: "Opening Balance",
+              },
+            ],
+          },
+        },
+        include: { lines: true },
+      });
+    }
+
+    const accountLine = openingEntry.lines.find(
+      (line) => line.accountId === account.id
+    );
+    const equityLine = openingEntry.lines.find(
+      (line) => line.accountId !== account.id
+    );
+
+    if (!accountLine || !equityLine) {
+      throw new Error("Opening balance entry is missing required lines.");
+    }
+
+    await prisma.journalEntry.update({
+      where: { id: openingEntry.id },
       data: {
-        date: typeof entryDate === "string" ? entryDate : entryDate.toISOString().slice(0, 10),
+        date: dateStr,
         description: "Opening Balance",
-        displayOrder: Date.now(),
+        entryType: "opening-balance",
       },
     });
 
-    const accounts = await prisma.account.findMany({
-      where: { id: { in: balances.map((b) => b.accountId) } },
-    });
-    const accountMap = new Map(accounts.map((a) => [a.id, a]));
-
-    // 3. Create Journal Lines for each account
-    const linesData = [];
-    let total = 0;
-
-    for (const item of balances) {
-      const account = accountMap.get(item.accountId);
-      if (!account) {
-        // Or handle this error more gracefully
-        throw new Error(`Account with id ${item.accountId} not found.`);
-      }
-
-      let amount = 0;
-      const accType = toAccountType(account.type);
-      if (ASSET_TYPES.includes(accType)) {
-        amount = item.balance; // Debits are positive
-      } else if (LIABILITY_TYPES.includes(accType)) {
-        amount = -item.balance; // Credits are negative
-      }
-      // Always round the amount
-      amount = Math.round(amount * 100) / 100;
-
-      if (amount !== 0) {
-        linesData.push({
-          entryId: journalEntry.id,
-          accountId: item.accountId,
-          amount,
-          currency: account.currency, // Add currency from the account
-          description: "Opening Balance",
-        });
-        total += amount;
-      }
-    }
-
-    // 4. Create the balancing line for the equity account
-    if (total !== 0) {
-      linesData.push({
-        entryId: journalEntry.id,
-        accountId: equityAccount.id,
-        amount: Math.round(-total * 100) / 100, // The balancing amount, rounded
-        currency: equityAccount.currency || "USD", // Add currency for equity account
+    await prisma.journalLine.update({
+      where: { id: accountLine.id },
+      data: {
+        amount: rawAmount,
+        currency: account.currency,
         description: "Opening Balance",
-      });
+      },
+    });
+
+    await prisma.journalLine.update({
+      where: { id: equityLine.id },
+      data: {
+        amount: Math.round(-rawAmount * 100) / 100,
+        currency: equityAccount.currency || account.currency,
+        description: "Opening Balance",
+      },
+    });
+
+    return prisma.journalEntry.findUnique({
+      where: { id: openingEntry.id },
+      include: { lines: true },
+    });
+  }
+
+  private async applyOpeningBalanceDelta(
+    openingEntryId: string,
+    accountId: string,
+    delta: number,
+    prisma: TransactionClient
+  ) {
+    const entry = await prisma.journalEntry.findUnique({
+      where: { id: openingEntryId },
+      include: { lines: true },
+    });
+
+    if (!entry) {
+      return;
     }
 
-    // 5. Create all lines in one go
-    if (linesData.length > 0) {
-      await prisma.journalLine.createMany({
-        data: linesData,
-      });
+    const accountLine = entry.lines.find((line: any) => line.accountId === accountId);
+    const equityLine = entry.lines.find((line: any) => line.accountId !== accountId);
+
+    if (!accountLine || !equityLine) {
+      throw new Error("Opening balance entry is missing required lines.");
     }
 
-    return journalEntry;
+    const nextAccountAmount = Math.round((accountLine.amount + delta) * 100) / 100;
+    const nextEquityAmount = Math.round((equityLine.amount - delta) * 100) / 100;
+
+    if (nextAccountAmount === 0) {
+      await prisma.journalLine.deleteMany({ where: { entryId: entry.id } });
+      await prisma.journalEntry.delete({ where: { id: entry.id } });
+      return;
+    }
+
+    await prisma.journalLine.update({
+      where: { id: accountLine.id },
+      data: { amount: nextAccountAmount },
+    });
+
+    await prisma.journalLine.update({
+      where: { id: equityLine.id },
+      data: { amount: nextEquityAmount },
+    });
+  }
+
+  private async adjustOpeningBalanceForEntryChange(
+    data: {
+      entryDate: string;
+      lines: { accountId: string; amount: number }[];
+      sign: 1 | -1;
+    },
+    prisma: TransactionClient
+  ) {
+    if (!data.lines.length) {
+      return;
+    }
+
+    const uniqueAccountIds = Array.from(
+      new Set(data.lines.map((line) => line.accountId))
+    );
+    const accounts = await prisma.account.findMany({
+      where: { id: { in: uniqueAccountIds } },
+    });
+    const accountMap = new Map(accounts.map((account) => [account.id, account]));
+
+    for (const line of data.lines) {
+      const account = accountMap.get(line.accountId);
+      if (!account || account.type !== AccountType.User) {
+        continue;
+      }
+
+      const openingEntry = await this.findOpeningBalanceEntryForAccount(
+        line.accountId,
+        prisma
+      );
+
+      if (!openingEntry) {
+        continue;
+      }
+
+      const openingDate = parseToStandardDate(openingEntry.date);
+      if (!openingDate) {
+        continue;
+      }
+
+      if (data.entryDate >= openingDate) {
+        continue;
+      }
+
+      const delta = Math.round(-data.sign * line.amount * 100) / 100;
+      if (delta === 0) {
+        continue;
+      }
+
+      await this.applyOpeningBalanceDelta(
+        openingEntry.id,
+        line.accountId,
+        delta,
+        prisma
+      );
+    }
   }
 
   // --- Dashboard Data Methods ---
@@ -1520,15 +1767,34 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       });
     }
 
-    // First, delete all journal lines associated with this entry
-    await prisma.journalLine.deleteMany({
-      where: { entryId },
+    const entry = await prisma.journalEntry.findUnique({
+      where: { id: entryId },
+      include: { lines: true },
     });
 
-    // Then delete the journal entry itself
-    const deletedEntry = await prisma.journalEntry.delete({
-      where: { id: entryId },
-    });
+    if (!entry) {
+      throw new Error("Journal entry not found");
+    }
+
+    const isOpeningBalanceEntry =
+      entry.entryType === "opening-balance" || entry.description === "Opening Balance";
+
+    if (!isOpeningBalanceEntry) {
+      await this.adjustOpeningBalanceForEntryChange(
+        {
+          entryDate: parseToStandardDate(entry.date) || entry.date,
+          lines: entry.lines.map((line: any) => ({
+            accountId: line.accountId,
+            amount: line.amount,
+          })),
+          sign: -1,
+        },
+        prisma
+      );
+    }
+
+    await prisma.journalLine.deleteMany({ where: { entryId } });
+    const deletedEntry = await prisma.journalEntry.delete({ where: { id: entryId } });
 
     return deletedEntry;
   }
@@ -1601,7 +1867,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       },
       // System accounts
       {
-        name: "Opening Balance Equity",
+        name: "Opening Balances",
         type: AccountType.System,
         subtype: AccountSubtype.Asset,
         currency: "USD",
@@ -2238,6 +2504,14 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     const lines = entry.lines;
     if (lines.length !== 2) throw new Error("Expected double-entry transaction");
 
+    const originalEntryDate = parseToStandardDate(entry.date) || entry.date;
+    const originalLines = lines.map((existingLine: any) => ({
+      accountId: existingLine.accountId,
+      amount: existingLine.amount,
+    }));
+    const isOpeningBalanceEntry =
+      entry.entryType === "opening-balance" || entry.description === "Opening Balance";
+
     // Determine which is from and which is to
     let fromLine = lines.find((l: any) => l.accountId === data.fromAccountId);
     let toLine = lines.find((l: any) => l.accountId === data.toAccountId);
@@ -2310,11 +2584,35 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       },
     });
 
-    // Return updated entry with lines
-    return prisma.journalEntry.findUnique({
+    const updatedEntry = await prisma.journalEntry.findUnique({
       where: { id: entry.id },
       include: { lines: true },
     });
+
+    if (!isOpeningBalanceEntry && updatedEntry) {
+      const updatedEntryDate = parseToStandardDate(updatedEntry.date) || updatedEntry.date;
+      await this.adjustOpeningBalanceForEntryChange(
+        {
+          entryDate: originalEntryDate,
+          lines: originalLines,
+          sign: -1,
+        },
+        prisma
+      );
+      await this.adjustOpeningBalanceForEntryChange(
+        {
+          entryDate: updatedEntryDate,
+          lines: updatedEntry.lines.map((updatedLine: any) => ({
+            accountId: updatedLine.accountId,
+            amount: updatedLine.amount,
+          })),
+          sign: 1,
+        },
+        prisma
+      );
+    }
+
+    return updatedEntry;
   }
 
   // Transaction reordering methods

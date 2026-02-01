@@ -60,6 +60,7 @@ model JournalEntry {
   date         String
   description  String?
   type         String?       // e.g., 'regular', 'currency_transfer'
+  entryType    String?
   postingDate  String?       // Date posted to account (YYYY-MM-DD)
   displayOrder Float?        // Order for display, defaults to createdAt timestamp
   createdAt    DateTime      @default(now())
@@ -67,6 +68,7 @@ model JournalEntry {
   lines        JournalLine[]
   
   @@index([displayOrder])
+  @@index([entryType])
 }
 
 model JournalLine {

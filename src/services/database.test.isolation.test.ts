@@ -22,7 +22,7 @@ describe('Database Test Isolation', () => {
     // Verify we can connect to the database
     const accounts = await databaseService.getAccounts();
     
-    // Should have default accounts (Opening Balance Equity, Retained Earnings)
+    // Should have default accounts (Opening Balances, Retained Earnings)
     expect(accounts).toBeDefined();
     expect(Array.isArray(accounts)).toBe(true);
   });

@@ -8,14 +8,14 @@
 
 ## Tasks
 
-- [ ] 1. Data model tag for opening balance entries
+- [x] 1. Data model tag for opening balance entries
   - Acceptance: opening balance entries are uniquely identifiable (e.g., entry type or metadata).
   - Acceptance: exactly one opening balance entry per account is enforceable.
-- [ ] 2. Service: set/update opening balance (single account)
+- [x] 2. Service: set/update opening balance (single account)
   - Acceptance: creates or updates a single entry for the target account.
   - Acceptance: uses system equity account `Opening Balances` as counter-account.
   - Acceptance: liability semantics treat positive input as "amount owed".
-- [ ] 3. Service: backfill adjustment hooks
+- [x] 3. Service: backfill adjustment hooks
   - Acceptance: insert/update/delete of older transactions adjusts opening balance entry amount.
   - Acceptance: current balance remains unchanged after backfill adjustments.
   - Acceptance: date boundary moves are handled correctly.

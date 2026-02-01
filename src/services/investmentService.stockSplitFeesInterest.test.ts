@@ -17,7 +17,7 @@ describe("InvestmentService - Stock Splits, Fees, and Interest", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -86,7 +86,7 @@ describe("InvestmentService - Stock Splits, Fees, and Interest", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 

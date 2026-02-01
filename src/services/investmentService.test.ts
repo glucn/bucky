@@ -331,7 +331,7 @@ describe("InvestmentService - Buy Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -372,7 +372,7 @@ describe("InvestmentService - Buy Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -408,7 +408,7 @@ describe("InvestmentService - Buy Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -499,7 +499,7 @@ describe("InvestmentService - Buy Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -542,7 +542,7 @@ describe("InvestmentService - Buy Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -611,7 +611,7 @@ describe("InvestmentService - Sell Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -657,7 +657,7 @@ describe("InvestmentService - Sell Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -697,7 +697,7 @@ describe("InvestmentService - Sell Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -738,7 +738,7 @@ describe("InvestmentService - Sell Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -779,7 +779,7 @@ describe("InvestmentService - Sell Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 20000,
       });
 
@@ -841,7 +841,7 @@ describe("InvestmentService - Sell Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 20000,
       });
 
@@ -963,7 +963,7 @@ describe("InvestmentService - Sell Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -996,7 +996,7 @@ describe("InvestmentService - Sell Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -1035,7 +1035,7 @@ describe("InvestmentService - Sell Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -1125,7 +1125,7 @@ describe("InvestmentService - Dividend Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -1293,7 +1293,7 @@ describe("InvestmentService - Dividend Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -1431,7 +1431,7 @@ describe("InvestmentService - Dividend Transactions", () => {
         date: "2024-01-01",
         description: "Initial deposit",
         fromAccountId: tradeCashAccount.id,
-        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        toAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         amount: 10000,
       });
 
@@ -1528,7 +1528,7 @@ describe("InvestmentService - Cash Management", () => {
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial balance",
-        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         toAccountId: checkingAccount.id,
         amount: 10000,
       });
@@ -1571,7 +1571,7 @@ describe("InvestmentService - Cash Management", () => {
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial balance",
-        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         toAccountId: checkingAccount.id,
         amount: 10000,
       });
@@ -1676,7 +1676,7 @@ describe("InvestmentService - Cash Management", () => {
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial balance",
-        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         toAccountId: checkingAccount.id,
         amount: 20000,
       });
@@ -1705,7 +1705,7 @@ describe("InvestmentService - Cash Management", () => {
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         toAccountId: tradeCashAccount.id,
         amount: 10000,
       });
@@ -1749,7 +1749,7 @@ describe("InvestmentService - Cash Management", () => {
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         toAccountId: tradeCashAccount.id,
         amount: 10000,
       });
@@ -1778,7 +1778,7 @@ describe("InvestmentService - Cash Management", () => {
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         toAccountId: tradeCashAccount.id,
         amount: 5000,
       });
@@ -1802,7 +1802,7 @@ describe("InvestmentService - Cash Management", () => {
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         toAccountId: tradeCashAccount.id,
         amount: 10000,
       });
@@ -1858,7 +1858,7 @@ describe("InvestmentService - Cash Management", () => {
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         toAccountId: tradeCashAccount.id,
         amount: 10000,
       });
@@ -1895,7 +1895,7 @@ describe("InvestmentService - Cash Management", () => {
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         toAccountId: tradeCashAccount.id,
         amount: 20000,
       });
@@ -1928,7 +1928,7 @@ describe("InvestmentService - Cash Management", () => {
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial deposit",
-        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         toAccountId: tradeCashAccount.id,
         amount: 10000,
       });
@@ -1963,7 +1963,7 @@ describe("InvestmentService - Cash Management", () => {
       await databaseService.createJournalEntry({
         date: "2024-01-01",
         description: "Initial balance",
-        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balance Equity" } }))!.id,
+        fromAccountId: (await databaseService.prismaClient.account.findFirst({ where: { name: "Opening Balances" } }))!.id,
         toAccountId: checkingAccount.id,
         amount: 20000,
       });

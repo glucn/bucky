@@ -1059,12 +1059,12 @@ class InvestmentService {
       // We need a balancing entry - typically this would be to a special equity account
       // or we can use the security account itself with offsetting entries
       // However, based on the requirements, we should just debit the security account
-      // Let's use a contra-account approach or Opening Balance Equity
+      // Let's use a contra-account approach or Opening Balances
       const openingBalanceEquity = await databaseService.prismaClient.account.findFirst({
-        where: { name: "Opening Balance Equity" },
+        where: { name: "Opening Balances" },
       });
       if (!openingBalanceEquity) {
-        throw new Error("Opening Balance Equity account not found");
+        throw new Error("Opening Balances account not found");
       }
 
       journalLines.push({
