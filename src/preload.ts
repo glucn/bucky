@@ -36,4 +36,10 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("move-transaction-up", entryId),
   moveTransactionDown: (entryId: string) =>
     ipcRenderer.invoke("move-transaction-down", entryId),
+
+  // Opening balance operations
+  setOpeningBalance: (data: { accountId: string; displayAmount: number; asOfDate: string }) =>
+    ipcRenderer.invoke("set-opening-balance", data),
+  getOpeningBalance: (accountId: string) =>
+    ipcRenderer.invoke("get-opening-balance", accountId),
 });

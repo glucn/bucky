@@ -20,10 +20,13 @@ const SetOpeningBalanceModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ accountId, onClose, onSuccess }) => {
-  const [currentBalance, setCurrentBalance] = React.useState<number | null>(
+  const [openingBalance, setOpeningBalance] = React.useState<number | null>(
     null
   );
   const [accountCurrency, setAccountCurrency] = React.useState<string>("USD");
+  const [accountSubtype, setAccountSubtype] = React.useState<AccountSubtype>(
+    AccountSubtype.Asset
+  );
   const [desiredBalance, setDesiredBalance] = React.useState<string>("");
   const [entryDate, setEntryDate] = React.useState(
     new Date().toISOString().split("T")[0]
@@ -33,7 +36,7 @@ const SetOpeningBalanceModal: React.FC<{
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   React.useEffect(() => {
-    const fetchCurrentBalance = async () => {
+    const fetchOpeningBalance = async () => {
       setIsLoading(true);
       setError(null);
       try {
@@ -42,58 +45,48 @@ const SetOpeningBalanceModal: React.FC<{
           accountId
         );
         setAccountCurrency(account?.currency || "USD");
-        
-        const lines = await window.electron.ipcRenderer.invoke(
-          "get-transactions",
-          accountId
-        );
-        const rawBalance = lines.reduce(
-          (total: number, line: { amount: number }) => total + line.amount,
-          0
-        );
-        
-        // Normalize the balance for display
-        const accountType = toAccountType(account?.type || "user");
-        const accountSubtype = (account?.subtype === "liability"
+        const subtype = (account?.subtype === "liability"
           ? AccountSubtype.Liability
           : AccountSubtype.Asset) as AccountSubtype;
-        
-        const normalizedBalance = normalizeAccountBalance(
-          rawBalance,
-          accountType,
-          accountSubtype
-        );
-        
-        setCurrentBalance(Math.round(normalizedBalance * 100) / 100);
+        setAccountSubtype(subtype);
+
+        const openingEntry = await window.electron.getOpeningBalance(accountId);
+        if (openingEntry) {
+          setOpeningBalance(openingEntry.displayAmount);
+          setDesiredBalance(openingEntry.displayAmount.toString());
+          setEntryDate(openingEntry.date);
+        } else {
+          setOpeningBalance(null);
+          setDesiredBalance("");
+          setEntryDate(new Date().toISOString().split("T")[0]);
+        }
       } catch (err) {
-        setError("Failed to fetch current balance.");
-        setCurrentBalance(null);
+        setError("Failed to fetch opening balance.");
+        setOpeningBalance(null);
       } finally {
         setIsLoading(false);
       }
     };
-    fetchCurrentBalance();
+    fetchOpeningBalance();
   }, [accountId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (currentBalance === null) return;
-
     const desired = Math.round(parseFloat(desiredBalance || "0") * 100) / 100;
-    const diff = desired - currentBalance;
 
-    if (isNaN(desired) || diff === 0) {
-      setError("Please enter a balance different from the current balance.");
+    if (isNaN(desired)) {
+      setError("Please enter a valid opening balance.");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await window.electron.ipcRenderer.invoke("create-opening-balance-entry", {
-        balances: [{ accountId, balance: diff }],
-        entryDate,
+      await window.electron.setOpeningBalance({
+        accountId,
+        displayAmount: desired,
+        asOfDate: entryDate,
       });
       setDesiredBalance("");
       onSuccess();
@@ -118,7 +111,7 @@ const SetOpeningBalanceModal: React.FC<{
         </button>
         <h2 className="text-xl font-bold mb-4">Set Opening Balance</h2>
         {isLoading ? (
-          <div className="text-gray-500">Loading balance...</div>
+          <div className="text-gray-500">Loading opening balance...</div>
         ) : (
           <>
             {error && (
@@ -136,19 +129,24 @@ const SetOpeningBalanceModal: React.FC<{
                   value={entryDate}
                   onChange={(e) => setEntryDate(e.target.value)}
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  required
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Current Balance
+                  Current Opening Balance
                 </label>
                 <div className="text-gray-800 font-mono">
-                  {formatTransactionCurrency(currentBalance ?? 0, accountCurrency)}
+                  {openingBalance === null
+                    ? "Not set"
+                    : formatTransactionCurrency(openingBalance, accountCurrency)}
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Desired Opening Balance
+                  {accountSubtype === AccountSubtype.Liability
+                    ? "Balance owed"
+                    : "Opening Balance"}
                 </label>
                 <input
                   type="number"

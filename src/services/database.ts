@@ -1353,6 +1353,47 @@ class DatabaseService {
     return primary;
   }
 
+  public async getOpeningBalanceForAccount(
+    accountId: string,
+    tx?: TransactionClient
+  ): Promise<
+    | {
+        entryId: string;
+        accountId: string;
+        displayAmount: number;
+        date: string;
+      }
+    | null
+  > {
+    const prisma = tx || this.prisma;
+    const account = await prisma.account.findUnique({ where: { id: accountId } });
+    if (!account) {
+      throw new Error(`Account with id ${accountId} not found.`);
+    }
+
+    const entry = await this.findOpeningBalanceEntryForAccount(accountId, prisma);
+    if (!entry) {
+      return null;
+    }
+
+    const accountLine = entry.lines.find((line: any) => line.accountId === accountId);
+    if (!accountLine) {
+      return null;
+    }
+
+    const displayAmount =
+      account.subtype === AccountSubtype.Liability
+        ? Math.round(-accountLine.amount * 100) / 100
+        : Math.round(accountLine.amount * 100) / 100;
+
+    return {
+      entryId: entry.id,
+      accountId,
+      displayAmount,
+      date: entry.date,
+    };
+  }
+
   public async setOpeningBalance(
     data: { accountId: string; displayAmount: number; asOfDate: Date | string },
     tx?: TransactionClient

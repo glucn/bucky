@@ -229,6 +229,37 @@ function setupIpcHandlers() {
     }
   );
 
+  ipcMain.handle(
+    "set-opening-balance",
+    async (
+      _,
+      {
+        accountId,
+        displayAmount,
+        asOfDate,
+      }: { accountId: string; displayAmount: number; asOfDate: string }
+    ) => {
+      console.log("Handling set-opening-balance request:", {
+        accountId,
+        displayAmount,
+        asOfDate,
+      });
+      return databaseService.setOpeningBalance({
+        accountId,
+        displayAmount,
+        asOfDate,
+      });
+    }
+  );
+
+  ipcMain.handle(
+    "get-opening-balance",
+    async (_, accountId: string) => {
+      console.log("Handling get-opening-balance request:", { accountId });
+      return databaseService.getOpeningBalanceForAccount(accountId);
+    }
+  );
+
   ipcMain.handle("get-net-worth", async () => {
     console.log("Handling get-net-worth request");
     return databaseService.getNetWorth();

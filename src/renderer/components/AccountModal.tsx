@@ -22,6 +22,11 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const [selectedGroupId, setSelectedGroupId] = useState<string>("");
   const [availableGroups, setAvailableGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [openingBalanceAmount, setOpeningBalanceAmount] = useState("");
+  const [openingBalanceDate, setOpeningBalanceDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
+  const [openingBalanceError, setOpeningBalanceError] = useState<string | null>(null);
   const [showCreditCardSetup, setShowCreditCardSetup] = useState(false);
   const [createdAccountId, setCreatedAccountId] = useState<string | null>(null);
   const [selectedTypeValue, setSelectedTypeValue] = useState<string>("cash"); // Track raw dropdown value
@@ -34,6 +39,9 @@ export const AccountModal: React.FC<AccountModalProps> = ({
       setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
       setSelectedTypeValue("cash");
       setSelectedGroupId("");
+      setOpeningBalanceAmount("");
+      setOpeningBalanceDate(new Date().toISOString().split("T")[0]);
+      setOpeningBalanceError(null);
     }
   }, [isOpen]);
 
@@ -50,6 +58,16 @@ export const AccountModal: React.FC<AccountModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setOpeningBalanceError(null);
+
+    const trimmedAmount = openingBalanceAmount.trim();
+    const parsedOpeningBalance = trimmedAmount === "" ? null : Number(trimmedAmount);
+
+    if (parsedOpeningBalance !== null && Number.isNaN(parsedOpeningBalance)) {
+      setOpeningBalanceError("Please enter a valid opening balance.");
+      return;
+    }
+
     setLoading(true);
     
     try {
@@ -72,10 +90,32 @@ export const AccountModal: React.FC<AccountModalProps> = ({
       const isCreditCard = selectedTypeValue === "credit" && newAccount.subtype === AccountSubtype.Liability;
       
       if (isCreditCard && result?.account?.id) {
+        if (parsedOpeningBalance !== null && parsedOpeningBalance !== 0) {
+          try {
+            await window.electron.setOpeningBalance({
+              accountId: result.account.id,
+              displayAmount: parsedOpeningBalance,
+              asOfDate: openingBalanceDate,
+            });
+          } catch (balanceError) {
+            console.error("Failed to set opening balance:", balanceError);
+          }
+        }
         // Store the created account ID and show credit card setup modal
         setCreatedAccountId(result.account.id);
         setShowCreditCardSetup(true);
       } else {
+        if (parsedOpeningBalance !== null && parsedOpeningBalance !== 0) {
+          try {
+            await window.electron.setOpeningBalance({
+              accountId: result.account.id,
+              displayAmount: parsedOpeningBalance,
+              asOfDate: openingBalanceDate,
+            });
+          } catch (balanceError) {
+            console.error("Failed to set opening balance:", balanceError);
+          }
+        }
         // For non-credit card accounts, close immediately
         setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
         setSelectedTypeValue("cash");
@@ -125,6 +165,11 @@ export const AccountModal: React.FC<AccountModalProps> = ({
         <h2 className="text-lg font-medium text-gray-900 mb-4">
           Add New Account
         </h2>
+        {openingBalanceError && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mb-3">
+            {openingBalanceError}
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
@@ -245,6 +290,39 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               </p>
             </div>
           )}
+
+          <div className="border-t border-gray-200 pt-4">
+            <h3 className="text-sm font-medium text-gray-900 mb-3">Opening Balance</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {newAccount.subtype === AccountSubtype.Liability
+                    ? "Balance owed"
+                    : "Balance"}
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={openingBalanceAmount}
+                  onChange={(e) => setOpeningBalanceAmount(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  As of date
+                </label>
+                <input
+                  type="date"
+                  value={openingBalanceDate}
+                  onChange={(e) => setOpeningBalanceDate(e.target.value)}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  required
+                />
+              </div>
+            </div>
+          </div>
           
           <button
             type="submit"

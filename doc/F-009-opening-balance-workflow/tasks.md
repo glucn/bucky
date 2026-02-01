@@ -19,13 +19,13 @@
   - Acceptance: insert/update/delete of older transactions adjusts opening balance entry amount.
   - Acceptance: current balance remains unchanged after backfill adjustments.
   - Acceptance: date boundary moves are handled correctly.
-- [ ] 4. IPC: set opening balance endpoint
+- [x] 4. IPC: set opening balance endpoint
   - Acceptance: IPC handler accepts accountId, displayAmount, asOfDate.
   - Acceptance: errors are surfaced to the renderer with clear messages.
-- [ ] 5. UI: account creation opening balance fields
+- [x] 5. UI: account creation opening balance fields
   - Acceptance: optional amount + as-of date are present on account creation.
   - Acceptance: liability accounts show "Balance owed" label.
-- [ ] 6. UI: account details "Set Opening Balance" modal
+- [x] 6. UI: account details "Set Opening Balance" modal
   - Acceptance: modal shows current opening balance and allows edit.
   - Acceptance: saves update instead of creating new entry.
 - [ ] 7. Replace legacy opening balance flows
