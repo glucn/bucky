@@ -10,7 +10,7 @@ Bucky uses Playwright for end-to-end testing of the Electron application. E2E te
 - **Test directory**: `tests/e2e/`
 - **Test files**: `*.spec.ts`
 - **Database**: Automatically uses `prisma/test.db`
-- **Webpack dev server**: Automatically started on port 3001
+- **Webpack dev server**: Automatically started on port 3000
 
 ## Running Tests
 

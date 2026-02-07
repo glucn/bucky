@@ -217,6 +217,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
               }}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
               required
+              data-testid="manual-transaction-category"
             >
               <option value="" disabled>
                 {accounts.length === 0 ? "Loading..." : "Select a category"}
@@ -252,6 +253,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
               required
               step="0.01"
+              data-testid="manual-transaction-amount"
             />
             {fromAccount && (
               <p className="mt-1 text-xs text-gray-500">
@@ -282,6 +284,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
               }
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
               required
+              data-testid="manual-transaction-date"
             />
           </div>
           <div>
@@ -328,6 +331,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
               }
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
               rows={2}
+              data-testid="manual-transaction-description"
             />
           </div>
 
@@ -429,6 +433,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
             type="submit"
             className="w-full py-2 px-4 bg-primary-600 text-white rounded hover:bg-primary-700"
             disabled={isSubmitting}
+            data-testid="manual-transaction-submit"
           >
             {isSubmitting
               ? isEdit

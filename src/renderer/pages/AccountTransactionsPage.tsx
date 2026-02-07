@@ -15,7 +15,7 @@ import {
 import { AccountType, AccountSubtype, toAccountType } from "../../shared/accountTypes";
 
 // Modal for setting opening balance for the current account
-const SetOpeningBalanceModal: React.FC<{
+export const SetOpeningBalanceModal: React.FC<{
   accountId: string;
   onClose: () => void;
   onSuccess: () => void;
@@ -76,8 +76,13 @@ const SetOpeningBalanceModal: React.FC<{
 
     const desired = Math.round(parseFloat(desiredBalance || "0") * 100) / 100;
 
-    if (isNaN(desired)) {
+    if (!Number.isFinite(desired) || isNaN(desired)) {
       setError("Please enter a valid opening balance.");
+      return;
+    }
+
+    if (!entryDate) {
+      setError("Please provide an as-of date for opening balance.");
       return;
     }
 
@@ -130,13 +135,14 @@ const SetOpeningBalanceModal: React.FC<{
                   onChange={(e) => setEntryDate(e.target.value)}
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   required
+                  data-testid="opening-balance-modal-date"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Current Opening Balance
                 </label>
-                <div className="text-gray-800 font-mono">
+                <div className="text-gray-800 font-mono" data-testid="current-opening-balance">
                   {openingBalance === null
                     ? "Not set"
                     : formatTransactionCurrency(openingBalance, accountCurrency)}
@@ -162,6 +168,7 @@ const SetOpeningBalanceModal: React.FC<{
                   }}
                   className="block w-full rounded-md border-gray-300 pl-2 pr-2 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   placeholder="0.00"
+                  data-testid="opening-balance-modal-amount"
                 />
               </div>
               <div className="flex justify-end gap-3">
@@ -176,6 +183,7 @@ const SetOpeningBalanceModal: React.FC<{
                   type="submit"
                   className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   disabled={isSubmitting}
+                  data-testid="opening-balance-save"
                 >
                   {isSubmitting ? "Saving..." : "Save"}
                 </button>
@@ -719,6 +727,7 @@ export const AccountTransactionsPage: React.FC = () => {
               type="button"
               aria-haspopup="true"
               aria-expanded="false"
+              data-testid="more-actions-button"
             >
               More Actions
               <svg
@@ -741,6 +750,7 @@ export const AccountTransactionsPage: React.FC = () => {
                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                   onClick={() => setShowOpenBalanceModal(true)}
                   type="button"
+                  data-testid="set-opening-balance-action"
                 >
                   Set Opening Balance
                 </button>
@@ -759,6 +769,7 @@ export const AccountTransactionsPage: React.FC = () => {
             className="px-4 py-2 bg-primary-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
             onClick={() => setShowManualModal(true)}
             type="button"
+            data-testid="add-transaction-button"
           >
             Add Transaction
           </button>

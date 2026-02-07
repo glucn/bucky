@@ -18,7 +18,7 @@ module.exports = {
   output: {
     filename: "renderer.js",
     path: path.resolve(__dirname, ".webpack/renderer"),
-    publicPath: "http://localhost:3001/",
+    publicPath: "http://localhost:3000/",
   },
   module: {
     rules,
@@ -38,7 +38,7 @@ module.exports = {
   },
   target: "web",
   devServer: {
-    port: 3001,
+    port: 3000,
     hot: true,
     static: {
       directory: path.join(__dirname, ".webpack/renderer"),

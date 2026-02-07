@@ -108,7 +108,7 @@ const getMainWindow = async (app: ElectronApplication): Promise<Page> => {
     const windows = app.windows();
     for (const window of windows) {
       const url = await window.url();
-      if (url.includes("localhost:3001")) {
+      if (url.includes("localhost:3000")) {
         await window.waitForLoadState("domcontentloaded");
         return window;
       }
@@ -123,7 +123,7 @@ const getMainWindow = async (app: ElectronApplication): Promise<Page> => {
 
 const openTransactionsPage = async (page: Page) => {
   const accountId = await ensureSeedAccounts();
-  await page.goto(`http://localhost:3001/accounts/${accountId}/transactions`, {
+  await page.goto(`http://localhost:3000/accounts/${accountId}/transactions`, {
     waitUntil: "domcontentloaded",
   });
   await page.waitForURL(new RegExp(`/accounts/${accountId}/transactions`));

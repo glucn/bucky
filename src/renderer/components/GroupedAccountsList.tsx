@@ -239,6 +239,7 @@ export const GroupedAccountsList: React.FC<GroupedAccountsListProps> = ({
               {ungroupedAccounts.map((account) => (
                 <tr 
                   key={account.id}
+                  data-testid={`account-row-${account.id}`}
                   className="hover:bg-gray-50 cursor-pointer"
                   onClick={() => navigate(`/accounts/${account.id}/transactions`)}
                 >
@@ -250,7 +251,10 @@ export const GroupedAccountsList: React.FC<GroupedAccountsListProps> = ({
                       {account.subtype}
                     </td>
                   )}
-                  <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${getBalanceColor(account)}`}>
+                  <td
+                    className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${getBalanceColor(account)}`}
+                    data-testid={`account-balance-${account.id}`}
+                  >
                     {formatBalances(account)}
                   </td>
                   {accountType === AccountType.User && (

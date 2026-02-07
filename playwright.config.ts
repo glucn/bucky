@@ -11,7 +11,7 @@ export default defineConfig({
   reporter: "list",
   webServer: {
     command: "npm run dev:webpack",
-    url: "http://localhost:3001",
+    url: "http://localhost:3000",
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,
     stdout: "pipe",

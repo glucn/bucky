@@ -63,8 +63,13 @@ export const AccountModal: React.FC<AccountModalProps> = ({
     const trimmedAmount = openingBalanceAmount.trim();
     const parsedOpeningBalance = trimmedAmount === "" ? null : Number(trimmedAmount);
 
-    if (parsedOpeningBalance !== null && Number.isNaN(parsedOpeningBalance)) {
+    if (parsedOpeningBalance !== null && !Number.isFinite(parsedOpeningBalance)) {
       setOpeningBalanceError("Please enter a valid opening balance.");
+      return;
+    }
+
+    if (!openingBalanceDate) {
+      setOpeningBalanceError("Please provide an as-of date for opening balance.");
       return;
     }
 
@@ -307,6 +312,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   onChange={(e) => setOpeningBalanceAmount(e.target.value)}
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   placeholder="0.00"
+                  data-testid="opening-balance-amount-input"
                 />
               </div>
               <div>
@@ -319,6 +325,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   onChange={(e) => setOpeningBalanceDate(e.target.value)}
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   required
+                  data-testid="opening-balance-date-input"
                 />
               </div>
             </div>

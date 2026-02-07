@@ -66,7 +66,7 @@ When testing any code changes, you MUST use the Test DB, and MUST NOT do any ope
 ### Webpack Configuration
 
 - **Main Process**: `webpack.main.config.js` - Node.js backend
-- **Renderer Process**: `webpack.renderer.config.js` - React frontend with dev server on port 3001
+- **Renderer Process**: `webpack.renderer.config.js` - React frontend with dev server on port 3000
 - **Preload Script**: `webpack.preload.config.js` - Bridge between main and renderer
 
 ### Testing Setup

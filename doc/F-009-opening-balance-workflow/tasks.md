@@ -37,9 +37,10 @@
 - [x] 9. Service tests: backfill adjustment
   - Acceptance: current balance remains unchanged; opening balance entry amount adjusts.
   - Acceptance: insert/update/delete and date boundary move cases covered.
-- [ ] 10. UI tests: opening balance UX
+- [x] 10. UI tests: opening balance UX
   - Acceptance: modal validation for amount/as-of date.
   - Acceptance: liability label is "Balance owed".
-- [ ] 11. E2E tests (Playwright): opening balance workflow
+- [/] 11. E2E tests (Playwright): opening balance workflow
   - Acceptance: create account with opening balance and verify CB/OB behavior.
   - Acceptance: older transaction insert/update/delete keeps current balance unchanged and adjusts opening balance entry amount.
+  - Note: test spec added at `tests/e2e/opening-balance.spec.ts`; current Playwright environment has repeated renderer navigation/reload causing flaky failures across E2E specs.

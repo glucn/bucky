@@ -53,6 +53,10 @@ interface IElectronAPI {
   // Transaction reordering operations
   moveTransactionUp(entryId: string): Promise<{ success: boolean; error?: string }>;
   moveTransactionDown(entryId: string): Promise<{ success: boolean; error?: string }>;
+
+  // Opening balance operations
+  setOpeningBalance(data: { accountId: string; displayAmount: number; asOfDate: string }): Promise<any>;
+  getOpeningBalance(accountId: string): Promise<{ entryId: string; accountId: string; displayAmount: number; date: string } | null>;
 }
 
 declare global {

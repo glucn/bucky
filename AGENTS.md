@@ -48,6 +48,8 @@ Bucky is a personal bookkeeping desktop app built with Electron, React, and Pris
 
 - Unit/property tests live in `src/**/*.test.ts(x)`.
 - E2E tests live in `tests/e2e/*.spec.ts` using Playwright (see `doc/e2e-testing-guide.md`).
+- Before running Playwright tests, check whether port `3000` is already in use.
+  - If port `3000` is occupied, ask the user for confirmation before killing the process.
 - Investment features are covered by multiple service tests (e.g. `src/services/investmentService.*.test.ts`).
 - Database isolation and transaction ordering have dedicated tests.
 

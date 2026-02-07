@@ -1022,7 +1022,7 @@ function createWindow() {
 
   // Load the index.html of the app
   const appUrl = isDev
-    ? "http://localhost:3001"
+    ? "http://localhost:3000"
     : `file://${path.join(__dirname, "../renderer/index.html")}`;
   console.log("Loading app URL:", appUrl);
   mainWindow.loadURL(appUrl);
