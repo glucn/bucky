@@ -10,20 +10,20 @@
 
 ### Batch 1: Contract + Net Worth
 
-- [ ] 1. Define shared overview payload type
+- [x] 1. Define shared overview payload type
   - Acceptance: one shared response type includes `asOfDate`, `netWorth`, `incomeExpenseTrend6m`, `investmentAllocation`, and `metadata`.
   - Acceptance: the same type is used across service, IPC, and renderer layers.
-- [ ] 2. Service tests: future-dated exclusion and net worth core logic
+- [x] 2. Service tests: future-dated exclusion and net worth core logic
   - Acceptance: transactions dated after local today are excluded from dashboard metrics.
   - Acceptance: net worth is `assets - liabilities` across non-category accounts.
   - Acceptance: investment account value (securities + cash) is included.
-- [ ] 3. Implement minimal overview service scaffold + net worth metric
+- [x] 3. Implement minimal overview service scaffold + net worth metric
   - Acceptance: orchestrator creates shared context and delegates net worth computation.
   - Acceptance: tests from tasks 1-2 pass.
 
 ### Batch 2: 6-Month Trend
 
-- [ ] 4. Service tests: 6-month bucket boundaries and ordering
+- [/] 4. Service tests: 6-month bucket boundaries and ordering
   - Acceptance: trend returns current month + previous 5 months using local calendar months.
   - Acceptance: bucket order is deterministic (`YYYY-MM`).
 - [ ] 5. Service tests: trend inclusion/exclusion rules
