@@ -10,7 +10,7 @@ export default defineConfig({
   },
   reporter: "list",
   webServer: {
-    command: "npm run dev:webpack",
+    command: "npm run e2e:db:push && npm run dev:webpack",
     url: "http://localhost:3000",
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,
