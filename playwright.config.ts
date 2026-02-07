@@ -5,12 +5,13 @@ export default defineConfig({
   timeout: 120_000,
   expect: { timeout: 10_000 },
   retries: 0,
+  workers: 1,
   use: {
     headless: true,
   },
   reporter: "list",
   webServer: {
-    command: "npm run e2e:db:push && npm run dev:webpack",
+    command: "PLAYWRIGHT_TEST=1 npm run e2e:db:push && PLAYWRIGHT_TEST=1 npm run dev:webpack",
     url: "http://localhost:3000",
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,

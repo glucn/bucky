@@ -1028,7 +1028,7 @@ function createWindow() {
   mainWindow.loadURL(appUrl);
 
   // Open DevTools in development
-  if (isDev) {
+  if (isDev && process.env.PLAYWRIGHT_TEST !== "1") {
     console.log("Opening DevTools...");
     mainWindow.webContents.openDevTools();
   }

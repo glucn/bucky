@@ -12,6 +12,7 @@ const launchApp = async (): Promise<ElectronApplication> => {
       NODE_ENV: "test",
       VITEST: "true",
       ELECTRON_IS_DEV: "1",
+      PLAYWRIGHT_TEST: "1",
     },
   });
 };
