@@ -23,27 +23,27 @@
 
 ### Batch 2: 6-Month Trend
 
-- [/] 4. Service tests: 6-month bucket boundaries and ordering
+- [x] 4. Service tests: 6-month bucket boundaries and ordering
   - Acceptance: trend returns current month + previous 5 months using local calendar months.
   - Acceptance: bucket order is deterministic (`YYYY-MM`).
-- [ ] 5. Service tests: trend inclusion/exclusion rules
+- [x] 5. Service tests: trend inclusion/exclusion rules
   - Acceptance: uncategorized and placeholder-linked transactions are included.
   - Acceptance: internal transfers between user-owned accounts are excluded.
   - Acceptance: monthly `income` and `expense` are returned as separate positive values.
-- [ ] 6. Implement minimal income/expense trend metric
+- [x] 6. Implement minimal income/expense trend metric
   - Acceptance: metric passes month-bucket and inclusion/exclusion tests.
 
 ### Batch 3: Investment Allocation + FX
 
-- [ ] 7. Service tests: allocation composition and empty-state behavior
+- [x] 7. Service tests: allocation composition and empty-state behavior
   - Acceptance: slices are grouped by investment account/portfolio.
   - Acceptance: slice values include securities + investment cash.
   - Acceptance: no-investment case returns `hasData=false` with empty hint metadata.
-- [ ] 8. Service tests: FX conversion and fallback metadata
+- [x] 8. Service tests: FX conversion and fallback metadata
   - Acceptance: multi-currency totals convert using latest FX rate.
   - Acceptance: missing latest FX uses last known cached rate.
   - Acceptance: fallback sets metadata flags (`usedEstimatedFxRate`, `missingFxPairs`).
-- [ ] 9. Implement minimal investment allocation metric + shared FX helper
+- [x] 9. Implement minimal investment allocation metric + shared FX helper
   - Acceptance: allocation and FX tests pass with deterministic results.
 
 ### Batch 4: IPC + Preload Integration
