@@ -57,16 +57,16 @@
 
 ### Batch 5: Dashboard UI + Auto-Refresh + E2E
 
-- [ ] 12. Renderer tests: loading/success/error/empty states
+- [x] 12. Renderer tests: loading/success/error/empty states
   - Acceptance: page shows loading before data resolves.
   - Acceptance: success renders three cards from one payload.
   - Acceptance: allocation empty hint renders when `hasData=false`.
-- [ ] 13. Implement read-only dashboard cards on default home
+- [x] 13. Implement read-only dashboard cards on default home
   - Acceptance: cards render in order: Net Worth, 6-Month Trend, Investment Allocation.
   - Acceptance: cards are read-only and non-drilldown.
-- [ ] 14. Renderer tests + implementation: debounced auto-refresh
+- [x] 14. Renderer tests + implementation: debounced auto-refresh
   - Acceptance: dashboard re-fetches when relevant data changes.
   - Acceptance: rapid updates are coalesced/debounced to avoid thrashing.
-- [ ] 15. E2E test: overview happy path
+- [x] 15. E2E test: overview happy path
   - Acceptance: app opens on overview dashboard by default.
   - Acceptance: three cards render and allocation empty hint appears when no investment data exists.
