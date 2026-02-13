@@ -1,4 +1,5 @@
 import { AccountGroup, Account, GroupedAccountsView } from '../types';
+import { OverviewDashboardPayload } from '../../shared/overview';
 
 export interface IElectronAPI {
   ipcRenderer: {
@@ -27,6 +28,9 @@ export interface IElectronAPI {
   // Opening balance operations
   setOpeningBalance(data: { accountId: string; displayAmount: number; asOfDate: string }): Promise<any>;
   getOpeningBalance(accountId: string): Promise<{ entryId: string; accountId: string; displayAmount: number; date: string } | null>;
+
+  // Overview dashboard operations
+  getOverviewDashboard(asOfDate?: string): Promise<OverviewDashboardPayload>;
 }
 
 declare global {

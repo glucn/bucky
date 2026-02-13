@@ -10,6 +10,7 @@ import { creditCardService } from "../services/creditCardService";
 import { resolveImportAccounts } from "../services/importUtils";
 import { AccountSubtype } from "../shared/accountTypes";
 import { setupInvestmentIpcHandlers } from "./ipcHandlers.investments";
+import { setupOverviewIpcHandlers } from "./ipcHandlers.overview";
 
 // Add this at the top of the file for type safety with the injected variable
 // eslint-disable-next-line no-var
@@ -967,6 +968,7 @@ function setupIpcHandlers() {
 
   // Setup investment IPC handlers
   setupInvestmentIpcHandlers();
+  setupOverviewIpcHandlers();
 
   console.log("All IPC handlers registered");
   // DEV ONLY: Reset all data to initial state

@@ -1,4 +1,5 @@
 import { AccountType } from "../shared/accountTypes";
+import { OverviewDashboardPayload } from "../shared/overview";
 
 export type AccountGroup = {
   id: string;
@@ -57,6 +58,9 @@ interface IElectronAPI {
   // Opening balance operations
   setOpeningBalance(data: { accountId: string; displayAmount: number; asOfDate: string }): Promise<any>;
   getOpeningBalance(accountId: string): Promise<{ entryId: string; accountId: string; displayAmount: number; date: string } | null>;
+
+  // Overview dashboard operations
+  getOverviewDashboard(asOfDate?: string): Promise<OverviewDashboardPayload>;
 }
 
 declare global {

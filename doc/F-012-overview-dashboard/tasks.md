@@ -48,10 +48,10 @@
 
 ### Batch 4: IPC + Preload Integration
 
-- [ ] 10. IPC tests: overview endpoint wiring
+- [x] 10. IPC tests: overview endpoint wiring
   - Acceptance: IPC handler delegates to overview service and returns combined payload.
   - Acceptance: error behavior is consistent with existing IPC patterns.
-- [ ] 11. Implement IPC handler and preload API for overview payload
+- [x] 11. Implement IPC handler and preload API for overview payload
   - Acceptance: renderer can call one method to fetch all dashboard cards.
   - Acceptance: IPC tests pass.
 

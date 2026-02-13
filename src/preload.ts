@@ -42,4 +42,8 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("set-opening-balance", data),
   getOpeningBalance: (accountId: string) =>
     ipcRenderer.invoke("get-opening-balance", accountId),
+
+  // Overview dashboard operations
+  getOverviewDashboard: (asOfDate?: string) =>
+    ipcRenderer.invoke("get-overview-dashboard", asOfDate),
 });
