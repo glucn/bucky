@@ -50,6 +50,16 @@ export const attachDebugLogging = (page: Page, label: string) => {
   page.on("pageerror", (error) => {
     console.error(`[E2E:${label}] pageerror: ${error.message}`);
   });
+  page.on("framenavigated", (frame) => {
+    if (frame === page.mainFrame()) {
+      console.log(`[E2E:${label}] navigated: ${frame.url()}`);
+    }
+  });
+  page.on("response", (response) => {
+    if (response.status() === 404) {
+      console.log(`[E2E:${label}] 404: ${response.url()}`);
+    }
+  });
 };
 
 const ensureArtifactsDir = () => {
@@ -62,7 +72,11 @@ export const captureScreenshot = async (page: Page, name: string) => {
   ensureArtifactsDir();
   const filename = `${Date.now()}-${name}.png`;
   const filePath = path.join(artifactsDir, filename);
-  await page.screenshot({ path: filePath, fullPage: true });
+  try {
+    await page.screenshot({ path: filePath, fullPage: true });
+  } catch {
+    // Ignore screenshot failures when the page is already closed.
+  }
 };
 
 const ensureSeedAccounts = async (): Promise<string> => {
@@ -103,13 +117,9 @@ const ensureSeedAccounts = async (): Promise<string> => {
     await insertAccount("Uncategorized Expense", "category", "liability");
   }
 
-  let accountId = "";
-  try {
-    accountId = await fetchId("E2E Seed Account");
-  } catch {
-    await insertAccount("E2E Seed Account", "user", "asset");
-    accountId = await fetchId("E2E Seed Account");
-  }
+  const seedName = `E2E Seed Account ${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  await insertAccount(seedName, "user", "asset");
+  const accountId = await fetchId(seedName);
 
   db.close();
   return accountId;
@@ -117,9 +127,23 @@ const ensureSeedAccounts = async (): Promise<string> => {
 
 export const openTransactionsPage = async (page: Page) => {
   const accountId = await ensureSeedAccounts();
-  await page.goto(`http://localhost:3000/accounts/${accountId}/transactions`, {
-    waitUntil: "domcontentloaded",
-  });
+  const targetUrl = `http://localhost:3000/accounts/${accountId}/transactions`;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
+      await page.waitForURL(new RegExp(`/accounts/${accountId}/transactions`), {
+        timeout: 5000,
+      });
+      break;
+    } catch (error) {
+      if (attempt === 4) {
+        throw error;
+      }
+      await page.waitForTimeout(500);
+    }
+  }
+
   await page.waitForURL(new RegExp(`/accounts/${accountId}/transactions`));
   await page.getByTestId("import-transactions-button").waitFor({ state: "visible" });
 };
@@ -128,11 +152,11 @@ export const openImportWizard = async (page: Page) => {
   const importButton = page.getByTestId("import-transactions-button");
   await importButton.waitFor({ state: "visible" });
 
-  for (let attempt = 0; attempt < 15; attempt += 1) {
+  const deadline = Date.now() + 30_000;
+
+  while (Date.now() < deadline) {
     try {
-      await importButton.evaluate((node) => {
-        (node as HTMLButtonElement).click();
-      });
+      await importButton.click({ force: true, noWaitAfter: true });
       await page.getByTestId("import-wizard-title").waitFor({ state: "visible", timeout: 1500 });
       return;
     } catch {
