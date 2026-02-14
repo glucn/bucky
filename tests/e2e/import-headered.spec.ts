@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import {
   attachDebugLogging,
   captureScreenshot,
+  closeApp,
   getMainWindow,
   launchApp,
   openImportWizard,
@@ -47,6 +48,6 @@ test("imports headered CSV with read-only preview", async () => {
     await captureScreenshot(page, "import-headered-failure");
     throw error;
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });

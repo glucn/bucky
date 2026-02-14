@@ -23,6 +23,30 @@ export const launchApp = async (): Promise<ElectronApplication> => {
   });
 };
 
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export const closeApp = async (app: ElectronApplication): Promise<void> => {
+  const processHandle = app.process();
+
+  const waitForExit =
+    processHandle && processHandle.exitCode === null
+      ? new Promise<void>((resolve) => {
+          processHandle.once("exit", () => resolve());
+        })
+      : Promise.resolve();
+
+  if (processHandle && processHandle.exitCode === null) {
+    processHandle.kill("SIGKILL");
+    await Promise.race([waitForExit, wait(1500)]);
+  }
+
+  try {
+    await app.close();
+  } catch {
+    // Connection can already be gone after force-kill.
+  }
+};
+
 export const getMainWindow = async (app: ElectronApplication): Promise<Page> => {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const windows = app.windows();

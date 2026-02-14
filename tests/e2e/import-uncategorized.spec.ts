@@ -2,6 +2,7 @@ import { test } from "@playwright/test";
 import {
   attachDebugLogging,
   captureScreenshot,
+  closeApp,
   getMainWindow,
   launchApp,
   openImportWizard,
@@ -35,6 +36,6 @@ test("uncategorized fallback shows warning summary", async () => {
     await captureScreenshot(page, "import-uncategorized-failure");
     throw error;
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });

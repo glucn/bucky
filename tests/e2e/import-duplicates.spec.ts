@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import {
   attachDebugLogging,
   captureScreenshot,
+  closeApp,
   getMainWindow,
   launchApp,
   openImportWizard,
@@ -48,6 +49,6 @@ test("file duplicates can be skipped in confirm step", async () => {
     await captureScreenshot(page, "import-duplicates-failure");
     throw error;
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });

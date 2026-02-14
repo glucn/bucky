@@ -1,21 +1,5 @@
 import { test, expect, type ElectronApplication } from "@playwright/test";
-import { _electron as electron } from "playwright";
-import path from "path";
-
-const appEntry = path.join(__dirname, "..", "..", ".webpack", "main", "index.js");
-
-const launchApp = async (): Promise<ElectronApplication> => {
-  return electron.launch({
-    args: [appEntry],
-    env: {
-      ...process.env,
-      NODE_ENV: "test",
-      VITEST: "true",
-      ELECTRON_IS_DEV: "1",
-      PLAYWRIGHT_TEST: "1",
-    },
-  });
-};
+import { closeApp, launchApp } from "./helpers/importFlow";
 
 const waitForHandler = async (app: ElectronApplication, channel: string) => {
   for (let i = 0; i < 40; i += 1) {
@@ -152,6 +136,6 @@ test("opening balance adjusts for older transaction mutations", async () => {
     expect(balanceAfterDelete).toBe(100);
     expect(openingAfterDelete?.displayAmount).toBe(100);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
