@@ -25,6 +25,19 @@ This note captures practical findings from stabilizing flaky E2E runs, especiall
 - Use `scripts/e2e-prepare-electron.js` to ensure required Electron bundles are present before tests begin.
 - In that prepare step, derive the preload hot-update hash from `.webpack/renderer/main_window/preload.js` and create matching hot-update artifact files under `.webpack/renderer` when missing.
 
+## Current implementation notes
+
+- `scripts/e2e-prepare-electron.js`
+  - launches prep with `PLAYWRIGHT_PREPARE_ONLY=1`,
+  - waits for `.webpack/main/index.js` and `.webpack/renderer/main_window/preload.js`,
+  - writes missing `main_window.<hash>.hot-update.{json,js}` files,
+  - exits so Playwright can start renderer dev server.
+- `src/main/index.ts`
+  - short-circuits startup when `PLAYWRIGHT_PREPARE_ONLY=1`.
+  - centralizes app shutdown via `before-quit` and disconnects DB before final exit.
+- `tests/e2e/helpers/importFlow.ts`
+  - forces `PLAYWRIGHT_PREPARE_ONLY=0` for real app launches during tests.
+
 ## Test helper hardening patterns
 
 - Navigation helpers should retry short transient failures around `page.goto`/`waitForURL`.
@@ -41,3 +54,4 @@ This note captures practical findings from stabilizing flaky E2E runs, especiall
 
 - Before Playwright runs, check port `3000` usage to avoid stale servers causing false failures.
 - Keep local DB artifacts (`dev.db`, `test.db`) untracked.
+- If a run stalls, clear stale `webpack` on port `3000` and rerun.

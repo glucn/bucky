@@ -9,8 +9,9 @@ Bucky uses Playwright for end-to-end testing of the Electron application. E2E te
 - **Config file**: `playwright.config.ts`
 - **Test directory**: `tests/e2e/`
 - **Test files**: `*.spec.ts`
-- **Database**: Automatically uses `prisma/test.db`
+- **Database**: E2E currently uses root `test.db` (via `schema.e2e.prisma`)
 - **Webpack dev server**: Automatically started on port 3000
+- **Electron prep**: `e2e:electron:prepare` runs before tests to stabilize preload artifacts
 
 ## Running Tests
 
@@ -118,6 +119,20 @@ page.locator('input[type="file"]')
 2. **Add screenshots** at key points: `await page.screenshot({ path: 'debug.png' })`
 3. **Use --debug flag** to pause execution and inspect elements
 4. **Check console logs** for JavaScript errors during test runs
+
+### Common failure modes and quick fixes
+
+1. **Run hangs before tests start**
+   - Check port usage: `lsof -i :3000`
+   - If a stale `webpack` process is holding the port, stop it and rerun.
+2. **Import tests loop or stall intermittently**
+   - Look for repeated 404s on `main_window.<hash>.hot-update.json` in debug logs.
+   - Confirm prep runs: `npm run e2e:electron:prepare`.
+3. **macOS "Electron quit unexpectedly" after run**
+   - This was tied to unstable prep/shutdown behavior.
+   - Pull latest `main` and rerun with `npx playwright test`.
+4. **Need deeper context**
+   - Read `doc/e2e-stabilization-learnings.md` before changing product code.
 
 ## Test Organization
 
