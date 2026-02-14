@@ -11,7 +11,8 @@ export default defineConfig({
   },
   reporter: "list",
   webServer: {
-    command: "PLAYWRIGHT_TEST=1 npm run e2e:db:push && PLAYWRIGHT_TEST=1 npm run dev:webpack",
+    command:
+      "PLAYWRIGHT_TEST=1 npm run e2e:db:push && PLAYWRIGHT_TEST=1 npm run e2e:electron:prepare && PLAYWRIGHT_TEST=1 npm run dev:webpack",
     url: "http://localhost:3000",
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,

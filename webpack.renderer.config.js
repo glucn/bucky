@@ -41,6 +41,7 @@ module.exports = {
     port: 3000,
     hot: process.env.PLAYWRIGHT_TEST === "1" ? false : true,
     liveReload: process.env.PLAYWRIGHT_TEST === "1" ? false : true,
+    client: process.env.PLAYWRIGHT_TEST === "1" ? false : undefined,
     static: {
       directory: path.join(__dirname, ".webpack/renderer"),
       publicPath: "/",
