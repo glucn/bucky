@@ -18,6 +18,7 @@ export const launchApp = async (): Promise<ElectronApplication> => {
       VITEST: "true",
       ELECTRON_IS_DEV: "1",
       PLAYWRIGHT_TEST: "1",
+      PLAYWRIGHT_PREPARE_ONLY: "0",
     },
   });
 };

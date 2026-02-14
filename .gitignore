@@ -106,6 +106,9 @@ prisma/test.db-journal
 
 # Playwright artifacts
 /tests/e2e/artifacts/
+dev.db
+test.db
+
 # Playwright test results
 test-results/
 test-debug*.png

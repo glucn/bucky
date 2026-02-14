@@ -1042,6 +1042,11 @@ function createWindow() {
 
 // This method will be called when Electron has finished initialization
 app.whenReady().then(() => {
+  if (process.env.PLAYWRIGHT_PREPARE_ONLY === "1") {
+    app.quit();
+    return;
+  }
+
   console.log("Electron app is ready, starting initialization...");
   initialize().catch((error) => {
     console.error("Failed to initialize app:", error);
@@ -1056,9 +1061,27 @@ app.whenReady().then(() => {
   });
 });
 
+let isQuitting = false;
+app.on("before-quit", (event) => {
+  if (isQuitting) {
+    return;
+  }
+
+  isQuitting = true;
+  event.preventDefault();
+
+  void databaseService
+    .disconnect()
+    .catch((error) => {
+      console.error("Error disconnecting database during quit:", error);
+    })
+    .finally(() => {
+      app.exit(0);
+    });
+});
+
 app.on("window-all-closed", async function () {
   if (process.platform !== "darwin") {
-    await databaseService.disconnect();
     app.quit();
   }
 });

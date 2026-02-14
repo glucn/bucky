@@ -5,30 +5,10 @@ const path = require("path");
 const root = process.cwd();
 const mainBundle = path.join(root, ".webpack", "main", "index.js");
 const rendererDir = path.join(root, ".webpack", "renderer");
-const preloadBundle = path.join(
-  root,
-  ".webpack",
-  "renderer",
-  "main_window",
-  "preload.js"
-);
-
+const preloadBundle = path.join(rendererDir, "main_window", "preload.js");
 const timeoutMs = 120000;
 
-const child = spawn("npm", ["run", "dev:electron"], {
-  cwd: root,
-  env: {
-    ...process.env,
-    PLAYWRIGHT_TEST: "1",
-  },
-  stdio: "ignore",
-});
-
-const startedAt = Date.now();
-
-const checkReady = () => {
-  return fs.existsSync(mainBundle) && fs.existsSync(preloadBundle);
-};
+const checkReady = () => fs.existsSync(mainBundle) && fs.existsSync(preloadBundle);
 
 const ensureHotUpdateArtifacts = () => {
   const preloadSource = fs.readFileSync(preloadBundle, "utf8");
@@ -50,24 +30,33 @@ const ensureHotUpdateArtifacts = () => {
   }
 };
 
-const stop = () => {
-  if (!child.killed) {
-    child.kill("SIGTERM");
-  }
-};
+const child = spawn("npm", ["run", "dev:electron"], {
+  cwd: root,
+  env: {
+    ...process.env,
+    PLAYWRIGHT_TEST: "1",
+    PLAYWRIGHT_PREPARE_ONLY: "1",
+  },
+  stdio: "ignore",
+});
+
+const startedAt = Date.now();
 
 const interval = setInterval(() => {
   if (checkReady()) {
     ensureHotUpdateArtifacts();
     clearInterval(interval);
-    stop();
+    if (!child.killed) {
+      child.kill("SIGTERM");
+    }
     process.exit(0);
-    return;
   }
 
   if (Date.now() - startedAt > timeoutMs) {
     clearInterval(interval);
-    stop();
+    if (!child.killed) {
+      child.kill("SIGTERM");
+    }
     console.error("Timed out preparing Electron bundles for E2E.");
     process.exit(1);
   }
