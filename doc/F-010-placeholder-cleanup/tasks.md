@@ -15,12 +15,12 @@
 
 ## Tasks
 
-- [ ] 1. Add placeholder cleanup helper utilities
+- [x] 1. Add placeholder cleanup helper utilities
   - Acceptance: helper detects placeholder rows by `Uncategorized Income` / `Uncategorized Expense` reliably.
   - Acceptance: helper builds destination options with category-first ordering and optional all-accounts mode.
   - Acceptance: utility-level tests cover detection, grouping, and filtering/search behavior.
 
-- [ ] 2. Add cleanup mode to transactions page
+- [/] 2. Add cleanup mode to transactions page
   - Acceptance: `AccountTransactionsPage` has a cleanup mode toggle and remaining-count tracker.
   - Acceptance: cleanup mode filters to placeholder rows while preserving existing date/posting filters.
   - Acceptance: page/component tests cover toggle behavior and filtered result expectations.
