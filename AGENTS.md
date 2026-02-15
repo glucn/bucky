@@ -70,5 +70,6 @@ Bucky is a personal bookkeeping desktop app built with Electron, React, and Pris
 - If a file grows large (e.g., a monolithic page component), consider breaking it into smaller modules or components.
 - For tasks tracked in docs, commit when done without asking; for ad-hoc investigations/fixes, confirm outcome before committing.
 - For task-based work, commit as soon as you believe a task is done (do not wait for the next task).
+- For well-defined tasks, prefer using git worktrees so multiple changes can be developed in parallel with isolated workspaces.
 - Verify changes (build/test or relevant check) before stating work is done.
 - After completing a task, run required tests and commit changes without requesting confirmation.
