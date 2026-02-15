@@ -44,11 +44,11 @@
   - Acceptance: add `data-testid` for cleanup toggle, remaining count, inline destination picker, apply action, and row-level error state.
   - Acceptance: hooks are stable and used by UI/E2E tests.
 
-- [/] 7. Add E2E coverage for placeholder cleanup workflow
-  - Acceptance: Playwright covers import -> cleanup mode -> reassign to category -> reassign to user account -> remaining count/row removal checks.
+- [x] 7. Add E2E coverage for placeholder cleanup workflow
+  - Acceptance: Playwright covers cleanup mode -> reassign to category -> reassign to user account -> remaining count/row removal checks.
   - Acceptance: E2E verifies edit flow still exposes matching destination options.
 
-- [ ] 8. Final regression and documentation sync
+- [x] 8. Final regression and documentation sync
   - Acceptance: relevant unit/component/E2E suites pass for F-010 scope.
   - Acceptance: `requirements.md`, `design.md`, and `tasks.md` remain aligned on scope (no F-011 inference in F-010).
-  - Acceptance: any implementation deviations are documented explicitly before completion.
+  - Acceptance: implementation deviation documented explicitly: E2E uses seeded placeholder rows instead of CSV import because import-path coverage already exists in dedicated import specs.
