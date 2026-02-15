@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { JournalLine } from "../pages/AccountTransactionsPage";
 import { normalizeTransactionAmount } from "../utils/displayNormalization";
 import { formatNormalizedTransactionAmount } from "../utils/currencyUtils";
+import { buildCleanupDestinationOptions } from "../utils/placeholderCleanup";
 
 interface ManualTransactionModalProps {
   accountId: string;
@@ -92,6 +93,21 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
 
   // Lookup target account
   const toAccount = accounts.find((a) => a.id === newTransaction.toAccountId);
+
+  const destinationOptions = React.useMemo(() => {
+    return buildCleanupDestinationOptions(
+      accounts.map((account) => ({
+        id: account.id,
+        name: account.name,
+        type: account.type,
+        subtype: account.subtype as AccountSubtype,
+      })),
+      {
+        includeUserAccounts: true,
+        excludeAccountId: accountId,
+      }
+    );
+  }, [accounts, accountId]);
 
   // When transaction date changes, update posting date to match if posting date is set and before transaction date
   React.useEffect(() => {
@@ -204,7 +220,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
               htmlFor="toAccountId"
               className="block text-sm font-medium text-gray-700"
             >
-              Category
+              Category / Counter Account
             </label>
             <select
               id="toAccountId"
@@ -220,15 +236,13 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
               data-testid="manual-transaction-category"
             >
               <option value="" disabled>
-                {accounts.length === 0 ? "Loading..." : "Select a category"}
+                {accounts.length === 0 ? "Loading..." : "Select a destination"}
               </option>
-              {accounts
-                .filter((acc) => acc.type === AccountType.Category)
-                .map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name}
-                  </option>
-                ))}
+              {destinationOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.group === "category" ? "Category" : "Account"}: {option.name}
+                </option>
+              ))}
             </select>
           </div>
 

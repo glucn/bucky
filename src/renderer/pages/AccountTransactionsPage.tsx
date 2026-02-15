@@ -4,6 +4,7 @@ import { ManualTransactionModal } from "../components/ManualTransactionModal";
 import { ImportTransactionsWizard } from "../components/ImportTransactionsWizard";
 import { TransferModal } from "../components/TransferModal";
 import { CreditCardSetupModal } from "../components/CreditCardSetupModal";
+import { InlineCounterpartyReassign } from "../components/InlineCounterpartyReassign";
 import { useAccounts } from "../context/AccountsContext";
 import { formatTransactionCurrency } from "../utils/currencyUtils";
 import { 
@@ -13,6 +14,7 @@ import {
   getTransactionAriaLabel
 } from "../utils/displayNormalization";
 import { AccountType, AccountSubtype, toAccountType } from "../../shared/accountTypes";
+import { buildCleanupDestinationOptions, isPlaceholderCounterpartyName } from "../utils/placeholderCleanup";
 
 // Modal for setting opening balance for the current account
 export const SetOpeningBalanceModal: React.FC<{
@@ -525,10 +527,13 @@ export const AccountTransactionsPage: React.FC = () => {
   const [postingDateFrom, setPostingDateFrom] = useState<string>("");
   const [postingDateTo, setPostingDateTo] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
+  const [isCleanupMode, setIsCleanupMode] = useState(false);
   
   // Reordering state
   const [reorderingEntryId, setReorderingEntryId] = useState<string | null>(null);
   const [reorderError, setReorderError] = useState<string | null>(null);
+  const [cleanupPendingLineId, setCleanupPendingLineId] = useState<string | null>(null);
+  const [cleanupErrors, setCleanupErrors] = useState<Record<string, string>>({});
 
   const fetchTransactions = async () => {
     if (!accountId) return;
@@ -579,6 +584,84 @@ export const AccountTransactionsPage: React.FC = () => {
     }
   };
 
+  const resolveCounterpartyLine = (line: JournalLine) => {
+    return line.entry?.lines?.find((entryLine: any) => entryLine.accountId !== line.accountId);
+  };
+
+  const resolveCounterpartyName = (line: JournalLine): string => {
+    return resolveCounterpartyLine(line)?.account?.name || "—";
+  };
+
+  const resolveTransactionType = (fromAccount: Account, toAccount: Account): "income" | "expense" | "transfer" => {
+    if (fromAccount.type === AccountType.User && toAccount.type === AccountType.Category) {
+      return toAccount.subtype === AccountSubtype.Asset ? "income" : "expense";
+    }
+
+    if (fromAccount.type === AccountType.Category && toAccount.type === AccountType.User) {
+      return fromAccount.subtype === AccountSubtype.Asset ? "expense" : "income";
+    }
+
+    return "transfer";
+  };
+
+  const handleCleanupReassign = async (line: JournalLine, toAccountId: string) => {
+    const fromAccount = accounts.find((acc) => acc.id === line.accountId);
+    const toAccount = accounts.find((acc) => acc.id === toAccountId);
+
+    if (!fromAccount || !toAccount) {
+      setCleanupErrors((prev) => ({
+        ...prev,
+        [line.id]: "Unable to resolve selected account.",
+      }));
+      return;
+    }
+
+    setCleanupErrors((prev) => ({
+      ...prev,
+      [line.id]: "",
+    }));
+    setCleanupPendingLineId(line.id);
+
+    try {
+      const accountType = toAccountType(fromAccount.type || "user");
+      const accountSubtype =
+        fromAccount.subtype === "liability" ? AccountSubtype.Liability : AccountSubtype.Asset;
+      const normalizedAmount = normalizeTransactionAmount(
+        line.amount,
+        accountType,
+        accountSubtype,
+        true
+      );
+
+      const result = await window.electron.ipcRenderer.invoke("update-transaction", {
+        lineId: line.id,
+        fromAccountId: line.accountId,
+        toAccountId,
+        amount: normalizedAmount,
+        date: line.entry.date,
+        postingDate: line.entry.postingDate || null,
+        description: line.description || line.entry.description || "",
+        transactionType: resolveTransactionType(fromAccount, toAccount),
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to reassign transaction");
+      }
+
+      await fetchTransactions();
+      await fetchAccount();
+      await refreshAccounts();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to reassign transaction";
+      setCleanupErrors((prev) => ({
+        ...prev,
+        [line.id]: message,
+      }));
+    } finally {
+      setCleanupPendingLineId(null);
+    }
+  };
+
   // Filter transactions based on date filters
   const filteredTransactions = React.useMemo(() => {
     return transactions.filter((line) => {
@@ -601,9 +684,28 @@ export const AccountTransactionsPage: React.FC = () => {
         return false;
       }
 
+      if (isCleanupMode) {
+        return isPlaceholderCounterpartyName(resolveCounterpartyName(line));
+      }
+
       return true;
     });
-  }, [transactions, transactionDateFrom, transactionDateTo, postingDateFrom, postingDateTo]);
+  }, [transactions, transactionDateFrom, transactionDateTo, postingDateFrom, postingDateTo, isCleanupMode]);
+
+  const cleanupDestinationAccounts = React.useMemo(() => {
+    return accounts.map((acc) => ({
+      id: acc.id,
+      name: acc.name,
+      type: toAccountType(acc.type || "user"),
+      subtype: acc.subtype === "liability" ? AccountSubtype.Liability : AccountSubtype.Asset,
+    }));
+  }, [accounts]);
+
+  const cleanupRemainingCount = React.useMemo(() => {
+    return filteredTransactions.filter((line) =>
+      isPlaceholderCounterpartyName(resolveCounterpartyName(line))
+    ).length;
+  }, [filteredTransactions]);
 
   // Helper function to group transactions by date and determine position
   const getTransactionPositionInfo = React.useMemo(() => {
@@ -878,6 +980,29 @@ export const AccountTransactionsPage: React.FC = () => {
         
         {/* Date Filters */}
         <div className="mb-4">
+          <div className="mb-3 flex items-center gap-3">
+            <button
+              type="button"
+              className={`rounded px-3 py-1 text-sm font-medium ${
+                isCleanupMode
+                  ? "bg-yellow-500 text-white hover:bg-yellow-600"
+                  : "bg-yellow-100 text-yellow-900 hover:bg-yellow-200"
+              }`}
+              onClick={() => setIsCleanupMode((prev) => !prev)}
+              data-testid="cleanup-mode-toggle"
+            >
+              {isCleanupMode ? "Exit Cleanup Mode" : "Cleanup Mode"}
+            </button>
+            {isCleanupMode && (
+              <span
+                className="rounded bg-yellow-100 px-2 py-1 text-xs text-yellow-900"
+                data-testid="cleanup-remaining-count"
+              >
+                {cleanupRemainingCount} remaining
+              </span>
+            )}
+          </div>
+
           <button
             onClick={() => setShowFilters(!showFilters)}
             className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900"
@@ -990,9 +1115,7 @@ export const AccountTransactionsPage: React.FC = () => {
               )}
               {filteredTransactions.map((line) => {
                 // Find the "other" line in the same entry (the other side of the double-entry)
-                const otherLine = line.entry?.lines?.find(
-                  (l: any) => l.accountId !== line.accountId
-                );
+                const otherLine = resolveCounterpartyLine(line);
                 const categoryName = otherLine?.account?.name || "—";
                 const positionInfo = getTransactionPositionInfo.get(line.id);
                 const isReordering = reorderingEntryId === line.entry.id;
@@ -1143,6 +1266,19 @@ export const AccountTransactionsPage: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div>
                         <div>{categoryName}</div>
+                        {isCleanupMode && isPlaceholderCounterpartyName(categoryName) && (
+                          <div className="mt-2" data-testid={`cleanup-row-${line.id}`}>
+                            <InlineCounterpartyReassign
+                              accounts={cleanupDestinationAccounts}
+                              fromAccountId={line.accountId}
+                              isSubmitting={cleanupPendingLineId === line.id}
+                              error={cleanupErrors[line.id] || null}
+                              onApply={(toAccountId) => {
+                                handleCleanupReassign(line, toAccountId);
+                              }}
+                            />
+                          </div>
+                        )}
                         {/* Show currency if different from account currency */}
                         {otherLine && otherLine.currency && otherLine.currency !== line.currency && (
                           <div className="text-xs text-gray-400">
