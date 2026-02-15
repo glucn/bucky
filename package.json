@@ -8,7 +8,7 @@
     "start": "electron-forge start",
     "dev:webpack": "webpack serve --config webpack.renderer.config.js",
     "dev:electron": "cross-env NODE_ENV=development electron-forge start",
-    "dev": "concurrently -k \"npm run dev:webpack\" \"wait-on tcp:3000 && npm run dev:electron\"",
+    "dev": "npm run dev:electron",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "lint": "eslint --ext .ts,.tsx .",

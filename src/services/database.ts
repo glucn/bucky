@@ -111,12 +111,15 @@ class DatabaseService {
     const isDev = process.env.NODE_ENV === "development";
     
     // Determine database path based on environment
+    const devDbPath = path.join(process.cwd(), "prisma", "dev.db");
+    const testDbPath = path.join(process.cwd(), "prisma", "test.db");
+
     if (isTest) {
-      this.databasePath = "file:./test.db";
+      this.databasePath = `file:${testDbPath}`;
       console.log("[DatabaseService] Environment: TEST");
     } else if (isDev || process.env.NODE_ENV === undefined) {
       // Default to development database if environment is ambiguous
-      this.databasePath = "file:./dev.db";
+      this.databasePath = `file:${devDbPath}`;
       if (process.env.NODE_ENV === undefined) {
         console.warn("[DatabaseService] Unable to detect environment, defaulting to development database");
       } else {
@@ -124,7 +127,7 @@ class DatabaseService {
       }
     } else {
       // Production or other environments
-      this.databasePath = "file:./dev.db";
+      this.databasePath = `file:${devDbPath}`;
       console.log("[DatabaseService] Environment: PRODUCTION");
     }
     

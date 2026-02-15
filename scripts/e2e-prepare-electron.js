@@ -30,10 +30,12 @@ const ensureHotUpdateArtifacts = () => {
   }
 };
 
-const child = spawn("npm", ["run", "dev:electron"], {
+const child = spawn("npm", ["run", "start"], {
   cwd: root,
   env: {
     ...process.env,
+    NODE_ENV: "test",
+    VITEST: "true",
     PLAYWRIGHT_TEST: "1",
     PLAYWRIGHT_PREPARE_ONLY: "1",
   },
