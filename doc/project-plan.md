@@ -18,11 +18,11 @@
 
 ## MVP Scope
 
-- [ ] F-008 offline-import-foundation (CSV import with mapping, preview, duplicate detection, uncategorized fallback)
-- [ ] F-009 opening-balance-workflow (per-account opening balance + backfill adjustment)
-- [ ] F-010 placeholder-cleanup (inline reassignment with original account name display)
+- [X] F-008 offline-import-foundation (CSV import with mapping, preview, duplicate detection, uncategorized fallback)
+- [X] F-009 opening-balance-workflow (per-account opening balance + backfill adjustment)
+- [/] F-010 placeholder-cleanup (inline reassignment with original account name display)
 - [ ] F-011 auto-categorization (rule inference with exact-match transparency)
-- [ ] F-012 overview-dashboard (net worth, income/expense trend, allocation)
+- [X] F-012 overview-dashboard (net worth, income/expense trend, allocation)
 - [ ] F-013 reporting-basics (overview + breakdowns with presets and date picker)
 - [ ] F-014 liability-unified-model (liability accounts without specialized UX)
 - [ ] F-015 security-gate (app lock + database encryption with hybrid key mgmt)
