@@ -642,6 +642,7 @@ export const AccountTransactionsPage: React.FC = () => {
         postingDate: line.entry.postingDate || null,
         description: line.description || line.entry.description || "",
         transactionType: resolveTransactionType(fromAccount, toAccount),
+        source: "cleanup",
       });
 
       if (!result.success) {

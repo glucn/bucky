@@ -6,6 +6,7 @@ import {
   AccountSubtype,
 } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
+import { autoCategorizationService } from "./autoCategorizationService";
 
 // Type for transaction client
 type TransactionClient = Prisma.TransactionClient;
@@ -71,6 +72,8 @@ class DatabaseService {
       await tx.journalLine.deleteMany({});
       // Delete all journal entries
       await tx.journalEntry.deleteMany({});
+      // Delete all auto-categorization rules
+      await tx.autoCategorizationRule.deleteMany({});
       // Delete all checkpoints
       await tx.checkpoint.deleteMany({});
       // Delete all investment properties (must be before accounts due to foreign key)
@@ -2531,6 +2534,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       postingDate?: string;
       description: string;
       transactionType?: "income" | "expense" | "transfer";
+      source?: string;
     },
     tx?: TransactionClient
   ): Promise<any> {
@@ -2651,6 +2655,16 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
             amount: updatedLine.amount,
           })),
           sign: 1,
+        },
+        prisma
+      );
+    }
+
+    if (data.source === "cleanup") {
+      await autoCategorizationService.upsertExactRuleFromCleanupAction(
+        {
+          description: data.description,
+          targetCategoryAccountId: data.toAccountId,
         },
         prisma
       );

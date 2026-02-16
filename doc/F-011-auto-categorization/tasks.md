@@ -31,13 +31,13 @@
   - Acceptance: rules with missing/archived target categories are treated as `Invalid target` for UI and ignored during import.
   - Acceptance: tests cover tie-breakers and invalid-target behavior.
 
-- [/] 4. Integrate matching into import pipeline (F-008 path)
+- [x] 4. Integrate matching into import pipeline (F-008 path)
   - Acceptance: exact matches auto-apply category when no explicit mapped `toAccountId` exists.
   - Acceptance: keyword matches are counted but not auto-applied.
   - Acceptance: explicit mapped `toAccountId` keeps existing precedence.
   - Acceptance: import result includes aggregate counters: exact auto-applied, keyword matched, uncategorized.
 
-- [ ] 5. Add learning hook from F-010 cleanup confirmations
+- [x] 5. Add learning hook from F-010 cleanup confirmations
   - Acceptance: cleanup reassignment to active category upserts exact rule using normalized description.
   - Acceptance: repeated confirmations update existing rule target and last-updated/confirmed timestamps.
   - Acceptance: learning is not triggered by unrelated Add/Edit flows.
