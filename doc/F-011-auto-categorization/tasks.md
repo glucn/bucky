@@ -74,7 +74,7 @@
   - Acceptance: E2E covers bootstrap learning via cleanup then exact auto-apply on a later import.
   - Acceptance: E2E covers rules page edit/delete affecting subsequent import behavior.
 
-- [ ] 12. Final regression and documentation sync
+- [x] 12. Final regression and documentation sync
   - Acceptance: relevant unit/service/renderer/E2E suites pass for F-011 scope.
   - Acceptance: `requirements.md`, `design.md`, and `tasks.md` remain aligned with MVP boundaries.
   - Acceptance: any implementation deviations are documented explicitly before completion.
