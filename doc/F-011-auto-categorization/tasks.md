@@ -20,18 +20,18 @@
   - Acceptance: uniqueness is enforced for `(normalizedPattern, matchType)`.
   - Acceptance: test DB/dev DB schema sync succeeds after migration.
 
-- [/] 2. Add auto-categorization matching service utilities
+- [x] 2. Add auto-categorization matching service utilities
   - Acceptance: service normalizes pattern/description with case + whitespace rules only.
   - Acceptance: matching supports exact and keyword (substring) logic against description only.
   - Acceptance: keyword minimum length validation (3+) is enforced.
   - Acceptance: unit tests cover normalization, exact/keyword matching, and non-matching edge cases.
 
-- [ ] 3. Add conflict resolution and invalid-target handling in service
+- [x] 3. Add conflict resolution and invalid-target handling in service
   - Acceptance: priority resolves as exact > longer normalized pattern > most recent confirmation/update.
   - Acceptance: rules with missing/archived target categories are treated as `Invalid target` for UI and ignored during import.
   - Acceptance: tests cover tie-breakers and invalid-target behavior.
 
-- [ ] 4. Integrate matching into import pipeline (F-008 path)
+- [/] 4. Integrate matching into import pipeline (F-008 path)
   - Acceptance: exact matches auto-apply category when no explicit mapped `toAccountId` exists.
   - Acceptance: keyword matches are counted but not auto-applied.
   - Acceptance: explicit mapped `toAccountId` keeps existing precedence.

@@ -65,12 +65,12 @@ model AutoCategorizationRule {
   id                      String                     @id @default(uuid())
   normalizedPattern       String
   matchType               AutoCategorizationMatchType
-  targetCategoryAccountId String
+  targetCategoryAccountId String?
   lastConfirmedAt         DateTime?
   createdAt               DateTime                   @default(now())
   updatedAt               DateTime                   @updatedAt
 
-  targetCategoryAccount Account @relation("AutoCategorizationRuleTarget", fields: [targetCategoryAccountId], references: [id], onDelete: Cascade)
+  targetCategoryAccount Account? @relation("AutoCategorizationRuleTarget", fields: [targetCategoryAccountId], references: [id], onDelete: SetNull)
 
   @@unique([normalizedPattern, matchType])
   @@index([matchType, normalizedPattern])
