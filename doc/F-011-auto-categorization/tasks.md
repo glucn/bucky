@@ -42,7 +42,7 @@
   - Acceptance: repeated confirmations update existing rule target and last-updated/confirmed timestamps.
   - Acceptance: learning is not triggered by unrelated Add/Edit flows.
 
-- [ ] 6. Add IPC + preload contracts for rules management
+- [x] 6. Add IPC + preload contracts for rules management
   - Acceptance: IPC handlers support list, update, and delete for rules.
   - Acceptance: server-side validation blocks duplicate `(normalizedPattern, matchType)` and invalid target category writes.
   - Acceptance: preload/types expose stable renderer methods for the rules page.

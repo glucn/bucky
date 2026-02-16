@@ -1,6 +1,22 @@
 import { AccountGroup, Account, GroupedAccountsView } from '../types';
 import { OverviewDashboardPayload } from '../../shared/overview';
 
+interface AutoCategorizationRuleListItem {
+  id: string;
+  pattern: string;
+  matchType: "exact" | "keyword";
+  targetCategoryAccountId: string | null;
+  targetCategoryName: string | null;
+  lastUpdatedAt: Date;
+  status: "Valid" | "Invalid target";
+}
+
+interface AutoCategorizationRuleUpdateInput {
+  pattern: string;
+  matchType: "exact" | "keyword";
+  targetCategoryAccountId: string;
+}
+
 export interface IElectronAPI {
   ipcRenderer: {
     invoke(channel: string, ...args: any[]): Promise<any>;
@@ -31,6 +47,14 @@ export interface IElectronAPI {
 
   // Overview dashboard operations
   getOverviewDashboard(asOfDate?: string): Promise<OverviewDashboardPayload>;
+
+  // Auto-categorization rule operations
+  getAutoCategorizationRules(): Promise<AutoCategorizationRuleListItem[]>;
+  updateAutoCategorizationRule(
+    ruleId: string,
+    update: AutoCategorizationRuleUpdateInput
+  ): Promise<AutoCategorizationRuleListItem>;
+  deleteAutoCategorizationRule(ruleId: string): Promise<{ success: boolean }>;
 }
 
 declare global {

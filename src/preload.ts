@@ -46,4 +46,18 @@ contextBridge.exposeInMainWorld("electron", {
   // Overview dashboard operations
   getOverviewDashboard: (asOfDate?: string) =>
     ipcRenderer.invoke("get-overview-dashboard", asOfDate),
+
+  // Auto-categorization rule operations
+  getAutoCategorizationRules: () =>
+    ipcRenderer.invoke("get-auto-categorization-rules"),
+  updateAutoCategorizationRule: (
+    ruleId: string,
+    update: {
+      pattern: string;
+      matchType: "exact" | "keyword";
+      targetCategoryAccountId: string;
+    }
+  ) => ipcRenderer.invoke("update-auto-categorization-rule", { ruleId, update }),
+  deleteAutoCategorizationRule: (ruleId: string) =>
+    ipcRenderer.invoke("delete-auto-categorization-rule", ruleId),
 });
