@@ -1,12 +1,13 @@
 import {
   AutoCategorizationMatchType,
   Prisma,
+  PrismaClient,
   type Account,
   type AutoCategorizationRule,
 } from "@prisma/client";
-import { databaseService } from "./database";
 
 type TransactionClient = Prisma.TransactionClient;
+type RulePrisma = PrismaClient | TransactionClient;
 
 export interface AutoCategorizationRuleMatch {
   id: string;
@@ -37,6 +38,12 @@ export interface AutoCategorizationRuleUpdateInput {
 export interface AutoCategorizationMatchResult {
   rule: AutoCategorizationRuleMatch;
   matchType: "exact" | "keyword";
+}
+
+export interface ImportAutoCategorizationResolution {
+  toAccountId: string | null;
+  exactAutoApplied: boolean;
+  keywordMatched: boolean;
 }
 
 const collapseWhitespace = (value: string): string =>
@@ -108,6 +115,43 @@ export const findBestAutoCategorizationMatch = (
   };
 };
 
+export const resolveImportAutoCategorization = (data: {
+  explicitToAccountId: string | null;
+  description?: string | null;
+  rules: AutoCategorizationRuleMatch[];
+}): ImportAutoCategorizationResolution => {
+  if (data.explicitToAccountId) {
+    return {
+      toAccountId: data.explicitToAccountId,
+      exactAutoApplied: false,
+      keywordMatched: false,
+    };
+  }
+
+  const match = findBestAutoCategorizationMatch(data.rules, data.description);
+  if (!match) {
+    return {
+      toAccountId: null,
+      exactAutoApplied: false,
+      keywordMatched: false,
+    };
+  }
+
+  if (match.matchType === "exact") {
+    return {
+      toAccountId: match.rule.targetCategoryAccountId,
+      exactAutoApplied: Boolean(match.rule.targetCategoryAccountId),
+      keywordMatched: false,
+    };
+  }
+
+  return {
+    toAccountId: null,
+    exactAutoApplied: false,
+    keywordMatched: true,
+  };
+};
+
 class AutoCategorizationService {
   private toRuleMatch(
     rule: AutoCategorizationRule & { targetCategoryAccount: Account | null }
@@ -125,11 +169,9 @@ class AutoCategorizationService {
 
   private async validateRuleUpdateInput(
     input: AutoCategorizationRuleUpdateInput,
+    prisma: RulePrisma,
     options: { excludeRuleId?: string } = {},
-    tx?: TransactionClient
   ): Promise<{ normalizedPattern: string; matchType: AutoCategorizationMatchType }> {
-    const prisma = tx || databaseService.prismaClient;
-
     const normalizedPattern = normalizePattern(input.pattern || "");
     if (!normalizedPattern) {
       throw new Error("Pattern is required");
@@ -180,8 +222,7 @@ class AutoCategorizationService {
     };
   }
 
-  public async getRulesForImport(tx?: TransactionClient): Promise<AutoCategorizationRuleMatch[]> {
-    const prisma = tx || databaseService.prismaClient;
+  public async getRulesForImport(prisma: RulePrisma): Promise<AutoCategorizationRuleMatch[]> {
     const rules = await prisma.autoCategorizationRule.findMany({
       include: {
         targetCategoryAccount: true,
@@ -191,8 +232,7 @@ class AutoCategorizationService {
     return rules.map((rule) => this.toRuleMatch(rule));
   }
 
-  public async getRulesForSettings(tx?: TransactionClient): Promise<AutoCategorizationRuleListItem[]> {
-    const prisma = tx || databaseService.prismaClient;
+  public async getRulesForSettings(prisma: RulePrisma): Promise<AutoCategorizationRuleListItem[]> {
     const rules = await prisma.autoCategorizationRule.findMany({
       include: {
         targetCategoryAccount: true,
@@ -219,13 +259,12 @@ class AutoCategorizationService {
   public async updateRule(
     ruleId: string,
     input: AutoCategorizationRuleUpdateInput,
-    tx?: TransactionClient
+    prisma: RulePrisma
   ): Promise<AutoCategorizationRuleListItem> {
-    const prisma = tx || databaseService.prismaClient;
     const { normalizedPattern, matchType } = await this.validateRuleUpdateInput(
       input,
+      prisma,
       { excludeRuleId: ruleId },
-      prisma
     );
 
     const updated = await prisma.autoCategorizationRule.update({
@@ -251,8 +290,7 @@ class AutoCategorizationService {
     };
   }
 
-  public async deleteRule(ruleId: string, tx?: TransactionClient): Promise<void> {
-    const prisma = tx || databaseService.prismaClient;
+  public async deleteRule(ruleId: string, prisma: RulePrisma): Promise<void> {
     await prisma.autoCategorizationRule.delete({
       where: { id: ruleId },
     });
@@ -263,9 +301,8 @@ class AutoCategorizationService {
       description?: string | null;
       targetCategoryAccountId: string;
     },
-    tx?: TransactionClient
+    prisma: RulePrisma
   ): Promise<AutoCategorizationRule | null> {
-    const prisma = tx || databaseService.prismaClient;
     const normalizedPattern = normalizePattern(data.description || "");
     if (!normalizedPattern) {
       return null;

@@ -187,7 +187,6 @@ describe("AutoCategorizationRules", () => {
       new Error("Rule with same pattern and match type already exists")
     );
     mockDeleteAutoCategorizationRule.mockResolvedValue({ success: true });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(<AutoCategorizationRules />);
 
@@ -206,6 +205,10 @@ describe("AutoCategorizationRules", () => {
     });
 
     fireEvent.click(screen.getByTestId("auto-categorization-delete-rule-1"));
+    await waitFor(() => {
+      expect(screen.getByTestId("auto-categorization-delete-confirmation")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId("auto-categorization-delete-confirm-button"));
 
     await waitFor(() => {
       expect(mockDeleteAutoCategorizationRule).toHaveBeenCalledWith("rule-1");

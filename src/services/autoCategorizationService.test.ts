@@ -3,6 +3,7 @@ import {
   isValidKeywordPattern,
   normalizePattern,
   findBestAutoCategorizationMatch,
+  resolveImportAutoCategorization,
   type AutoCategorizationRuleMatch,
 } from "./autoCategorizationService";
 
@@ -15,6 +16,65 @@ describe("normalizePattern", () => {
   it("does not remove punctuation in MVP", () => {
     expect(normalizePattern("Uber-trip #123"))
       .toBe("uber-trip #123");
+  });
+});
+
+describe("resolveImportAutoCategorization", () => {
+  const rules: AutoCategorizationRuleMatch[] = [
+    {
+      id: "ex",
+      normalizedPattern: "coffee bean vancouver bc",
+      matchType: "exact",
+      targetCategoryAccountId: "cat-dining",
+      targetCategoryArchived: false,
+      lastConfirmedAt: new Date("2026-02-10T00:00:00Z"),
+      updatedAt: new Date("2026-02-10T00:00:00Z"),
+    },
+    {
+      id: "kw",
+      normalizedPattern: "coffee bean",
+      matchType: "keyword",
+      targetCategoryAccountId: "cat-dining",
+      targetCategoryArchived: false,
+      lastConfirmedAt: new Date("2026-02-09T00:00:00Z"),
+      updatedAt: new Date("2026-02-09T00:00:00Z"),
+    },
+  ];
+
+  it("auto-applies exact matches", () => {
+    const resolution = resolveImportAutoCategorization({
+      explicitToAccountId: null,
+      description: "COFFEE BEAN VANCOUVER BC",
+      rules,
+    });
+
+    expect(resolution.toAccountId).toBe("cat-dining");
+    expect(resolution.exactAutoApplied).toBe(true);
+    expect(resolution.keywordMatched).toBe(false);
+  });
+
+  it("counts keyword match without auto-apply", () => {
+    const resolution = resolveImportAutoCategorization({
+      explicitToAccountId: null,
+      description: "COFFEE BEAN DT VANCOUVER",
+      rules,
+    });
+
+    expect(resolution.toAccountId).toBeNull();
+    expect(resolution.exactAutoApplied).toBe(false);
+    expect(resolution.keywordMatched).toBe(true);
+  });
+
+  it("keeps explicit mapped toAccountId precedence", () => {
+    const resolution = resolveImportAutoCategorization({
+      explicitToAccountId: "manual-category-id",
+      description: "COFFEE BEAN VANCOUVER BC",
+      rules,
+    });
+
+    expect(resolution.toAccountId).toBe("manual-category-id");
+    expect(resolution.exactAutoApplied).toBe(false);
+    expect(resolution.keywordMatched).toBe(false);
   });
 });
 

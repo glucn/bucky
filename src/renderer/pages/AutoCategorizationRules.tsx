@@ -20,6 +20,7 @@ export const AutoCategorizationRules: React.FC = () => {
   const [editTargetCategoryAccountId, setEditTargetCategoryAccountId] = React.useState("");
   const [editError, setEditError] = React.useState<string | null>(null);
   const [activeCategories, setActiveCategories] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [pendingDeleteRuleId, setPendingDeleteRuleId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const loadRules = async () => {
@@ -93,13 +94,18 @@ export const AutoCategorizationRules: React.FC = () => {
     }
   };
 
-  const handleDelete = async (ruleId: string) => {
-    if (!window.confirm("Delete this auto-categorization rule?")) {
+  const handleDelete = (ruleId: string) => {
+    setPendingDeleteRuleId(ruleId);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteRuleId) {
       return;
     }
 
-    await window.electron.deleteAutoCategorizationRule(ruleId);
-    setRules((current) => current.filter((rule) => rule.id !== ruleId));
+    await window.electron.deleteAutoCategorizationRule(pendingDeleteRuleId);
+    setRules((current) => current.filter((rule) => rule.id !== pendingDeleteRuleId));
+    setPendingDeleteRuleId(null);
   };
 
   return (
@@ -156,7 +162,7 @@ export const AutoCategorizationRules: React.FC = () => {
                       className="text-sm text-red-600 hover:text-red-700"
                       data-testid={`auto-categorization-delete-${rule.id}`}
                       onClick={() => {
-                        void handleDelete(rule.id);
+                        handleDelete(rule.id);
                       }}
                     >
                       Delete
@@ -230,6 +236,35 @@ export const AutoCategorizationRules: React.FC = () => {
                 }}
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDeleteRuleId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="w-full max-w-sm rounded-md bg-white p-4 shadow-lg" data-testid="auto-categorization-delete-confirmation">
+            <h2 className="text-base font-semibold text-gray-900">Delete rule?</h2>
+            <p className="mt-2 text-sm text-gray-600">This action cannot be undone.</p>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                onClick={() => setPendingDeleteRuleId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-md bg-red-600 px-3 py-2 text-sm text-white"
+                data-testid="auto-categorization-delete-confirm-button"
+                onClick={() => {
+                  void confirmDelete();
+                }}
+              >
+                Delete
               </button>
             </div>
           </div>

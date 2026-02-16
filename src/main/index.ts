@@ -9,6 +9,10 @@ import { databaseService } from "../services/database";
 import { creditCardService } from "../services/creditCardService";
 import { resolveImportAccounts } from "../services/importUtils";
 import { AccountSubtype } from "../shared/accountTypes";
+import {
+  autoCategorizationService,
+  resolveImportAutoCategorization,
+} from "../services/autoCategorizationService";
 import { setupInvestmentIpcHandlers } from "./ipcHandlers.investments";
 import { setupOverviewIpcHandlers } from "./ipcHandlers.overview";
 
@@ -285,6 +289,9 @@ function setupIpcHandlers() {
     const skippedDetails = [];
     const usedDefaultAccountDetails = [];
     const autoCreatedCategories: Array<{ name: string; subtype: string }> = [];
+    let exactAutoAppliedCount = 0;
+    let keywordMatchedCount = 0;
+    let uncategorizedCount = 0;
     try {
 
       // Ensure default accounts exist
@@ -297,6 +304,9 @@ function setupIpcHandlers() {
       );
       const uncategorizedExpense = allAccounts.find(
         (acc) => acc.name === "Uncategorized Expense" && acc.type === "category"
+      );
+      const autoCategorizationRules = await autoCategorizationService.getRulesForImport(
+        databaseService.prismaClient
       );
 
       for (const tx of transactions) {
@@ -331,6 +341,8 @@ function setupIpcHandlers() {
         let usedDefault = false;
         let defaultAccountName = null;
         const amount = Number(tx.amount);
+        let exactAutoApplied = false;
+        let keywordMatched = false;
 
         // Auto-create category if toAccountId is a string (category name) instead of an ID
         if (toAccountId && typeof toAccountId === 'string' && !allAccounts.find(acc => acc.id === toAccountId)) {
@@ -374,6 +386,18 @@ function setupIpcHandlers() {
             }
           }
         }
+
+        const autoCategorizationResolution = resolveImportAutoCategorization({
+          explicitToAccountId: toAccountId || null,
+          description: tx.description,
+          rules: autoCategorizationRules,
+        });
+
+        if (!toAccountId) {
+          toAccountId = autoCategorizationResolution.toAccountId;
+        }
+        exactAutoApplied = autoCategorizationResolution.exactAutoApplied;
+        keywordMatched = autoCategorizationResolution.keywordMatched;
 
         const resolution = resolveImportAccounts({
           userAccountId: tx.fromAccountId,
@@ -457,7 +481,14 @@ function setupIpcHandlers() {
             console.log("[IMPORT] Skipped transaction (reason):", result.reason, tx);
           } else {
             importedCount++;
+            if (exactAutoApplied) {
+              exactAutoAppliedCount++;
+            }
+            if (keywordMatched) {
+              keywordMatchedCount++;
+            }
             if (usedDefault) {
+              uncategorizedCount++;
               usedDefaultAccountDetails.push({
                 date: tx.date,
                 amount: tx.amount,
@@ -485,6 +516,9 @@ function setupIpcHandlers() {
       console.log("[IMPORT] Import summary:", {
         importedCount,
         skippedCount,
+        exactAutoAppliedCount,
+        keywordMatchedCount,
+        uncategorizedCount,
         skippedDetails,
         usedDefaultAccountDetails,
         autoCreatedCategories,
@@ -493,6 +527,9 @@ function setupIpcHandlers() {
         success: true,
         imported: importedCount,
         skipped: skippedCount,
+        exactAutoAppliedCount,
+        keywordMatchedCount,
+        uncategorizedCount,
         skippedDetails,
         usedDefaultAccountDetails,
         autoCreatedCategories,
