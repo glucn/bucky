@@ -15,12 +15,12 @@
 
 ## Tasks
 
-- [ ] 1. Add rule persistence model and schema migration
+- [x] 1. Add rule persistence model and schema migration
   - Acceptance: Prisma schema includes `AutoCategorizationRule` with normalized pattern, match type, target category reference, and timestamps.
   - Acceptance: uniqueness is enforced for `(normalizedPattern, matchType)`.
   - Acceptance: test DB/dev DB schema sync succeeds after migration.
 
-- [ ] 2. Add auto-categorization matching service utilities
+- [/] 2. Add auto-categorization matching service utilities
   - Acceptance: service normalizes pattern/description with case + whitespace rules only.
   - Acceptance: matching supports exact and keyword (substring) logic against description only.
   - Acceptance: keyword minimum length validation (3+) is enforced.

@@ -22,6 +22,11 @@ enum AccountType {
   system
 }
 
+enum AutoCategorizationMatchType {
+  exact
+  keyword
+}
+
 model AccountGroup {
   id           String      @id @default(uuid())
   name         String
@@ -50,9 +55,26 @@ model Account {
   checkpoints Checkpoint[]
   creditCardProperties CreditCardProperties[]
   investmentProperties InvestmentProperties?
+  autoCategorizationRules AutoCategorizationRule[] @relation("AutoCategorizationRuleTarget")
   group     AccountGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   
   @@index([groupId])
+}
+
+model AutoCategorizationRule {
+  id                      String                     @id @default(uuid())
+  normalizedPattern       String
+  matchType               AutoCategorizationMatchType
+  targetCategoryAccountId String
+  lastConfirmedAt         DateTime?
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+
+  targetCategoryAccount Account @relation("AutoCategorizationRuleTarget", fields: [targetCategoryAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([normalizedPattern, matchType])
+  @@index([matchType, normalizedPattern])
+  @@index([targetCategoryAccountId])
 }
 
 model JournalEntry {
