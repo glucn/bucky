@@ -5,17 +5,25 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AutoCategorizationRules } from "./AutoCategorizationRules";
 
 const mockGetAutoCategorizationRules = vi.fn();
+const mockUpdateAutoCategorizationRule = vi.fn();
+const mockDeleteAutoCategorizationRule = vi.fn();
+const mockInvoke = vi.fn();
 
 describe("AutoCategorizationRules", () => {
   beforeEach(() => {
     mockGetAutoCategorizationRules.mockReset();
+    mockUpdateAutoCategorizationRule.mockReset();
+    mockDeleteAutoCategorizationRule.mockReset();
+    mockInvoke.mockReset();
 
     Object.defineProperty(window, "electron", {
       writable: true,
       value: {
         getAutoCategorizationRules: mockGetAutoCategorizationRules,
+        updateAutoCategorizationRule: mockUpdateAutoCategorizationRule,
+        deleteAutoCategorizationRule: mockDeleteAutoCategorizationRule,
         ipcRenderer: {
-          invoke: vi.fn(),
+          invoke: mockInvoke,
           on: vi.fn(),
         },
       },
@@ -95,5 +103,112 @@ describe("AutoCategorizationRules", () => {
 
     expect(screen.getByText("coffee bean")).toBeTruthy();
     expect(screen.queryByText("uber trip")).toBeNull();
+  });
+
+  it("edits a rule with pattern, match type, and target category", async () => {
+    mockGetAutoCategorizationRules.mockResolvedValue([
+      {
+        id: "rule-1",
+        pattern: "coffee bean",
+        matchType: "keyword",
+        targetCategoryAccountId: "cat-1",
+        targetCategoryName: "Dining Out",
+        lastUpdatedAt: "2026-02-01T10:00:00.000Z",
+        status: "Valid",
+      },
+    ]);
+    mockInvoke.mockResolvedValue({
+      success: true,
+      accounts: [
+        { id: "cat-1", name: "Dining Out" },
+        { id: "cat-2", name: "Groceries" },
+      ],
+    });
+    mockUpdateAutoCategorizationRule.mockResolvedValue({
+      id: "rule-1",
+      pattern: "coffee run",
+      matchType: "exact",
+      targetCategoryAccountId: "cat-2",
+      targetCategoryName: "Groceries",
+      lastUpdatedAt: "2026-02-12T10:00:00.000Z",
+      status: "Valid",
+    });
+
+    render(<AutoCategorizationRules />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auto-categorization-edit-rule-1")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId("auto-categorization-edit-rule-1"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auto-categorization-edit-modal")).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByTestId("auto-categorization-edit-pattern"), {
+      target: { value: "coffee run" },
+    });
+    fireEvent.change(screen.getByTestId("auto-categorization-edit-match-type"), {
+      target: { value: "exact" },
+    });
+    fireEvent.change(screen.getByTestId("auto-categorization-edit-target"), {
+      target: { value: "cat-2" },
+    });
+
+    fireEvent.click(screen.getByTestId("auto-categorization-save-button"));
+
+    await waitFor(() => {
+      expect(mockUpdateAutoCategorizationRule).toHaveBeenCalledWith("rule-1", {
+        pattern: "coffee run",
+        matchType: "exact",
+        targetCategoryAccountId: "cat-2",
+      });
+    });
+  });
+
+  it("shows update validation errors and supports delete confirmation", async () => {
+    mockGetAutoCategorizationRules.mockResolvedValue([
+      {
+        id: "rule-1",
+        pattern: "coffee bean",
+        matchType: "keyword",
+        targetCategoryAccountId: "cat-1",
+        targetCategoryName: "Dining Out",
+        lastUpdatedAt: "2026-02-01T10:00:00.000Z",
+        status: "Valid",
+      },
+    ]);
+    mockInvoke.mockResolvedValue({
+      success: true,
+      accounts: [{ id: "cat-1", name: "Dining Out" }],
+    });
+    mockUpdateAutoCategorizationRule.mockRejectedValue(
+      new Error("Rule with same pattern and match type already exists")
+    );
+    mockDeleteAutoCategorizationRule.mockResolvedValue({ success: true });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<AutoCategorizationRules />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("auto-categorization-edit-rule-1")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId("auto-categorization-edit-rule-1"));
+    await waitFor(() => {
+      expect(screen.getByTestId("auto-categorization-save-button")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId("auto-categorization-save-button"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Rule with same pattern and match type already exists")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId("auto-categorization-delete-rule-1"));
+
+    await waitFor(() => {
+      expect(mockDeleteAutoCategorizationRule).toHaveBeenCalledWith("rule-1");
+    });
   });
 });

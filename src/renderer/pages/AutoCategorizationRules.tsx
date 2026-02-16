@@ -14,6 +14,12 @@ export const AutoCategorizationRules: React.FC = () => {
   const [rules, setRules] = React.useState<RuleListItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
+  const [editingRule, setEditingRule] = React.useState<RuleListItem | null>(null);
+  const [editPattern, setEditPattern] = React.useState("");
+  const [editMatchType, setEditMatchType] = React.useState<"exact" | "keyword">("exact");
+  const [editTargetCategoryAccountId, setEditTargetCategoryAccountId] = React.useState("");
+  const [editError, setEditError] = React.useState<string | null>(null);
+  const [activeCategories, setActiveCategories] = React.useState<Array<{ id: string; name: string }>>([]);
 
   React.useEffect(() => {
     const loadRules = async () => {
@@ -49,6 +55,51 @@ export const AutoCategorizationRules: React.FC = () => {
     }
 
     return date.toLocaleDateString();
+  };
+
+  const openEditModal = async (rule: RuleListItem) => {
+    setEditingRule(rule);
+    setEditPattern(rule.pattern);
+    setEditMatchType(rule.matchType);
+    setEditTargetCategoryAccountId(rule.targetCategoryAccountId || "");
+    setEditError(null);
+
+    const categoryResult = await window.electron.ipcRenderer.invoke("get-category-accounts", false);
+    const active = categoryResult?.success && Array.isArray(categoryResult.accounts)
+      ? categoryResult.accounts.filter((account: any) => !account.isArchived)
+      : [];
+    setActiveCategories(active.map((account: any) => ({ id: account.id, name: account.name })));
+  };
+
+  const handleSave = async () => {
+    if (!editingRule || !editTargetCategoryAccountId) {
+      return;
+    }
+
+    try {
+      const updatedRule = await window.electron.updateAutoCategorizationRule(editingRule.id, {
+        pattern: editPattern,
+        matchType: editMatchType,
+        targetCategoryAccountId: editTargetCategoryAccountId,
+      });
+
+      setRules((current) =>
+        current.map((rule) => (rule.id === updatedRule.id ? updatedRule : rule))
+      );
+      setEditingRule(null);
+      setEditError(null);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "Failed to update rule");
+    }
+  };
+
+  const handleDelete = async (ruleId: string) => {
+    if (!window.confirm("Delete this auto-categorization rule?")) {
+      return;
+    }
+
+    await window.electron.deleteAutoCategorizationRule(ruleId);
+    setRules((current) => current.filter((rule) => rule.id !== ruleId));
   };
 
   return (
@@ -89,10 +140,99 @@ export const AutoCategorizationRules: React.FC = () => {
                   <td className="px-3 py-2">{rule.targetCategoryName || "—"}</td>
                   <td className="px-3 py-2">{formatLastUpdated(rule.lastUpdatedAt)}</td>
                   <td className="px-3 py-2">{rule.status}</td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      className="mr-2 text-sm text-primary-600 hover:text-primary-700"
+                      data-testid={`auto-categorization-edit-${rule.id}`}
+                      onClick={() => {
+                        void openEditModal(rule);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="text-sm text-red-600 hover:text-red-700"
+                      data-testid={`auto-categorization-delete-${rule.id}`}
+                      onClick={() => {
+                        void handleDelete(rule.id);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {editingRule && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20">
+          <div className="w-full max-w-md rounded-md bg-white p-4 shadow-lg" data-testid="auto-categorization-edit-modal">
+            <h2 className="text-lg font-semibold text-gray-900">Edit Rule</h2>
+
+            <label className="mt-3 block text-sm text-gray-700">Pattern</label>
+            <input
+              value={editPattern}
+              onChange={(event) => setEditPattern(event.target.value)}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              data-testid="auto-categorization-edit-pattern"
+            />
+
+            <label className="mt-3 block text-sm text-gray-700">Match Type</label>
+            <select
+              value={editMatchType}
+              onChange={(event) => setEditMatchType(event.target.value as "exact" | "keyword")}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              data-testid="auto-categorization-edit-match-type"
+            >
+              <option value="exact">exact</option>
+              <option value="keyword">keyword</option>
+            </select>
+
+            <label className="mt-3 block text-sm text-gray-700">Target Category</label>
+            <select
+              value={editTargetCategoryAccountId}
+              onChange={(event) => setEditTargetCategoryAccountId(event.target.value)}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              data-testid="auto-categorization-edit-target"
+            >
+              <option value="">Select category</option>
+              {activeCategories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+
+            {editError && <div className="mt-3 text-sm text-red-600">{editError}</div>}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                onClick={() => {
+                  setEditingRule(null);
+                  setEditError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-md bg-primary-600 px-3 py-2 text-sm text-white"
+                data-testid="auto-categorization-save-button"
+                onClick={() => {
+                  void handleSave();
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

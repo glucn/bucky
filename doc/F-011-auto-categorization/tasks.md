@@ -58,7 +58,7 @@
   - Acceptance: list columns include Pattern, Match Type, Target Category, Last Updated, Status.
   - Acceptance: status shows only `Valid` or `Invalid target`.
 
-- [ ] 9. Build rule edit modal and delete flow
+- [x] 9. Build rule edit modal and delete flow
   - Acceptance: edit modal supports pattern, match type, and active target category fields.
   - Acceptance: save is immediate when valid; normalization is silent on save.
   - Acceptance: duplicate `(normalizedPattern, matchType)` errors are surfaced clearly.
