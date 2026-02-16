@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import App from "./App";
 
 vi.mock("./components/Sidebar", () => ({
@@ -47,12 +47,24 @@ vi.mock("./pages/PerformanceReportsPage", () => ({
 describe("App settings route", () => {
   beforeEach(() => {
     window.history.pushState({}, "", "/settings/auto-categorization");
+    Object.defineProperty(window, "electron", {
+      writable: true,
+      value: {
+        getAutoCategorizationRules: vi.fn().mockResolvedValue([]),
+        ipcRenderer: {
+          invoke: vi.fn(),
+          on: vi.fn(),
+        },
+      },
+    });
   });
 
-  it("renders settings auto-categorization page and exposes navbar entry", () => {
+  it("renders settings auto-categorization page and exposes navbar entry", async () => {
     render(<App />);
 
-    expect(screen.getByTestId("auto-categorization-settings-page")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByTestId("auto-categorization-settings-page")).toBeTruthy();
+    });
     const settingsLink = screen.getByRole("link", { name: "Settings" });
     expect(settingsLink.getAttribute("href")).toBe("/settings/auto-categorization");
   });

@@ -52,7 +52,7 @@
   - Acceptance: routing and nav updates do not regress existing top-level navigation behavior.
   - Acceptance: basic route render test is added.
 
-- [ ] 8. Build rules list page (lightweight MVP)
+- [x] 8. Build rules list page (lightweight MVP)
   - Acceptance: page shows a single list with default `Last Updated` descending order.
   - Acceptance: pattern-only search filters list client-side.
   - Acceptance: list columns include Pattern, Match Type, Target Category, Last Updated, Status.
