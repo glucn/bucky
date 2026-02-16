@@ -47,7 +47,7 @@
   - Acceptance: server-side validation blocks duplicate `(normalizedPattern, matchType)` and invalid target category writes.
   - Acceptance: preload/types expose stable renderer methods for the rules page.
 
-- [ ] 7. Add settings route and navigation entry for rules page
+- [x] 7. Add settings route and navigation entry for rules page
   - Acceptance: new page is reachable at `Settings > Auto-Categorization`.
   - Acceptance: routing and nav updates do not regress existing top-level navigation behavior.
   - Acceptance: basic route render test is added.
