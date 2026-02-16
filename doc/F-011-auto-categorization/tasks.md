@@ -69,7 +69,7 @@
   - Acceptance: no per-row/per-rule detail UI is introduced in import steps.
   - Acceptance: summary rendering remains stable for imports with no rules.
 
-- [ ] 11. Add deterministic test hooks and end-to-end coverage
+- [x] 11. Add deterministic test hooks and end-to-end coverage
   - Acceptance: add stable `data-testid` hooks for rules list rows, edit/save actions, and delete confirmation.
   - Acceptance: E2E covers bootstrap learning via cleanup then exact auto-apply on a later import.
   - Acceptance: E2E covers rules page edit/delete affecting subsequent import behavior.
