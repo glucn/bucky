@@ -53,17 +53,38 @@ export const buildImportPayload = <T extends Record<string, unknown>>(
   }));
 
 export const resolveImportSummary = (
-  result: { imported?: number; skipped?: number } | null,
+  result: {
+    imported?: number;
+    skipped?: number;
+    exactAutoAppliedCount?: number;
+    keywordMatchedCount?: number;
+    uncategorizedCount?: number;
+  } | null,
   fallbackCount: number
-): { imported: number; skipped: number } => {
+): {
+  imported: number;
+  skipped: number;
+  exactAutoAppliedCount: number;
+  keywordMatchedCount: number;
+  uncategorizedCount: number;
+} => {
   if (result && typeof result.imported === "number" && typeof result.skipped === "number") {
     return {
       imported: result.imported,
       skipped: result.skipped,
+      exactAutoAppliedCount: result.exactAutoAppliedCount ?? 0,
+      keywordMatchedCount: result.keywordMatchedCount ?? 0,
+      uncategorizedCount: result.uncategorizedCount ?? 0,
     };
   }
 
-  return { imported: fallbackCount, skipped: 0 };
+  return {
+    imported: fallbackCount,
+    skipped: 0,
+    exactAutoAppliedCount: 0,
+    keywordMatchedCount: 0,
+    uncategorizedCount: 0,
+  };
 };
 
 export const shouldShowDefaultAccountWarning = (details: unknown[]): boolean => {

@@ -100,7 +100,13 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
   // Feedback and summary states
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [importSummary, setImportSummary] = useState<{ imported: number; skipped: number } | null>(null);
+  const [importSummary, setImportSummary] = useState<{
+    imported: number;
+    skipped: number;
+    exactAutoAppliedCount: number;
+    keywordMatchedCount: number;
+    uncategorizedCount: number;
+  } | null>(null);
   const [duplicateRows, setDuplicateRows] = useState<number[]>([]);
   const [duplicateAction, setDuplicateAction] = useState<"import" | "skip" | null>(null);
   const [skippedDetails, setSkippedDetails] = useState<any[]>([]);
@@ -847,6 +853,15 @@ export const ImportTransactionsWizard: React.FC<ImportTransactionsWizardProps> =
                     </div>
                     <div>
                       <strong>Skipped:</strong> {importSummary.skipped}
+                    </div>
+                    <div>
+                      <strong>Exact auto-applied:</strong> {importSummary.exactAutoAppliedCount}
+                    </div>
+                    <div>
+                      <strong>Keyword matched:</strong> {importSummary.keywordMatchedCount}
+                    </div>
+                    <div>
+                      <strong>Uncategorized:</strong> {importSummary.uncategorizedCount}
                     </div>
                   </div>
                 )}

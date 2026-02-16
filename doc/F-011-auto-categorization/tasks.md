@@ -64,7 +64,7 @@
   - Acceptance: duplicate `(normalizedPattern, matchType)` errors are surfaced clearly.
   - Acceptance: delete uses standard confirmation and performs hard delete.
 
-- [ ] 10. Update import summary UI with aggregate rule outcome counts
+- [x] 10. Update import summary UI with aggregate rule outcome counts
   - Acceptance: import summary displays exact auto-applied, keyword matched, and uncategorized counts.
   - Acceptance: no per-row/per-rule detail UI is introduced in import steps.
   - Acceptance: summary rendering remains stable for imports with no rules.
