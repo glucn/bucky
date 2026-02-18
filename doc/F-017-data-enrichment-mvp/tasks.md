@@ -70,7 +70,7 @@
   - Acceptance: cancel attempts immediate abort; non-abortable in-flight responses are discarded on return.
   - Acceptance: completed successful writes before cancel/failure are retained.
 
-- [ ] 12. Add IPC/preload contracts for enrichment panel + settings
+- [x] 12. Add IPC/preload contracts for enrichment panel + settings
   - Acceptance: renderer can start run, query run state/summary, cancel run, and move run to background.
   - Acceptance: renderer can read/write `baseCurrency` through app settings API.
   - Acceptance: IPC error behavior matches existing app conventions.

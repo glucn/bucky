@@ -60,4 +60,25 @@ contextBridge.exposeInMainWorld("electron", {
   ) => ipcRenderer.invoke("update-auto-categorization-rule", { ruleId, update }),
   deleteAutoCategorizationRule: (ruleId: string) =>
     ipcRenderer.invoke("delete-auto-categorization-rule", ruleId),
+
+  // Data enrichment operations
+  getEnrichmentPanelState: () =>
+    ipcRenderer.invoke("get-enrichment-panel-state"),
+  startEnrichmentRun: (scope: {
+    securityMetadata: boolean;
+    securityPrices: boolean;
+    fxRates: boolean;
+  }) => ipcRenderer.invoke("start-enrichment-run", scope),
+  cancelEnrichmentRun: (runId: string) =>
+    ipcRenderer.invoke("cancel-enrichment-run", runId),
+  sendEnrichmentRunToBackground: (runId: string) =>
+    ipcRenderer.invoke("send-enrichment-run-to-background", runId),
+  getEnrichmentRunSummary: (runId: string) =>
+    ipcRenderer.invoke("get-enrichment-run-summary", runId),
+
+  // Generic app settings operations
+  getAppSetting: (key: string) =>
+    ipcRenderer.invoke("get-app-setting", key),
+  setAppSetting: (key: string, value: unknown) =>
+    ipcRenderer.invoke("set-app-setting", { key, value }),
 });
