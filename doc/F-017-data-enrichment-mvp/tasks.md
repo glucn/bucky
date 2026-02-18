@@ -50,7 +50,7 @@
   - Acceptance: price/FX writes insert missing dates only and do not revise existing points.
   - Acceptance: repository helpers expose latest fetched date and freshness timestamps by category.
 
-- [ ] 8. Implement range derivation and gap detection utilities
+- [x] 8. Implement range derivation and gap detection utilities
   - Acceptance: first fetch starts from earliest relevant transaction date.
   - Acceptance: incremental fetch starts from last successful refresh point when history exists.
   - Acceptance: gap detection identifies missing historical windows and returns backfill plan metadata.
