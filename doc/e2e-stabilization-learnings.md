@@ -43,6 +43,18 @@ This note captures practical findings from stabilizing flaky E2E runs, especiall
 - Navigation helpers should retry short transient failures around `page.goto`/`waitForURL`.
 - UI open actions in unstable environments should use retry loops with short waits.
 - Keep screenshot capture best-effort (do not fail if page is already closed).
+- Always close sqlite handles with awaited callbacks in helpers; un-awaited `db.close()` can leak resources and create cross-test flakiness.
+- Keep helper cleanup scoped to the scenario that needs it; broad cleanup in shared helpers can silently break other specs.
+
+## State isolation and assertions
+
+- For import/idempotent workflows, prefer assertions that accept multiple valid outcomes (for example, imported rows vs. all rows skipped as duplicates) unless the test explicitly controls initial DB state.
+- If a spec must verify a single path, reset or seed DB state inside that spec so prior tests cannot change expected behavior.
+- When a full suite fails but single-spec reruns pass, suspect cross-spec state leakage before changing product logic.
+
+## Harness and contract alignment
+
+- Keep test harness contracts in sync with runtime IPC/preload contracts; adding a new required bridge method can surface as unrelated E2E or integration failures.
 
 ## Validation standard for flaky tests
 
