@@ -45,7 +45,7 @@
   - Acceptance: one candidate auto-selects; multiple candidates keep provider order for user selection.
   - Acceptance: zero candidates still allow save with save-time warning only.
 
-- [ ] 7. Add enrichment repository and immutable write policies
+- [x] 7. Add enrichment repository and immutable write policies
   - Acceptance: metadata writes fill missing fields only (no overwrite of non-null values).
   - Acceptance: price/FX writes insert missing dates only and do not revise existing points.
   - Acceptance: repository helpers expose latest fetched date and freshness timestamps by category.
