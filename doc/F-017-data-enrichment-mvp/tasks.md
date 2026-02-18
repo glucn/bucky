@@ -93,7 +93,7 @@
   - Acceptance: changing base currency prompts refresh and opens panel with default full scope.
   - Acceptance: FX derivation treats same-currency conversion as implicit `1.0` without persisted self-pair rows.
 
-- [ ] 16. Add missing-data CTA integration and valuation fallback behavior
+- [x] 16. Add missing-data CTA integration and valuation fallback behavior
   - Acceptance: valuation uses unbounded carry-forward of prior daily values when available.
   - Acceptance: when no prior value exists, value is shown as unavailable (not zero).
   - Acceptance: lightweight CTA (banner/snackbar) appears and opens refresh panel.

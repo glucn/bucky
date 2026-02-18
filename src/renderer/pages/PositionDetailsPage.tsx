@@ -183,6 +183,21 @@ export const PositionDetailsPage: React.FC = () => {
       {/* Position Summary */}
       <div className="bg-white shadow rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Summary</h3>
+        {position.marketPrice === null ? (
+          <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="missing-enrichment-cta">
+            Market data is unavailable for this position at the selected valuation point.
+            <button
+              type="button"
+              className="ml-2 text-primary-700 underline"
+              onClick={() => {
+                window.dispatchEvent(new Event("open-enrichment-panel"));
+              }}
+              data-testid="missing-enrichment-refresh-now"
+            >
+              Refresh now
+            </button>
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           <div>
             <p className="text-sm text-gray-500">Quantity</p>
