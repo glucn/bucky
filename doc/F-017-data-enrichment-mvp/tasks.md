@@ -15,7 +15,7 @@
 
 ## Tasks
 
-- [ ] 1. Add enrichment data models and schema migration
+- [x] 1. Add enrichment data models and schema migration
   - Acceptance: Prisma schema adds `AppSetting`, `SecurityMetadata`, `SecurityDailyPrice`, and `FxDailyRate` models.
   - Acceptance: uniqueness/indexes exist for `(ticker, market)`, `(ticker, market, marketDate)`, and `(sourceCurrency, targetCurrency, marketDate)`.
   - Acceptance: migration applies cleanly to test/dev databases.
