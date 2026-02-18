@@ -25,7 +25,7 @@
   - Acceptance: `baseCurrency` can be persisted/retrieved via service layer.
   - Acceptance: validation is enforced at consumption points, not generic storage write.
 
-- [ ] 3. Add provider adapter contract and startup provider resolution
+- [x] 3. Add provider adapter contract and startup provider resolution
   - Acceptance: `EnrichmentProviderAdapter` contract includes metadata, daily prices, daily FX, ticker search, and capabilities.
   - Acceptance: startup config selects one active provider via `ENRICHMENT_PROVIDER`.
   - Acceptance: unsupported/missing provider config yields controlled initialization error state.
