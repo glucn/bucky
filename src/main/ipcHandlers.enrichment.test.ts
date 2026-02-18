@@ -59,6 +59,7 @@ describe("setupEnrichmentIpcHandlers", () => {
   it("registers enrichment and app-setting handlers", async () => {
     getPanelState.mockResolvedValue({
       activeRun: null,
+      latestSummary: null,
       freshness: {
         metadata: null,
         prices: null,
@@ -102,6 +103,7 @@ describe("setupEnrichmentIpcHandlers", () => {
 
     expect(await getPanelStateHandler({})).toEqual({
       activeRun: null,
+      latestSummary: null,
       freshness: {
         metadata: null,
         prices: null,

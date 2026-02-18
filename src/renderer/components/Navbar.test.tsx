@@ -14,6 +14,7 @@ describe("Navbar enrichment panel", () => {
       ...((globalThis.window as any).electron || {}),
       getEnrichmentPanelState: vi.fn().mockResolvedValue({
         activeRun: null,
+        latestSummary: null,
         freshness: {
           metadata: null,
           prices: null,
@@ -66,6 +67,7 @@ describe("Navbar enrichment panel", () => {
         },
         failedItems: [],
       },
+      latestSummary: null,
       freshness: { metadata: null, prices: null, fx: null },
     });
     (globalThis.window as any).electron.getEnrichmentConfigState = vi.fn().mockResolvedValue({

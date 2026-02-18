@@ -98,12 +98,16 @@
   - Acceptance: when no prior value exists, value is shown as unavailable (not zero).
   - Acceptance: lightweight CTA (banner/snackbar) appears and opens refresh panel.
 
-- [ ] 17. Add deterministic tests and end-to-end coverage
+- [x] 17. Add deterministic tests and end-to-end coverage
   - Acceptance: unit/service tests cover provider selection, incremental/gap logic, immutable writes, retry/cancel, and single-run guard.
   - Acceptance: renderer tests cover disabled-state messaging, scope selection, progress counters, background flow, summary, and copy action.
   - Acceptance: E2E covers missing-data CTA -> refresh and completed-with-issues summary behavior.
 
-- [ ] 18. Final regression and documentation sync
+- [x] 18. Final regression and documentation sync
   - Acceptance: relevant unit/service/renderer/E2E suites pass for F-017 scope.
   - Acceptance: `requirements.md`, `design.md`, and `tasks.md` are aligned with dual-provider MVP implementation (`yahoo` + `twelvedata`).
   - Acceptance: implementation deviations are documented explicitly before completion.
+
+## Implementation Deviations
+
+- None identified for MVP scope.

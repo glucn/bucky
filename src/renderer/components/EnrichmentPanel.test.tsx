@@ -25,6 +25,7 @@ describe("EnrichmentPanel", () => {
             },
           ],
         },
+        latestSummary: null,
         freshness: {
           metadata: null,
           prices: null,

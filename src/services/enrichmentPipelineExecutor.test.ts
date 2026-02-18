@@ -27,17 +27,17 @@ describe("executeEnrichmentPipeline", () => {
   it("runs selected categories in fixed order and updates progress", async () => {
     const calls: string[] = [];
     const p = provider();
-    p.fetchSecurityMetadata = vi.fn(async (...args) => {
+    p.fetchSecurityMetadata = vi.fn(async (input) => {
       calls.push("metadata");
-      return provider().fetchSecurityMetadata(...args);
+      return provider().fetchSecurityMetadata(input);
     });
-    p.fetchSecurityDailyPrices = vi.fn(async (...args) => {
+    p.fetchSecurityDailyPrices = vi.fn(async (input) => {
       calls.push("prices");
-      return provider().fetchSecurityDailyPrices(...args);
+      return provider().fetchSecurityDailyPrices(input);
     });
-    p.fetchFxDailyRates = vi.fn(async (...args) => {
+    p.fetchFxDailyRates = vi.fn(async (input) => {
       calls.push("fx");
-      return provider().fetchFxDailyRates(...args);
+      return provider().fetchFxDailyRates(input);
     });
 
     const repo = {

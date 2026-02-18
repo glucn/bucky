@@ -21,6 +21,7 @@ export const setupEnrichmentIpcHandlers = () => {
   ipcMain.removeHandler("send-enrichment-run-to-background");
   ipcMain.removeHandler("get-enrichment-run-summary");
   ipcMain.removeHandler("get-enrichment-config-state");
+  ipcMain.removeHandler("seed-enrichment-run-summary");
   ipcMain.removeHandler("get-app-setting");
   ipcMain.removeHandler("set-app-setting");
 
@@ -28,6 +29,7 @@ export const setupEnrichmentIpcHandlers = () => {
     const panelState = await enrichmentRuntimeService.getPanelState();
     return {
       activeRun: serializeRun(panelState.activeRun),
+      latestSummary: serializeRun(panelState.latestSummary),
       freshness: {
         metadata:
           panelState.freshness.metadata instanceof Date
@@ -77,6 +79,12 @@ export const setupEnrichmentIpcHandlers = () => {
       baseCurrencyConfigured: Boolean(baseCurrency),
     };
   });
+
+  if (process.env.PLAYWRIGHT_TEST === "1") {
+    ipcMain.handle("seed-enrichment-run-summary", async () => {
+      return enrichmentRuntimeService.seedCompletedWithIssuesRunForTest();
+    });
+  }
 
   ipcMain.handle("get-app-setting", async (_, key: string) => {
     return appSettingsService.getAppSetting(key);

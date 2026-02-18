@@ -82,6 +82,7 @@ export interface IElectronAPI {
   // Data enrichment operations
   getEnrichmentPanelState(): Promise<{
     activeRun: EnrichmentRunSummary | null;
+    latestSummary: EnrichmentRunSummary | null;
     freshness: {
       metadata: string | null;
       prices: string | null;

@@ -96,7 +96,7 @@ export const EnrichmentPanel: React.FC<Props> = ({
   };
 
   const activeRun = panelState?.activeRun;
-  const summaryRun = activeRun || externalSummary;
+  const summaryRun = activeRun || panelState?.latestSummary || externalSummary;
   const freshness = panelState?.freshness || {
     metadata: null,
     prices: null,
