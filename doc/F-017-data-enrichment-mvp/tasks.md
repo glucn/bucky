@@ -40,7 +40,7 @@
   - Acceptance: missing `TWELVEDATA_API_KEY` fails gracefully when provider is `twelvedata`.
   - Acceptance: adapter tests cover common success/failure payload mapping.
 
-- [ ] 6. Add security setup ticker-search resolution flow (`ticker + market`)
+- [x] 6. Add security setup ticker-search resolution flow (`ticker + market`)
   - Acceptance: ticker-only search returns provider candidates for setup flow.
   - Acceptance: one candidate auto-selects; multiple candidates keep provider order for user selection.
   - Acceptance: zero candidates still allow save with save-time warning only.
