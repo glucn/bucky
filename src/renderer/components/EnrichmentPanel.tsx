@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 type Props = {
   isOpen: boolean;
   onClose: () => void;
+  onContinueInBackground?: (runId: string) => void;
+  externalSummary?: any | null;
 };
 
 type Scope = {
@@ -37,7 +39,12 @@ const formatFreshness = (value: string | null): string => {
   return `Refreshed ${days} days ago`;
 };
 
-export const EnrichmentPanel: React.FC<Props> = ({ isOpen, onClose }) => {
+export const EnrichmentPanel: React.FC<Props> = ({
+  isOpen,
+  onClose,
+  onContinueInBackground,
+  externalSummary,
+}) => {
   const [scope, setScope] = useState<Scope>(defaultScope);
   const [panelState, setPanelState] = useState<any>(null);
   const [configState, setConfigState] = useState<{
@@ -89,10 +96,38 @@ export const EnrichmentPanel: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   const activeRun = panelState?.activeRun;
+  const summaryRun = activeRun || externalSummary;
   const freshness = panelState?.freshness || {
     metadata: null,
     prices: null,
     fx: null,
+  };
+
+  const copyFailureDetails = async () => {
+    if (!summaryRun?.failedItems?.length) {
+      return;
+    }
+
+    const text = summaryRun.failedItems
+      .map((item: any) => `${item.category}: ${item.identifier} - ${item.reason}`)
+      .join("\n");
+
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    }
+  };
+
+  const categoryStatus = (category: "securityMetadata" | "securityPrices" | "fxRates") => {
+    if (!summaryRun) {
+      return "-";
+    }
+
+    if (summaryRun.status === "canceled") {
+      return "Canceled";
+    }
+
+    const hasIssue = (summaryRun.failedItems || []).some((item: any) => item.category === category);
+    return hasIssue ? "Issues" : "Done";
   };
 
   return (
@@ -152,12 +187,46 @@ export const EnrichmentPanel: React.FC<Props> = ({ isOpen, onClose }) => {
           </label>
         </div>
 
-        {activeRun ? (
+        {summaryRun ? (
           <div className="mt-5 rounded border border-gray-200 bg-gray-50 p-3 text-sm" data-testid="enrichment-active-run">
-            <div>Run status: {activeRun.status}</div>
-            <div>Metadata: {activeRun.categoryProgress.securityMetadata.processed}/{activeRun.categoryProgress.securityMetadata.total}</div>
-            <div>Prices: {activeRun.categoryProgress.securityPrices.processed}/{activeRun.categoryProgress.securityPrices.total}</div>
-            <div>FX: {activeRun.categoryProgress.fxRates.processed}/{activeRun.categoryProgress.fxRates.total}</div>
+            <div>Run status: {summaryRun.status}</div>
+            <div>Metadata: {summaryRun.categoryProgress.securityMetadata.processed}/{summaryRun.categoryProgress.securityMetadata.total} ({categoryStatus("securityMetadata")})</div>
+            <div>Prices: {summaryRun.categoryProgress.securityPrices.processed}/{summaryRun.categoryProgress.securityPrices.total} ({categoryStatus("securityPrices")})</div>
+            <div>FX: {summaryRun.categoryProgress.fxRates.processed}/{summaryRun.categoryProgress.fxRates.total} ({categoryStatus("fxRates")})</div>
+            {summaryRun.failedItems?.length ? (
+              <div className="mt-3">
+                <div className="mb-2 font-medium">Failed items</div>
+                <div className="max-h-40 overflow-auto rounded border border-gray-200 bg-white p-2" data-testid="enrichment-failed-items-list">
+                  {summaryRun.failedItems.map((item: any, index: number) => (
+                    <div key={`${item.identifier}-${index}`} className="text-xs text-gray-700">
+                      {item.category}: {item.identifier} - {item.reason}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  className="mt-2 rounded border border-gray-300 px-2 py-1 text-xs"
+                  onClick={() => {
+                    void copyFailureDetails();
+                  }}
+                  data-testid="copy-failure-details"
+                >
+                  Copy failure details
+                </button>
+              </div>
+            ) : null}
+            {summaryRun.status === "running" ? (
+              <button
+                className="mt-3 rounded border border-gray-300 px-3 py-1 text-xs"
+                onClick={() => {
+                  if (onContinueInBackground) {
+                    onContinueInBackground(summaryRun.id);
+                  }
+                }}
+                data-testid="continue-in-background"
+              >
+                Continue in background
+              </button>
+            ) : null}
           </div>
         ) : null}
 

@@ -81,7 +81,7 @@
   - Acceptance: panel shows freshness text for all categories, including deselected ones.
   - Acceptance: when config/base currency is missing, refresh action is visible but disabled with user-friendly message.
 
-- [ ] 14. Add foreground/background flow, summary UX, and copy details
+- [x] 14. Add foreground/background flow, summary UX, and copy details
   - Acceptance: user can move active run to background and still reopen current run panel.
   - Acceptance: background completion toast opens final summary when clicked.
   - Acceptance: summary shows per-category status plus scrollable failed-item list with identifiers and reason messages.
