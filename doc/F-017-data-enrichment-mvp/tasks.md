@@ -30,7 +30,7 @@
   - Acceptance: startup config selects one active provider via `ENRICHMENT_PROVIDER`.
   - Acceptance: unsupported/missing provider config yields controlled initialization error state.
 
-- [ ] 4. Implement Yahoo adapter (trial path)
+- [x] 4. Implement Yahoo adapter (trial path)
   - Acceptance: Yahoo adapter implements contract methods used by MVP flow.
   - Acceptance: adapter error mapping preserves provider-specific reason text with light cleanup.
   - Acceptance: adapter has no API key requirement in MVP path.
