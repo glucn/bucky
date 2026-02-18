@@ -27,7 +27,7 @@
 - [ ] F-014 liability-unified-model (liability accounts without specialized UX)
 - [ ] F-015 security-gate (app lock + database encryption with hybrid key mgmt)
 - [ ] F-016 investment-allocation-ux (asset-class pie with combined view)
-- [ ] F-017 data-enrichment-mvp (on-demand metadata fetch + caching)
+- [/] F-017 data-enrichment-mvp (on-demand metadata fetch + caching)
 - [ ] F-018 placeholder-reporting ("Unassigned" included in reports)
 
 ## Roadmap
