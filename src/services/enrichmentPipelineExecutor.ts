@@ -1,5 +1,6 @@
 import type { EnrichmentRunScope } from "./enrichmentRunCoordinator";
 import type { EnrichmentProviderAdapter } from "./enrichmentProviderRegistry";
+import { withTransientRetry } from "./enrichmentRetry";
 
 type SecurityRange = {
   ticker: string;
@@ -58,6 +59,13 @@ type PipelineInput = {
   scope: EnrichmentRunScope;
   securities: SecurityRange[];
   fxPairs: FxRange[];
+  cancellation?: {
+    isCanceled: () => boolean;
+  };
+  retryOptions?: {
+    maxRetries: number;
+    initialDelayMs: number;
+  };
 };
 
 const toReason = (error: unknown): string => {
@@ -74,6 +82,13 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
     reason: string;
   }> = [];
 
+  const retryOptions = input.retryOptions || {
+    maxRetries: 2,
+    initialDelayMs: 200,
+  };
+
+  const shouldCancel = () => Boolean(input.cancellation?.isCanceled());
+
   if (input.scope.securityMetadata) {
     let processed = 0;
     const total = input.securities.length;
@@ -83,11 +98,23 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
     });
 
     for (const security of input.securities) {
+      if (shouldCancel()) {
+        input.coordinator.finishRun(input.runId, "canceled");
+        return {
+          status: "canceled" as const,
+          failedItems,
+        };
+      }
+
       try {
-        const metadata = await input.provider.fetchSecurityMetadata({
-          symbol: security.ticker,
-          market: security.market,
-        });
+        const metadata = await withTransientRetry(
+          () =>
+            input.provider.fetchSecurityMetadata({
+              symbol: security.ticker,
+              market: security.market,
+            }),
+          retryOptions
+        );
         if (metadata) {
           await input.repository.upsertSecurityMetadataFillMissing({
             ticker: security.ticker,
@@ -124,13 +151,25 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
     });
 
     for (const security of input.securities) {
+      if (shouldCancel()) {
+        input.coordinator.finishRun(input.runId, "canceled");
+        return {
+          status: "canceled" as const,
+          failedItems,
+        };
+      }
+
       try {
-        const points = await input.provider.fetchSecurityDailyPrices({
-          symbol: security.ticker,
-          market: security.market,
-          startDate: security.startDate,
-          endDate: security.endDate,
-        });
+        const points = await withTransientRetry(
+          () =>
+            input.provider.fetchSecurityDailyPrices({
+              symbol: security.ticker,
+              market: security.market,
+              startDate: security.startDate,
+              endDate: security.endDate,
+            }),
+          retryOptions
+        );
         await input.repository.insertMissingSecurityDailyPrices(
           {
             ticker: security.ticker,
@@ -165,13 +204,25 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
     });
 
     for (const pair of input.fxPairs) {
+      if (shouldCancel()) {
+        input.coordinator.finishRun(input.runId, "canceled");
+        return {
+          status: "canceled" as const,
+          failedItems,
+        };
+      }
+
       try {
-        const points = await input.provider.fetchFxDailyRates({
-          sourceCurrency: pair.sourceCurrency,
-          targetCurrency: pair.targetCurrency,
-          startDate: pair.startDate,
-          endDate: pair.endDate,
-        });
+        const points = await withTransientRetry(
+          () =>
+            input.provider.fetchFxDailyRates({
+              sourceCurrency: pair.sourceCurrency,
+              targetCurrency: pair.targetCurrency,
+              startDate: pair.startDate,
+              endDate: pair.endDate,
+            }),
+          retryOptions
+        );
         await input.repository.insertMissingFxDailyRates(
           {
             sourceCurrency: pair.sourceCurrency,

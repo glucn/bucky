@@ -65,7 +65,7 @@
   - Acceptance: default execution is one-by-one item processing.
   - Acceptance: run result supports `Completed`, `Completed with issues`, and `Canceled` with partial persistence.
 
-- [ ] 11. Add retry and cancellation semantics
+- [x] 11. Add retry and cancellation semantics
   - Acceptance: bounded automatic retries apply to transient failures (network/429/5xx).
   - Acceptance: cancel attempts immediate abort; non-abortable in-flight responses are discarded on return.
   - Acceptance: completed successful writes before cancel/failure are retained.

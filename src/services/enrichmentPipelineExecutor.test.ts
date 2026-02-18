@@ -106,4 +106,40 @@ describe("executeEnrichmentPipeline", () => {
       },
     ]);
   });
+
+  it("ends as canceled when cancellation is requested", async () => {
+    const p = provider();
+    p.fetchSecurityMetadata = vi.fn(async () => {
+      throw new Error("Should not be reached");
+    });
+
+    const repo = {
+      upsertSecurityMetadataFillMissing: vi.fn(),
+      insertMissingSecurityDailyPrices: vi.fn(),
+      insertMissingFxDailyRates: vi.fn(),
+    };
+
+    const coordinator = createEnrichmentRunCoordinator();
+    const { run } = coordinator.startOrGetExistingRun({
+      securityMetadata: true,
+      securityPrices: false,
+      fxRates: false,
+    });
+
+    const result = await executeEnrichmentPipeline({
+      runId: run.id,
+      provider: p,
+      repository: repo,
+      coordinator,
+      scope: run.scope,
+      securities: [{ ticker: "AAPL", market: "NASDAQ", startDate: "2024-01-01", endDate: "2024-01-01" }],
+      fxPairs: [],
+      cancellation: {
+        isCanceled: () => true,
+      },
+    });
+
+    expect(result.status).toBe("canceled");
+    expect(p.fetchSecurityMetadata).not.toHaveBeenCalled();
+  });
 });
