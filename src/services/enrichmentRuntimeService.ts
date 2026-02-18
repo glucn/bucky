@@ -1,4 +1,5 @@
 import { createEnrichmentRunCoordinator, type EnrichmentRunScope } from "./enrichmentRunCoordinator";
+import { enrichmentRepository } from "./enrichmentRepository";
 
 const coordinator = createEnrichmentRunCoordinator();
 
@@ -7,9 +8,12 @@ class EnrichmentRuntimeService {
     return coordinator.startOrGetExistingRun(scope);
   }
 
-  getPanelState() {
+  async getPanelState() {
+    const freshness = await enrichmentRepository.getCategoryFreshness();
+
     return {
       activeRun: coordinator.getActiveRun(),
+      freshness,
     };
   }
 

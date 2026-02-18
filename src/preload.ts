@@ -75,6 +75,8 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("send-enrichment-run-to-background", runId),
   getEnrichmentRunSummary: (runId: string) =>
     ipcRenderer.invoke("get-enrichment-run-summary", runId),
+  getEnrichmentConfigState: () =>
+    ipcRenderer.invoke("get-enrichment-config-state"),
 
   // Generic app settings operations
   getAppSetting: (key: string) =>

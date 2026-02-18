@@ -10,6 +10,7 @@ const {
   getRunSummary,
   getAppSetting,
   setAppSetting,
+  getBaseCurrency,
 } = vi.hoisted(() => ({
   removeHandler: vi.fn(),
   handle: vi.fn(),
@@ -20,6 +21,7 @@ const {
   getRunSummary: vi.fn(),
   getAppSetting: vi.fn(),
   setAppSetting: vi.fn(),
+  getBaseCurrency: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -43,6 +45,7 @@ vi.mock("../services/appSettingsService", () => ({
   appSettingsService: {
     getAppSetting,
     setAppSetting,
+    getBaseCurrency,
   },
 }));
 
@@ -54,13 +57,21 @@ describe("setupEnrichmentIpcHandlers", () => {
   });
 
   it("registers enrichment and app-setting handlers", async () => {
-    getPanelState.mockReturnValue({ activeRun: null });
+    getPanelState.mockResolvedValue({
+      activeRun: null,
+      freshness: {
+        metadata: null,
+        prices: null,
+        fx: null,
+      },
+    });
     startRun.mockReturnValue({ createdNewRun: true, run: { id: "run-1" } });
     cancelRun.mockReturnValue({ success: true });
     sendToBackground.mockReturnValue({ success: true });
     getRunSummary.mockReturnValue({ id: "run-1", status: "running" });
     getAppSetting.mockResolvedValue("CAD");
     setAppSetting.mockResolvedValue(undefined);
+    getBaseCurrency.mockResolvedValue("CAD");
 
     setupEnrichmentIpcHandlers();
 
@@ -79,6 +90,9 @@ describe("setupEnrichmentIpcHandlers", () => {
     const getSummaryHandler = handle.mock.calls.find(
       ([channel]) => channel === "get-enrichment-run-summary"
     )?.[1];
+    const getConfigStateHandler = handle.mock.calls.find(
+      ([channel]) => channel === "get-enrichment-config-state"
+    )?.[1];
     const getSettingHandler = handle.mock.calls.find(
       ([channel]) => channel === "get-app-setting"
     )?.[1];
@@ -86,7 +100,14 @@ describe("setupEnrichmentIpcHandlers", () => {
       ([channel]) => channel === "set-app-setting"
     )?.[1];
 
-    expect(await getPanelStateHandler({})).toEqual({ activeRun: null });
+    expect(await getPanelStateHandler({})).toEqual({
+      activeRun: null,
+      freshness: {
+        metadata: null,
+        prices: null,
+        fx: null,
+      },
+    });
     expect(await startRunHandler({}, { securityMetadata: true, securityPrices: false, fxRates: false })).toEqual({
       createdNewRun: true,
       run: { id: "run-1" },
@@ -94,6 +115,10 @@ describe("setupEnrichmentIpcHandlers", () => {
     expect(await cancelRunHandler({}, "run-1")).toEqual({ success: true });
     expect(await toBackgroundHandler({}, "run-1")).toEqual({ success: true });
     expect(await getSummaryHandler({}, "run-1")).toEqual({ id: "run-1", status: "running" });
+    expect(await getConfigStateHandler({})).toEqual({
+      providerConfigured: false,
+      baseCurrencyConfigured: true,
+    });
     expect(await getSettingHandler({}, "baseCurrency")).toBe("CAD");
     expect(await setSettingHandler({}, { key: "baseCurrency", value: "CAD" })).toEqual({ success: true });
 

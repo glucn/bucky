@@ -115,13 +115,24 @@ interface IElectronAPI {
   deleteAutoCategorizationRule(ruleId: string): Promise<{ success: boolean }>;
 
   // Data enrichment operations
-  getEnrichmentPanelState(): Promise<{ activeRun: EnrichmentRunSummary | null }>;
+  getEnrichmentPanelState(): Promise<{
+    activeRun: EnrichmentRunSummary | null;
+    freshness: {
+      metadata: string | null;
+      prices: string | null;
+      fx: string | null;
+    };
+  }>;
   startEnrichmentRun(
     scope: EnrichmentRunScope
   ): Promise<{ createdNewRun: boolean; run: EnrichmentRunSummary }>;
   cancelEnrichmentRun(runId: string): Promise<{ success: boolean }>;
   sendEnrichmentRunToBackground(runId: string): Promise<{ success: boolean }>;
   getEnrichmentRunSummary(runId: string): Promise<EnrichmentRunSummary | null>;
+  getEnrichmentConfigState(): Promise<{
+    providerConfigured: boolean;
+    baseCurrencyConfigured: boolean;
+  }>;
 
   // Generic app settings operations
   getAppSetting(key: string): Promise<unknown | null>;

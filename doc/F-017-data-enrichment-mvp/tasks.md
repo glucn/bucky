@@ -75,7 +75,7 @@
   - Acceptance: renderer can read/write `baseCurrency` through app settings API.
   - Acceptance: IPC error behavior matches existing app conventions.
 
-- [ ] 13. Build global refresh action and enrichment panel UI
+- [x] 13. Build global refresh action and enrichment panel UI
   - Acceptance: nav/header includes global refresh entry point.
   - Acceptance: panel supports ad hoc category scope checkboxes (all selected by default).
   - Acceptance: panel shows freshness text for all categories, including deselected ones.

@@ -2,21 +2,55 @@ import { ipcMain } from "electron";
 import { appSettingsService } from "../services/appSettingsService";
 import { enrichmentRuntimeService } from "../services/enrichmentRuntimeService";
 
+const serializeRun = (run: any) => {
+  if (!run) {
+    return null;
+  }
+
+  return {
+    ...run,
+    startedAt: run.startedAt instanceof Date ? run.startedAt.toISOString() : run.startedAt,
+    endedAt: run.endedAt instanceof Date ? run.endedAt.toISOString() : run.endedAt,
+  };
+};
+
 export const setupEnrichmentIpcHandlers = () => {
   ipcMain.removeHandler("get-enrichment-panel-state");
   ipcMain.removeHandler("start-enrichment-run");
   ipcMain.removeHandler("cancel-enrichment-run");
   ipcMain.removeHandler("send-enrichment-run-to-background");
   ipcMain.removeHandler("get-enrichment-run-summary");
+  ipcMain.removeHandler("get-enrichment-config-state");
   ipcMain.removeHandler("get-app-setting");
   ipcMain.removeHandler("set-app-setting");
 
   ipcMain.handle("get-enrichment-panel-state", async () => {
-    return enrichmentRuntimeService.getPanelState();
+    const panelState = await enrichmentRuntimeService.getPanelState();
+    return {
+      activeRun: serializeRun(panelState.activeRun),
+      freshness: {
+        metadata:
+          panelState.freshness.metadata instanceof Date
+            ? panelState.freshness.metadata.toISOString()
+            : null,
+        prices:
+          panelState.freshness.prices instanceof Date
+            ? panelState.freshness.prices.toISOString()
+            : null,
+        fx:
+          panelState.freshness.fx instanceof Date
+            ? panelState.freshness.fx.toISOString()
+            : null,
+      },
+    };
   });
 
   ipcMain.handle("start-enrichment-run", async (_, scope) => {
-    return enrichmentRuntimeService.startRun(scope);
+    const result = enrichmentRuntimeService.startRun(scope);
+    return {
+      ...result,
+      run: serializeRun(result.run),
+    };
   });
 
   ipcMain.handle("cancel-enrichment-run", async (_, runId: string) => {
@@ -28,7 +62,20 @@ export const setupEnrichmentIpcHandlers = () => {
   });
 
   ipcMain.handle("get-enrichment-run-summary", async (_, runId: string) => {
-    return enrichmentRuntimeService.getRunSummary(runId);
+    return serializeRun(enrichmentRuntimeService.getRunSummary(runId));
+  });
+
+  ipcMain.handle("get-enrichment-config-state", async () => {
+    const provider = process.env.ENRICHMENT_PROVIDER;
+    const providerConfigured =
+      provider === "yahoo" ||
+      (provider === "twelvedata" && Boolean(process.env.TWELVEDATA_API_KEY));
+    const baseCurrency = await appSettingsService.getBaseCurrency();
+
+    return {
+      providerConfigured,
+      baseCurrencyConfigured: Boolean(baseCurrency),
+    };
   });
 
   ipcMain.handle("get-app-setting", async (_, key: string) => {

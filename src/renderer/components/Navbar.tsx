@@ -1,7 +1,10 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { EnrichmentPanel } from "./EnrichmentPanel";
 
 const Navbar: React.FC = () => {
+  const [isEnrichmentPanelOpen, setIsEnrichmentPanelOpen] = React.useState(false);
+
   // Only show the reset button in development mode
   const isDev = process.env.NODE_ENV === "development";
 
@@ -61,8 +64,15 @@ const Navbar: React.FC = () => {
               </Link>
             </div>
           </div>
-          {isDev && (
-            <div className="flex items-center">
+          <div className="flex items-center">
+              <button
+                onClick={() => setIsEnrichmentPanelOpen(true)}
+                className="ml-4 rounded bg-primary-600 px-3 py-1 text-white transition hover:bg-primary-700"
+                data-testid="open-enrichment-panel"
+              >
+                Refresh Data
+              </button>
+            {isDev && (
               <button
                 onClick={handleResetAllData}
                 className="ml-4 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition"
@@ -70,10 +80,14 @@ const Navbar: React.FC = () => {
               >
                 Reset All Data
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
+      <EnrichmentPanel
+        isOpen={isEnrichmentPanelOpen}
+        onClose={() => setIsEnrichmentPanelOpen(false)}
+      />
     </nav>
   );
 };
