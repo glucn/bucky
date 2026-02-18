@@ -35,7 +35,7 @@
   - Acceptance: adapter error mapping preserves provider-specific reason text with light cleanup.
   - Acceptance: adapter has no API key requirement in MVP path.
 
-- [ ] 5. Implement Twelve Data adapter (stable path)
+- [x] 5. Implement Twelve Data adapter (stable path)
   - Acceptance: Twelve Data adapter implements same contract for metadata, daily prices, daily FX, and ticker search.
   - Acceptance: missing `TWELVEDATA_API_KEY` fails gracefully when provider is `twelvedata`.
   - Acceptance: adapter tests cover common success/failure payload mapping.
