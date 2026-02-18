@@ -98,10 +98,18 @@ describe("InvestmentService - Price History Management", () => {
       expect(price).toBeNull();
     });
 
-    it("should return null for wrong date", async () => {
+    it("should use last available prior daily value when exact date is missing", async () => {
       await investmentService.recordMarketPrice("MSFT", 100, "2024-01-15");
 
       const price = await investmentService.getMarketPrice("MSFT", "2024-01-16");
+
+      expect(price).toBe(100);
+    });
+
+    it("should return null when no prior value exists", async () => {
+      await investmentService.recordMarketPrice("MSFT", 100, "2024-01-15");
+
+      const price = await investmentService.getMarketPrice("MSFT", "2024-01-14");
 
       expect(price).toBeNull();
     });

@@ -187,3 +187,51 @@ model SecurityPriceHistory {
   @@unique([tickerSymbol, date])
   @@index([tickerSymbol, date])
 }
+
+model AppSetting {
+  key       String   @id
+  jsonValue String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SecurityMetadata {
+  id            String    @id @default(uuid())
+  ticker        String
+  market        String
+  displayName   String?
+  assetType     String?
+  quoteCurrency String?
+  lastFetchedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([ticker, market])
+  @@index([ticker, market])
+}
+
+model SecurityDailyPrice {
+  id         String   @id @default(uuid())
+  ticker     String
+  market     String
+  marketDate String
+  close      Float
+  fetchedAt  DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@unique([ticker, market, marketDate])
+  @@index([ticker, market, marketDate])
+}
+
+model FxDailyRate {
+  id             String   @id @default(uuid())
+  sourceCurrency String
+  targetCurrency String
+  marketDate     String
+  rate           Float
+  fetchedAt      DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@unique([sourceCurrency, targetCurrency, marketDate])
+  @@index([sourceCurrency, targetCurrency, marketDate])
+}

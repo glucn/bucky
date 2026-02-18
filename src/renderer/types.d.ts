@@ -47,6 +47,34 @@ type AutoCategorizationRuleUpdateInput = {
   targetCategoryAccountId: string;
 };
 
+type EnrichmentRunScope = {
+  securityMetadata: boolean;
+  securityPrices: boolean;
+  fxRates: boolean;
+};
+
+type EnrichmentRunCategoryProgress = {
+  total: number;
+  processed: number;
+};
+
+type EnrichmentRunSummary = {
+  id: string;
+  status: "running" | "completed" | "completed_with_issues" | "canceled";
+  startedAt: string;
+  endedAt: string | null;
+  categoryProgress: {
+    securityMetadata: EnrichmentRunCategoryProgress;
+    securityPrices: EnrichmentRunCategoryProgress;
+    fxRates: EnrichmentRunCategoryProgress;
+  };
+  failedItems: Array<{
+    category: "securityMetadata" | "securityPrices" | "fxRates";
+    identifier: string;
+    reason: string;
+  }>;
+};
+
 interface IElectronAPI {
   ipcRenderer: {
     invoke(channel: string, ...args: any[]): Promise<any>;
@@ -85,6 +113,31 @@ interface IElectronAPI {
     update: AutoCategorizationRuleUpdateInput
   ): Promise<AutoCategorizationRuleListItem>;
   deleteAutoCategorizationRule(ruleId: string): Promise<{ success: boolean }>;
+
+  // Data enrichment operations
+  getEnrichmentPanelState(): Promise<{
+    activeRun: EnrichmentRunSummary | null;
+    latestSummary: EnrichmentRunSummary | null;
+    freshness: {
+      metadata: string | null;
+      prices: string | null;
+      fx: string | null;
+    };
+  }>;
+  startEnrichmentRun(
+    scope: EnrichmentRunScope
+  ): Promise<{ createdNewRun: boolean; run: EnrichmentRunSummary }>;
+  cancelEnrichmentRun(runId: string): Promise<{ success: boolean }>;
+  sendEnrichmentRunToBackground(runId: string): Promise<{ success: boolean }>;
+  getEnrichmentRunSummary(runId: string): Promise<EnrichmentRunSummary | null>;
+  getEnrichmentConfigState(): Promise<{
+    providerConfigured: boolean;
+    baseCurrencyConfigured: boolean;
+  }>;
+
+  // Generic app settings operations
+  getAppSetting(key: string): Promise<unknown | null>;
+  setAppSetting(key: string, value: unknown): Promise<{ success: boolean }>;
 }
 
 declare global {

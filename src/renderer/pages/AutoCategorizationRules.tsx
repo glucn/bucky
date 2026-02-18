@@ -21,6 +21,10 @@ export const AutoCategorizationRules: React.FC = () => {
   const [editError, setEditError] = React.useState<string | null>(null);
   const [activeCategories, setActiveCategories] = React.useState<Array<{ id: string; name: string }>>([]);
   const [pendingDeleteRuleId, setPendingDeleteRuleId] = React.useState<string | null>(null);
+  const [baseCurrency, setBaseCurrency] = React.useState("");
+  const [baseCurrencySaveMessage, setBaseCurrencySaveMessage] = React.useState<string | null>(null);
+
+  const allowedBaseCurrencies = ["USD", "CAD", "EUR", "GBP", "JPY", "CNY", "HKD", "AUD"];
 
   React.useEffect(() => {
     const loadRules = async () => {
@@ -28,6 +32,10 @@ export const AutoCategorizationRules: React.FC = () => {
       try {
         const fetched = await window.electron.getAutoCategorizationRules();
         setRules(Array.isArray(fetched) ? fetched : []);
+        const savedBaseCurrency = await window.electron.getAppSetting("baseCurrency");
+        if (typeof savedBaseCurrency === "string") {
+          setBaseCurrency(savedBaseCurrency);
+        }
       } finally {
         setLoading(false);
       }
@@ -108,10 +116,65 @@ export const AutoCategorizationRules: React.FC = () => {
     setPendingDeleteRuleId(null);
   };
 
+  const saveBaseCurrency = async () => {
+    if (!baseCurrency) {
+      return;
+    }
+
+    await window.electron.setAppSetting("baseCurrency", baseCurrency);
+    setBaseCurrencySaveMessage("Base currency saved. Refresh is recommended for updated FX coverage.");
+  };
+
   return (
     <div data-testid="auto-categorization-settings-page">
       <h1 className="text-2xl font-bold text-gray-900">Auto-Categorization</h1>
       <p className="mt-2 text-sm text-gray-600">Manage auto-categorization rules.</p>
+
+      <div className="mt-4 rounded-md border border-gray-200 bg-white p-4" data-testid="base-currency-settings">
+        <h2 className="text-base font-semibold text-gray-900">Data Enrichment Settings</h2>
+        <p className="mt-1 text-sm text-gray-600">Select the app base currency.</p>
+        <div className="mt-3 flex items-center gap-2">
+          <select
+            value={baseCurrency}
+            onChange={(event) => setBaseCurrency(event.target.value)}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            data-testid="base-currency-select"
+          >
+            <option value="">Select base currency</option>
+            {allowedBaseCurrencies.map((currency) => (
+              <option key={currency} value={currency}>
+                {currency}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="rounded-md bg-primary-600 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:bg-gray-400"
+            onClick={() => {
+              void saveBaseCurrency();
+            }}
+            disabled={!baseCurrency}
+            data-testid="base-currency-save"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            onClick={() => {
+              window.dispatchEvent(new Event("open-enrichment-panel"));
+            }}
+            data-testid="base-currency-open-refresh"
+          >
+            Refresh now
+          </button>
+        </div>
+        {baseCurrencySaveMessage ? (
+          <div className="mt-2 text-sm text-gray-600" data-testid="base-currency-save-message">
+            {baseCurrencySaveMessage}
+          </div>
+        ) : null}
+      </div>
 
       <div className="mt-4">
         <input

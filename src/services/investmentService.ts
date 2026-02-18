@@ -1655,13 +1655,16 @@ class InvestmentService {
       throw new Error("Date is required");
     }
 
-    // Query SecurityPriceHistory by ticker and date
-    const priceHistory = await databaseService.prismaClient.securityPriceHistory.findUnique({
+    // Use exact date when available, otherwise carry forward the latest prior daily value.
+    const priceHistory = await databaseService.prismaClient.securityPriceHistory.findFirst({
       where: {
-        tickerSymbol_date: {
-          tickerSymbol: tickerSymbol,
-          date: date,
+        tickerSymbol: tickerSymbol,
+        date: {
+          lte: date,
         },
+      },
+      orderBy: {
+        date: "desc",
       },
     });
 

@@ -1,7 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { EnrichmentPanel } from "./EnrichmentPanel";
 
 const Navbar: React.FC = () => {
+  const [isEnrichmentPanelOpen, setIsEnrichmentPanelOpen] = React.useState(false);
+  const [backgroundRunId, setBackgroundRunId] = React.useState<string | null>(null);
+  const [completedBackgroundSummary, setCompletedBackgroundSummary] = React.useState<any | null>(null);
+
   // Only show the reset button in development mode
   const isDev = process.env.NODE_ENV === "development";
 
@@ -19,6 +24,28 @@ const Navbar: React.FC = () => {
       alert("Error resetting data: " + (err instanceof Error ? err.message : String(err)));
     }
   };
+
+  React.useEffect(() => {
+    const handleOpenPanel = () => setIsEnrichmentPanelOpen(true);
+    window.addEventListener("open-enrichment-panel", handleOpenPanel);
+    return () => window.removeEventListener("open-enrichment-panel", handleOpenPanel);
+  }, []);
+
+  React.useEffect(() => {
+    if (!backgroundRunId) {
+      return;
+    }
+
+    const interval = window.setInterval(async () => {
+      const summary = await window.electron.getEnrichmentRunSummary(backgroundRunId);
+      if (summary && summary.status !== "running") {
+        setCompletedBackgroundSummary(summary);
+        setBackgroundRunId(null);
+      }
+    }, 1500);
+
+    return () => window.clearInterval(interval);
+  }, [backgroundRunId]);
 
   return (
     <nav className="bg-white shadow-lg">
@@ -61,8 +88,15 @@ const Navbar: React.FC = () => {
               </Link>
             </div>
           </div>
-          {isDev && (
-            <div className="flex items-center">
+          <div className="flex items-center">
+              <button
+                onClick={() => setIsEnrichmentPanelOpen(true)}
+                className="ml-4 rounded bg-primary-600 px-3 py-1 text-white transition hover:bg-primary-700"
+                data-testid="open-enrichment-panel"
+              >
+                Refresh Data
+              </button>
+            {isDev && (
               <button
                 onClick={handleResetAllData}
                 className="ml-4 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition"
@@ -70,10 +104,41 @@ const Navbar: React.FC = () => {
               >
                 Reset All Data
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
+      <EnrichmentPanel
+        isOpen={isEnrichmentPanelOpen}
+        onClose={() => setIsEnrichmentPanelOpen(false)}
+        onContinueInBackground={(runId) => {
+          setBackgroundRunId(runId);
+          setIsEnrichmentPanelOpen(false);
+          void window.electron.sendEnrichmentRunToBackground(runId);
+        }}
+        externalSummary={completedBackgroundSummary}
+      />
+      {completedBackgroundSummary ? (
+        <div
+          className="fixed bottom-4 right-4 z-50 rounded-md border border-gray-200 bg-white px-4 py-3 text-sm shadow"
+          data-testid="enrichment-background-toast"
+        >
+          <div className="font-medium">Refresh completed: {completedBackgroundSummary.status}</div>
+          <button
+            className="mt-2 text-primary-600 hover:text-primary-700"
+            onClick={() => setIsEnrichmentPanelOpen(true)}
+            data-testid="enrichment-toast-open-summary"
+          >
+            View summary
+          </button>
+          <button
+            className="ml-3 text-gray-600 hover:text-gray-800"
+            onClick={() => setCompletedBackgroundSummary(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
     </nav>
   );
 };

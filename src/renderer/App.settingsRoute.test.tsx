@@ -51,6 +51,8 @@ describe("App settings route", () => {
       writable: true,
       value: {
         getAutoCategorizationRules: vi.fn().mockResolvedValue([]),
+        getAppSetting: vi.fn().mockResolvedValue(null),
+        setAppSetting: vi.fn().mockResolvedValue(null),
         ipcRenderer: {
           invoke: vi.fn(),
           on: vi.fn(),

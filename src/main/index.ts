@@ -14,6 +14,7 @@ import {
   resolveImportAutoCategorization,
 } from "../services/autoCategorizationService";
 import { setupAutoCategorizationIpcHandlers } from "./ipcHandlers.autoCategorization";
+import { setupEnrichmentIpcHandlers } from "./ipcHandlers.enrichment";
 import { setupInvestmentIpcHandlers } from "./ipcHandlers.investments";
 import { setupOverviewIpcHandlers } from "./ipcHandlers.overview";
 
@@ -1008,6 +1009,7 @@ function setupIpcHandlers() {
   setupInvestmentIpcHandlers();
   setupOverviewIpcHandlers();
   setupAutoCategorizationIpcHandlers();
+  setupEnrichmentIpcHandlers();
 
   console.log("All IPC handlers registered");
   // DEV ONLY: Reset all data to initial state

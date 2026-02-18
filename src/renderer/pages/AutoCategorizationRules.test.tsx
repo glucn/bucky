@@ -7,6 +7,8 @@ import { AutoCategorizationRules } from "./AutoCategorizationRules";
 const mockGetAutoCategorizationRules = vi.fn();
 const mockUpdateAutoCategorizationRule = vi.fn();
 const mockDeleteAutoCategorizationRule = vi.fn();
+const mockGetAppSetting = vi.fn();
+const mockSetAppSetting = vi.fn();
 const mockInvoke = vi.fn();
 
 describe("AutoCategorizationRules", () => {
@@ -14,7 +16,11 @@ describe("AutoCategorizationRules", () => {
     mockGetAutoCategorizationRules.mockReset();
     mockUpdateAutoCategorizationRule.mockReset();
     mockDeleteAutoCategorizationRule.mockReset();
+    mockGetAppSetting.mockReset();
+    mockSetAppSetting.mockReset();
     mockInvoke.mockReset();
+    mockGetAppSetting.mockResolvedValue(null);
+    mockSetAppSetting.mockResolvedValue({ success: true });
 
     Object.defineProperty(window, "electron", {
       writable: true,
@@ -22,6 +28,8 @@ describe("AutoCategorizationRules", () => {
         getAutoCategorizationRules: mockGetAutoCategorizationRules,
         updateAutoCategorizationRule: mockUpdateAutoCategorizationRule,
         deleteAutoCategorizationRule: mockDeleteAutoCategorizationRule,
+        getAppSetting: mockGetAppSetting,
+        setAppSetting: mockSetAppSetting,
         ipcRenderer: {
           invoke: mockInvoke,
           on: vi.fn(),
@@ -212,6 +220,26 @@ describe("AutoCategorizationRules", () => {
 
     await waitFor(() => {
       expect(mockDeleteAutoCategorizationRule).toHaveBeenCalledWith("rule-1");
+    });
+  });
+
+  it("saves base currency from settings section", async () => {
+    mockGetAutoCategorizationRules.mockResolvedValue([]);
+
+    render(<AutoCategorizationRules />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("base-currency-select")).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByTestId("base-currency-select"), {
+      target: { value: "CAD" },
+    });
+    fireEvent.click(screen.getByTestId("base-currency-save"));
+
+    await waitFor(() => {
+      expect(mockSetAppSetting).toHaveBeenCalledWith("baseCurrency", "CAD");
+      expect(screen.getByTestId("base-currency-save-message")).toBeTruthy();
     });
   });
 });

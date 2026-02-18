@@ -82,6 +82,11 @@ class DatabaseService {
       await tx.creditCardProperties.deleteMany({});
       // Delete all security price history
       await tx.securityPriceHistory.deleteMany({});
+      // Delete F-017 enrichment tables
+      await tx.securityDailyPrice.deleteMany({});
+      await tx.securityMetadata.deleteMany({});
+      await tx.fxDailyRate.deleteMany({});
+      await tx.appSetting.deleteMany({});
       // Delete all accounts
       await tx.account.deleteMany({});
       // Delete all account groups

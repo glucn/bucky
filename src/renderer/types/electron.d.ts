@@ -17,6 +17,29 @@ interface AutoCategorizationRuleUpdateInput {
   targetCategoryAccountId: string;
 }
 
+interface EnrichmentRunScope {
+  securityMetadata: boolean;
+  securityPrices: boolean;
+  fxRates: boolean;
+}
+
+interface EnrichmentRunSummary {
+  id: string;
+  status: "running" | "completed" | "completed_with_issues" | "canceled";
+  startedAt: Date;
+  endedAt: Date | null;
+  categoryProgress: {
+    securityMetadata: { total: number; processed: number };
+    securityPrices: { total: number; processed: number };
+    fxRates: { total: number; processed: number };
+  };
+  failedItems: Array<{
+    category: "securityMetadata" | "securityPrices" | "fxRates";
+    identifier: string;
+    reason: string;
+  }>;
+}
+
 export interface IElectronAPI {
   ipcRenderer: {
     invoke(channel: string, ...args: any[]): Promise<any>;
@@ -55,6 +78,31 @@ export interface IElectronAPI {
     update: AutoCategorizationRuleUpdateInput
   ): Promise<AutoCategorizationRuleListItem>;
   deleteAutoCategorizationRule(ruleId: string): Promise<{ success: boolean }>;
+
+  // Data enrichment operations
+  getEnrichmentPanelState(): Promise<{
+    activeRun: EnrichmentRunSummary | null;
+    latestSummary: EnrichmentRunSummary | null;
+    freshness: {
+      metadata: string | null;
+      prices: string | null;
+      fx: string | null;
+    };
+  }>;
+  startEnrichmentRun(
+    scope: EnrichmentRunScope
+  ): Promise<{ createdNewRun: boolean; run: EnrichmentRunSummary }>;
+  cancelEnrichmentRun(runId: string): Promise<{ success: boolean }>;
+  sendEnrichmentRunToBackground(runId: string): Promise<{ success: boolean }>;
+  getEnrichmentRunSummary(runId: string): Promise<EnrichmentRunSummary | null>;
+  getEnrichmentConfigState(): Promise<{
+    providerConfigured: boolean;
+    baseCurrencyConfigured: boolean;
+  }>;
+
+  // Generic app settings operations
+  getAppSetting(key: string): Promise<unknown | null>;
+  setAppSetting(key: string, value: unknown): Promise<{ success: boolean }>;
 }
 
 declare global {
