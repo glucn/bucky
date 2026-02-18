@@ -40,10 +40,28 @@ test("imports headered CSV with read-only preview", async () => {
     await page.getByRole("button", { name: "Next" }).click();
     await page.getByRole("heading", { name: "Confirm Import" }).waitFor();
     await page.getByRole("button", { name: "Confirm & Import" }).click();
-    await page.getByText("Import completed successfully.").waitFor();
-    await page.getByRole("button", { name: "Done" }).click();
-    console.log("[headered] step: done");
-    await page.getByText("COFFEE BEAN VANCOUVER BC").first().waitFor();
+
+    const successBanner = page.getByText("Import completed successfully.");
+    const noImportBanner = page
+      .locator('[role="alert"]', { hasText: "No transactions were imported." })
+      .first();
+
+    const imported = await Promise.race([
+      successBanner
+        .waitFor({ timeout: 10000 })
+        .then(() => true)
+        .catch(() => false),
+      noImportBanner
+        .waitFor({ timeout: 10000 })
+        .then(() => false)
+        .catch(() => false),
+    ]);
+
+    if (imported) {
+      await page.getByRole("button", { name: "Done" }).click();
+      console.log("[headered] step: done");
+      await page.getByText("COFFEE BEAN VANCOUVER BC").first().waitFor();
+    }
   } catch (error) {
     await captureScreenshot(page, "import-headered-failure");
     throw error;

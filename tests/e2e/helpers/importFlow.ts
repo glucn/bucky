@@ -9,6 +9,17 @@ const appEntry = path.join(__dirname, "..", "..", "..", ".webpack", "main", "ind
 const testDbPath = path.join(__dirname, "..", "..", "..", "test.db");
 const artifactsDir = path.join(__dirname, "..", "artifacts");
 
+const closeDatabase = (db: sqlite3.Database) =>
+  new Promise<void>((resolve, reject) => {
+    db.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+
 export const launchApp = async (): Promise<ElectronApplication> => {
   return electron.launch({
     args: [appEntry],
@@ -131,23 +142,24 @@ const ensureSeedAccounts = async (): Promise<string> => {
     });
 
   try {
-    await fetchId("Uncategorized Income");
-  } catch {
-    await insertAccount("Uncategorized Income", "category", "asset");
+    try {
+      await fetchId("Uncategorized Income");
+    } catch {
+      await insertAccount("Uncategorized Income", "category", "asset");
+    }
+
+    try {
+      await fetchId("Uncategorized Expense");
+    } catch {
+      await insertAccount("Uncategorized Expense", "category", "liability");
+    }
+
+    const seedName = `E2E Seed Account ${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    await insertAccount(seedName, "user", "asset");
+    return await fetchId(seedName);
+  } finally {
+    await closeDatabase(db);
   }
-
-  try {
-    await fetchId("Uncategorized Expense");
-  } catch {
-    await insertAccount("Uncategorized Expense", "category", "liability");
-  }
-
-  const seedName = `E2E Seed Account ${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-  await insertAccount(seedName, "user", "asset");
-  const accountId = await fetchId(seedName);
-
-  db.close();
-  return accountId;
 };
 
 export const openTransactionsPage = async (page: Page) => {

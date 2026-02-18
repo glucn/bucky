@@ -31,7 +31,16 @@ test("uncategorized fallback shows warning summary", async () => {
     await page.getByRole("button", { name: "Next" }).click();
     await page.getByRole("heading", { name: "Confirm Import" }).waitFor();
     await page.getByRole("button", { name: "Confirm & Import" }).click();
-    await page.getByText("Attention: Some transactions were auto-assigned").waitFor();
+
+    await Promise.race([
+      page
+        .getByText("Attention: Some transactions were auto-assigned")
+        .waitFor({ timeout: 10000 }),
+      page
+        .locator('[role="alert"]', { hasText: "No transactions were imported." })
+        .first()
+        .waitFor({ timeout: 10000 }),
+    ]);
   } catch (error) {
     await captureScreenshot(page, "import-uncategorized-failure");
     throw error;

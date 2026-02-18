@@ -23,7 +23,15 @@ const runSql = async (sql: string, params: unknown[] = []) => {
       resolve();
     });
   });
-  db.close();
+  await new Promise<void>((resolve, reject) => {
+    db.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
 };
 
 const seedPortfolioSecurityWithoutPrice = async () => {
