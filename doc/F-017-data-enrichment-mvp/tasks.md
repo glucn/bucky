@@ -60,7 +60,7 @@
   - Acceptance: concurrent start attempts return existing run context.
   - Acceptance: run progress/state remains in memory only and includes per-category processed/total counters.
 
-- [ ] 10. Implement pipeline executor (metadata -> prices -> FX)
+- [x] 10. Implement pipeline executor (metadata -> prices -> FX)
   - Acceptance: selected categories run in fixed order with unselected categories skipped.
   - Acceptance: default execution is one-by-one item processing.
   - Acceptance: run result supports `Completed`, `Completed with issues`, and `Canceled` with partial persistence.
