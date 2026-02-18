@@ -55,7 +55,7 @@
   - Acceptance: incremental fetch starts from last successful refresh point when history exists.
   - Acceptance: gap detection identifies missing historical windows and returns backfill plan metadata.
 
-- [ ] 9. Implement single-run enrichment coordinator and in-memory run state
+- [x] 9. Implement single-run enrichment coordinator and in-memory run state
   - Acceptance: only one run can be active globally.
   - Acceptance: concurrent start attempts return existing run context.
   - Acceptance: run progress/state remains in memory only and includes per-category processed/total counters.
