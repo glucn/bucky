@@ -20,7 +20,7 @@
   - Acceptance: uniqueness/indexes exist for `(ticker, market)`, `(ticker, market, marketDate)`, and `(sourceCurrency, targetCurrency, marketDate)`.
   - Acceptance: migration applies cleanly to test/dev databases.
 
-- [ ] 2. Add app settings service for extensible JSON key-value storage
+- [x] 2. Add app settings service for extensible JSON key-value storage
   - Acceptance: app setting read/write supports generic keys with JSON values.
   - Acceptance: `baseCurrency` can be persisted/retrieved via service layer.
   - Acceptance: validation is enforced at consumption points, not generic storage write.
