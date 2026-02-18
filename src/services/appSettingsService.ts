@@ -10,6 +10,19 @@ type JsonValue =
 
 const BASE_CURRENCY_PATTERN = /^[A-Z]{3}$/;
 
+export const ALLOWED_BASE_CURRENCIES = [
+  "USD",
+  "CAD",
+  "EUR",
+  "GBP",
+  "JPY",
+  "CNY",
+  "HKD",
+  "AUD",
+] as const;
+
+const ALLOWED_BASE_CURRENCY_SET = new Set<string>(ALLOWED_BASE_CURRENCIES);
+
 class AppSettingsService {
   async getAppSetting(key: string): Promise<JsonValue | null> {
     const row = await databaseService.prismaClient.appSetting.findUnique({
@@ -51,7 +64,15 @@ class AppSettingsService {
       return null;
     }
 
+    if (!ALLOWED_BASE_CURRENCY_SET.has(value)) {
+      return null;
+    }
+
     return value;
+  }
+
+  getAllowedBaseCurrencies(): readonly string[] {
+    return ALLOWED_BASE_CURRENCIES;
   }
 }
 

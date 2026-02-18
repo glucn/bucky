@@ -87,7 +87,7 @@
   - Acceptance: summary shows per-category status plus scrollable failed-item list with identifiers and reason messages.
   - Acceptance: summary includes `Copy failure details` action.
 
-- [ ] 15. Add base currency settings integration and FX derivation hooks
+- [x] 15. Add base currency settings integration and FX derivation hooks
   - Acceptance: base currency is set from Settings only and limited to curated list (`USD`, `CAD`, `EUR`, `GBP`, `JPY`, `CNY`, `HKD`, `AUD`).
   - Acceptance: no implicit default base currency; enrichment is blocked until set.
   - Acceptance: changing base currency prompts refresh and opens panel with default full scope.

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { appSettingsService } from "./appSettingsService";
+import { ALLOWED_BASE_CURRENCIES, appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 
 describe("AppSettingsService", () => {
@@ -40,5 +40,14 @@ describe("AppSettingsService", () => {
     await appSettingsService.setAppSetting("baseCurrency", "CAD");
 
     expect(await appSettingsService.getBaseCurrency()).toBe("CAD");
+  });
+
+  it("only accepts curated base currencies", async () => {
+    await appSettingsService.setAppSetting("baseCurrency", "CHF");
+    expect(await appSettingsService.getBaseCurrency()).toBeNull();
+
+    await appSettingsService.setAppSetting("baseCurrency", "USD");
+    expect(await appSettingsService.getBaseCurrency()).toBe("USD");
+    expect(ALLOWED_BASE_CURRENCIES.includes("USD")).toBe(true);
   });
 });
