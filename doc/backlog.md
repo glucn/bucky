@@ -196,3 +196,157 @@ This file tracks deferred product improvements that are intentionally out of cur
 - **Open Questions**:
   - Should punctuation/diacritics normalization be global defaults or configurable?
   - How should existing stored normalized patterns be backfilled safely?
+
+## BL-009 - Runtime Provider Controls And Fallback
+
+- **ID**: BL-009
+- **Title**: Add runtime provider switching and controlled provider fallback for enrichment
+- **Status**: planned
+- **Priority**: medium
+- **Related Docs**: `doc/F-017-data-enrichment-mvp/requirements.md`, `doc/F-017-data-enrichment-mvp/design.md`
+- **Context (What / Why)**:
+  - F-017 MVP supports provider switching only via startup config and has no automatic fallback.
+  - Operational incidents (provider outage/rate-limit events) currently require restart/config edits.
+  - Runtime controls and explicit fallback rules would improve resilience and reduce user downtime.
+- **Proposed UX / Behavior**:
+  - Add diagnostics view for current provider health/capabilities.
+  - Allow controlled provider switch without app restart.
+  - Support optional fallback policy (primary -> secondary) with clear run-level attribution.
+- **Scope Notes**:
+  - Preserve provider-agnostic contracts and deterministic failure reporting.
+  - Keep provider-specific credentials secure and auditable.
+- **Open Questions**:
+  - Should fallback be category-scoped (metadata/prices/FX) or run-scoped?
+  - How should mixed-provider results be surfaced in summary and audit trails?
+
+## BL-010 - Durable Run History And Resume
+
+- **ID**: BL-010
+- **Title**: Persist enrichment run state/history and support resume after restart
+- **Status**: planned
+- **Priority**: medium
+- **Related Docs**: `doc/F-017-data-enrichment-mvp/requirements.md`, `doc/F-017-data-enrichment-mvp/design.md`
+- **Context (What / Why)**:
+  - F-017 MVP keeps run state in memory and stops background runs on app close/restart.
+  - Users lose progress visibility and must restart long runs manually.
+  - Durable run tracking improves reliability and supportability.
+- **Proposed UX / Behavior**:
+  - Persist run metadata, progress, and outcome summaries.
+  - Show recent run history with filterable statuses.
+  - Offer resume/retry actions when interruption is recoverable.
+- **Scope Notes**:
+  - Keep partial-write integrity guarantees from MVP.
+  - Ensure stale/abandoned runs are safely reconciled on startup.
+- **Open Questions**:
+  - Should resume continue from last successful item checkpoint or by date-range recomputation?
+  - What retention window should apply for run-history records?
+
+## BL-011 - Scheduled Refresh Policies
+
+- **ID**: BL-011
+- **Title**: Add scheduled/automatic enrichment refresh with policy controls
+- **Status**: planned
+- **Priority**: medium
+- **Related Docs**: `doc/F-017-data-enrichment-mvp/requirements.md`, `doc/F-017-data-enrichment-mvp/design.md`
+- **Context (What / Why)**:
+  - F-017 MVP is manual-run only.
+  - Users with frequent portfolio updates benefit from predictable background freshness.
+  - Scheduling reduces repetitive manual effort and stale valuation windows.
+- **Proposed UX / Behavior**:
+  - Add configurable schedules (daily/weekly and optional market-close aligned windows).
+  - Allow per-category schedule scope and pause controls.
+  - Provide notification/reporting for scheduled run outcomes.
+- **Scope Notes**:
+  - Respect single-run guard and app resource constraints.
+  - Must include safe behavior for missed schedules while app is offline.
+- **Open Questions**:
+  - Should scheduling run only when app is open, or via background agent?
+  - How should schedule conflicts with manual runs be resolved?
+
+## BL-012 - Intraday Price And FX Support
+
+- **ID**: BL-012
+- **Title**: Extend enrichment to intraday market data
+- **Status**: planned
+- **Priority**: low
+- **Related Docs**: `doc/F-017-data-enrichment-mvp/requirements.md`, `doc/F-017-data-enrichment-mvp/design.md`
+- **Context (What / Why)**:
+  - F-017 MVP stores daily points only and explicitly excludes intraday support.
+  - Active-trading workflows may need finer-grained valuation and timing analysis.
+  - Intraday support requires explicit model, policy, and UI decisions beyond MVP.
+- **Proposed UX / Behavior**:
+  - Add intraday interval selection for supported providers.
+  - Display valuation timestamps and staleness windows.
+  - Preserve daily mode for users who do not need intraday complexity.
+- **Scope Notes**:
+  - Requires schema/storage expansion and revised refresh/range logic.
+  - Must preserve deterministic accounting views when intraday data is missing.
+- **Open Questions**:
+  - Which intervals are in scope first (e.g., 1m/5m/15m/hourly)?
+  - Should intraday data be retained short-term with rollups to daily?
+
+## BL-013 - Enrichment Data Lifecycle Management
+
+- **ID**: BL-013
+- **Title**: Add retention and pruning controls for enrichment datasets
+- **Status**: planned
+- **Priority**: low
+- **Related Docs**: `doc/F-017-data-enrichment-mvp/requirements.md`, `doc/F-017-data-enrichment-mvp/design.md`
+- **Context (What / Why)**:
+  - F-017 MVP retains enrichment data indefinitely.
+  - Long-running usage can increase local DB size and maintenance cost.
+  - Lifecycle controls improve storage predictability and performance hygiene.
+- **Proposed UX / Behavior**:
+  - Add retention policy options by data domain and age.
+  - Support safe/manual prune actions with impact preview.
+  - Expose last-pruned metadata for transparency.
+- **Scope Notes**:
+  - Must avoid deleting required points for current valuation or audit needs.
+  - Should preserve immutable-point semantics for retained windows.
+- **Open Questions**:
+  - Should retention default differ between price and FX series?
+  - Do we need export/snapshot before destructive prune operations?
+
+## BL-014 - Large-Portfolio Refresh Performance
+
+- **ID**: BL-014
+- **Title**: Add batching/parallelization and adaptive throttling for enrichment runs
+- **Status**: planned
+- **Priority**: medium
+- **Related Docs**: `doc/F-017-data-enrichment-mvp/design.md`, `doc/F-017-data-enrichment-mvp/tasks.md`
+- **Context (What / Why)**:
+  - F-017 MVP intentionally executes one-by-one requests.
+  - Large portfolios may experience long refresh durations and higher timeout/rate-limit exposure.
+  - Controlled concurrency can improve throughput while preserving reliability.
+- **Proposed UX / Behavior**:
+  - Enable provider-aware batching/parallel execution where capabilities allow.
+  - Add adaptive throttling based on recent rate-limit responses.
+  - Surface run-speed diagnostics (items/minute, throttled state) in panel details.
+- **Scope Notes**:
+  - Preserve single-run guard and deterministic summary semantics.
+  - Keep fallback path to sequential mode when provider limits are tight.
+- **Open Questions**:
+  - Should concurrency be auto-tuned or user-configurable?
+  - How should retries interact with parallel queues to avoid retry storms?
+
+## BL-015 - Unresolved Security Diagnostics Beyond Save-Time Warning
+
+- **ID**: BL-015
+- **Title**: Add persistent unresolved-security indicators and remediation flow
+- **Status**: planned
+- **Priority**: medium
+- **Related Docs**: `doc/F-017-data-enrichment-mvp/requirements.md`, `doc/F-017-data-enrichment-mvp/design.md`
+- **Context (What / Why)**:
+  - F-017 MVP warns only at save time when ticker search returns zero candidates.
+  - Users can later forget unresolved identities and only discover issues during refresh summaries.
+  - Persistent diagnostics would improve discoverability and correction speed.
+- **Proposed UX / Behavior**:
+  - Show unresolved badge/status on affected securities and/or portfolio views.
+  - Provide direct remediation action to re-run ticker+market resolution.
+  - Optionally include dedicated summary section for skipped/unresolved items.
+- **Scope Notes**:
+  - Keep warning language user-friendly and avoid provider-specific jargon where possible.
+  - Must not block valid manual-save workflows that intentionally proceed unresolved.
+- **Open Questions**:
+  - Should unresolved state be computed live each run or persisted as explicit status?
+  - Where is the best primary remediation entry point (security detail, holdings table, refresh panel)?
