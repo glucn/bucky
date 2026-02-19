@@ -462,3 +462,27 @@ This file tracks deferred product improvements that are intentionally out of cur
 - **Open Questions**:
   - Should market reference data be static in-app, periodically synced, or hybrid?
   - How should provider-specific exchange aliases be mapped and versioned?
+
+## BL-021 - Unify Valuation Price Storage On SecurityDailyPrice
+
+- **ID**: BL-021
+- **Title**: Migrate valuation paths from `SecurityPriceHistory` to `SecurityDailyPrice`
+- **Status**: planned
+- **Priority**: high
+- **Related Docs**: `doc/F-017-data-enrichment-mvp/design.md`, `prisma/schema.prisma`
+- **Context (What / Why)**:
+  - Current valuation flows still depend on legacy `SecurityPriceHistory` keyed by `tickerSymbol + date`.
+  - F-017 introduced canonical market-data storage in `SecurityDailyPrice` keyed by `ticker + market + marketDate`.
+  - Running both models in parallel increases ambiguity, duplicate logic, and migration risk.
+- **Proposed UX / Behavior**:
+  - Use `SecurityDailyPrice` as the canonical source for position/portfolio valuation reads.
+  - Preserve user-visible valuation behavior during migration (position details, portfolio totals, overview calculations).
+  - Keep manual price correction/import workflows explicit with clear policy for overwrite vs correction mode.
+- **Scope Notes**:
+  - Requires service/IPC contract migration from ticker-only APIs to market-aware identity where needed.
+  - Requires legacy data migration strategy for rows without market identity.
+  - Should use staged rollout (compatibility adapter or dual-read/dual-write) to reduce regression risk.
+- **Open Questions**:
+  - How should ticker-only legacy rows map to market when multiple exchanges are possible?
+  - Should manual edits overwrite canonical daily points or write separate correction records?
+  - What cutover sequence is safest for renderer + IPC + service layers?
