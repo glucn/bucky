@@ -2,6 +2,46 @@
 
 Personal bookkeeping software built with Electron, React, and Prisma.
 
+## Enrichment Provider Configuration (F-017)
+
+Data enrichment uses environment variables to select the active provider at startup.
+
+- `ENRICHMENT_PROVIDER`: required to enable enrichment provider integration
+  - supported values: `yahoo`, `twelvedata`
+- `TWELVEDATA_API_KEY`: required only when `ENRICHMENT_PROVIDER=twelvedata`
+
+Behavior notes:
+
+- `yahoo` path does not require an API key in the current MVP adapter.
+- if provider config is missing/invalid, the refresh action remains visible but is disabled in the UI.
+- provider selection is startup-based in MVP (not user-selectable in app settings).
+
+### Quick examples
+
+Run with Yahoo:
+
+```bash
+ENRICHMENT_PROVIDER=yahoo npm run dev
+```
+
+Run with Twelve Data:
+
+```bash
+ENRICHMENT_PROVIDER=twelvedata TWELVEDATA_API_KEY=your_api_key npm run dev
+```
+
+### Using the example env file
+
+An example file is included at `.env.example`.
+
+This project does not auto-load `.env` by default, so load it from your shell first:
+
+```bash
+cp .env.example .env
+source .env
+npm run dev
+```
+
 ## Database Architecture
 
 Bucky uses SQLite databases with automatic environment detection to separate test and development data.

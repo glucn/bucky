@@ -20,11 +20,14 @@ const closeDatabase = (db: sqlite3.Database) =>
     });
   });
 
-export const launchApp = async (): Promise<ElectronApplication> => {
+export const launchApp = async (
+  envOverrides: Partial<Record<string, string>> = {}
+): Promise<ElectronApplication> => {
   return electron.launch({
     args: [appEntry],
     env: {
       ...process.env,
+      ...envOverrides,
       NODE_ENV: "test",
       VITEST: "true",
       ELECTRON_IS_DEV: "1",

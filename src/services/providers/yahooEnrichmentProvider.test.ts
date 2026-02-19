@@ -44,24 +44,20 @@ describe("yahooEnrichmentProvider", () => {
     ]);
   });
 
-  it("fetches security metadata from quoteSummary", async () => {
+  it("fetches security metadata from search", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
         asJsonResponse({
-          quoteSummary: {
-            result: [
-              {
-                price: {
-                  symbol: "AAPL",
-                  exchangeName: "NASDAQ",
-                  shortName: "Apple Inc.",
-                  quoteType: "EQUITY",
-                  currency: "USD",
-                },
-              },
-            ],
-          },
+          quotes: [
+            {
+              symbol: "AAPL",
+              exchDisp: "NASDAQ",
+              shortname: "Apple Inc.",
+              quoteType: "EQUITY",
+              currency: "USD",
+            },
+          ],
         })
       )
     );

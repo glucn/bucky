@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 type Props = {
   isOpen: boolean;
@@ -47,6 +47,8 @@ export const EnrichmentPanel: React.FC<Props> = ({
 }) => {
   const [scope, setScope] = useState<Scope>(defaultScope);
   const [panelState, setPanelState] = useState<any>(null);
+  const [isStartingRun, setIsStartingRun] = useState(false);
+  const awaitingStartPollRef = useRef(false);
   const [configState, setConfigState] = useState<{
     providerConfigured: boolean;
     baseCurrencyConfigured: boolean;
@@ -57,20 +59,47 @@ export const EnrichmentPanel: React.FC<Props> = ({
 
   useEffect(() => {
     if (!isOpen) {
+      awaitingStartPollRef.current = false;
+      setIsStartingRun(false);
       return;
     }
 
-    const load = async () => {
-      const [latestPanelState, latestConfigState] = await Promise.all([
-        window.electron.getEnrichmentPanelState(),
-        window.electron.getEnrichmentConfigState(),
-      ]);
+    let disposed = false;
+    let loading = false;
 
-      setPanelState(latestPanelState);
-      setConfigState(latestConfigState);
+    const load = async () => {
+      if (loading) {
+        return;
+      }
+      loading = true;
+      try {
+        const [latestPanelState, latestConfigState] = await Promise.all([
+          window.electron.getEnrichmentPanelState(),
+          window.electron.getEnrichmentConfigState(),
+        ]);
+
+        if (!disposed) {
+          setPanelState(latestPanelState);
+          setConfigState(latestConfigState);
+          if (awaitingStartPollRef.current) {
+            awaitingStartPollRef.current = false;
+            setIsStartingRun(false);
+          }
+        }
+      } finally {
+        loading = false;
+      }
     };
 
     void load();
+    const intervalId = window.setInterval(() => {
+      void load();
+    }, 1000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
   }, [isOpen]);
 
   const disabledReason = useMemo(() => {
@@ -90,9 +119,9 @@ export const EnrichmentPanel: React.FC<Props> = ({
   }
 
   const startRefresh = async () => {
+    setIsStartingRun(true);
+    awaitingStartPollRef.current = true;
     await window.electron.startEnrichmentRun(scope);
-    const latestPanelState = await window.electron.getEnrichmentPanelState();
-    setPanelState(latestPanelState);
   };
 
   const activeRun = panelState?.activeRun;
@@ -187,7 +216,16 @@ export const EnrichmentPanel: React.FC<Props> = ({
           </label>
         </div>
 
-        {summaryRun ? (
+        {isStartingRun ? (
+          <div className="mt-5 rounded border border-gray-200 bg-gray-50 p-3 text-sm" data-testid="enrichment-run-loading">
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-primary-600" />
+              <span>Starting refresh...</span>
+            </div>
+          </div>
+        ) : null}
+
+        {!isStartingRun && summaryRun ? (
           <div className="mt-5 rounded border border-gray-200 bg-gray-50 p-3 text-sm" data-testid="enrichment-active-run">
             <div>Run status: {summaryRun.status}</div>
             <div>Metadata: {summaryRun.categoryProgress.securityMetadata.processed}/{summaryRun.categoryProgress.securityMetadata.total} ({categoryStatus("securityMetadata")})</div>
@@ -236,11 +274,11 @@ export const EnrichmentPanel: React.FC<Props> = ({
           </button>
           <button
             className="rounded bg-primary-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-gray-400"
-            disabled={Boolean(disabledReason)}
+            disabled={Boolean(disabledReason) || isStartingRun}
             onClick={startRefresh}
             data-testid="start-enrichment-run"
           >
-            Refresh
+            {isStartingRun ? "Starting..." : "Refresh"}
           </button>
         </div>
       </div>

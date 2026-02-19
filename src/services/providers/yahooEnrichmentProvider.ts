@@ -79,20 +79,28 @@ export const yahooEnrichmentProvider: EnrichmentProviderAdapter = {
   },
 
   async fetchSecurityMetadata({ symbol, market }) {
-    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=price`;
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}`;
     const payload = await requestJson(url);
-    const price = payload?.quoteSummary?.result?.[0]?.price;
+    const quotes = payload?.quotes || [];
+    const exactSymbolMatches = quotes.filter(
+      (quote: any) => String(quote?.symbol || "").toUpperCase() === symbol.toUpperCase()
+    );
+    const marketMatch = exactSymbolMatches.find(
+      (quote: any) =>
+        String(quote?.exchDisp || quote?.exchange || "").toUpperCase() === market.toUpperCase()
+    );
+    const bestMatch = marketMatch || exactSymbolMatches[0] || quotes[0];
 
-    if (!price) {
+    if (!bestMatch) {
       return null;
     }
 
     return {
       symbol,
-      market,
-      displayName: price?.shortName || price?.longName || null,
-      assetType: price?.quoteType || null,
-      quoteCurrency: price?.currency || null,
+      market: bestMatch?.exchDisp || bestMatch?.exchange || market,
+      displayName: bestMatch?.shortname || bestMatch?.longname || null,
+      assetType: bestMatch?.quoteType || null,
+      quoteCurrency: bestMatch?.currency || null,
     };
   },
 

@@ -57,6 +57,11 @@ describe("setupEnrichmentIpcHandlers", () => {
   });
 
   it("registers enrichment and app-setting handlers", async () => {
+    const previousProvider = process.env.ENRICHMENT_PROVIDER;
+    const previousApiKey = process.env.TWELVEDATA_API_KEY;
+    delete process.env.ENRICHMENT_PROVIDER;
+    delete process.env.TWELVEDATA_API_KEY;
+
     getPanelState.mockResolvedValue({
       activeRun: null,
       latestSummary: null,
@@ -117,14 +122,27 @@ describe("setupEnrichmentIpcHandlers", () => {
     expect(await cancelRunHandler({}, "run-1")).toEqual({ success: true });
     expect(await toBackgroundHandler({}, "run-1")).toEqual({ success: true });
     expect(await getSummaryHandler({}, "run-1")).toEqual({ id: "run-1", status: "running" });
-    expect(await getConfigStateHandler({})).toEqual({
-      providerConfigured: false,
-      baseCurrencyConfigured: true,
-    });
-    expect(await getSettingHandler({}, "baseCurrency")).toBe("CAD");
-    expect(await setSettingHandler({}, { key: "baseCurrency", value: "CAD" })).toEqual({ success: true });
+    try {
+      expect(await getConfigStateHandler({})).toEqual({
+        providerConfigured: false,
+        baseCurrencyConfigured: true,
+      });
+      expect(await getSettingHandler({}, "baseCurrency")).toBe("CAD");
+      expect(await setSettingHandler({}, { key: "baseCurrency", value: "CAD" })).toEqual({ success: true });
 
-    expect(getAppSetting).toHaveBeenCalledWith("baseCurrency");
-    expect(setAppSetting).toHaveBeenCalledWith("baseCurrency", "CAD");
+      expect(getAppSetting).toHaveBeenCalledWith("baseCurrency");
+      expect(setAppSetting).toHaveBeenCalledWith("baseCurrency", "CAD");
+    } finally {
+      if (previousProvider === undefined) {
+        delete process.env.ENRICHMENT_PROVIDER;
+      } else {
+        process.env.ENRICHMENT_PROVIDER = previousProvider;
+      }
+      if (previousApiKey === undefined) {
+        delete process.env.TWELVEDATA_API_KEY;
+      } else {
+        process.env.TWELVEDATA_API_KEY = previousApiKey;
+      }
+    }
   });
 });

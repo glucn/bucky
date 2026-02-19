@@ -94,7 +94,7 @@ test("completed-with-issues summary is visible in refresh panel", async () => {
     await page.goto("http://localhost:3000/", { waitUntil: "domcontentloaded" });
 
     await page.evaluate(async () => {
-      await window.electron.ipcRenderer.invoke("seed-enrichment-run-summary");
+      await (window as any).electron.ipcRenderer.invoke("seed-enrichment-run-summary");
     });
 
     await page.getByTestId("open-enrichment-panel").click();
@@ -102,6 +102,84 @@ test("completed-with-issues summary is visible in refresh panel", async () => {
     await expect(page.getByText("CAD/USD")).toBeVisible();
   } catch (error) {
     await captureScreenshot(page, "enrichment-summary-failure");
+    throw error;
+  } finally {
+    await closeApp(app);
+  }
+});
+
+test("refresh run completes when all categories are deselected", async () => {
+  await runSql(
+    "INSERT INTO AppSetting (key, jsonValue, createdAt, updatedAt) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET jsonValue=excluded.jsonValue, updatedAt=CURRENT_TIMESTAMP",
+    ["baseCurrency", '"CAD"']
+  );
+
+  const app = await launchApp({ ENRICHMENT_PROVIDER: "yahoo" });
+  const page = await getMainWindow(app);
+  attachDebugLogging(page, "enrichment-run-completes");
+
+  try {
+    await page.goto("http://localhost:3000/", { waitUntil: "domcontentloaded" });
+    await page.getByTestId("open-enrichment-panel").click();
+    await page.getByTestId("enrichment-panel").waitFor();
+
+    await expect(page.getByTestId("start-enrichment-run")).toBeEnabled();
+
+    await page.getByTestId("scope-security-metadata").uncheck();
+    await page.getByTestId("scope-security-prices").uncheck();
+    await page.getByTestId("scope-fx-rates").uncheck();
+
+    await page.getByTestId("start-enrichment-run").click();
+
+    await page.waitForFunction(async () => {
+      const state = await (window as any).electron.getEnrichmentPanelState();
+      return Boolean(state.latestSummary && state.latestSummary.status === "completed");
+    });
+
+    await expect(page.getByText("FX: 0/0 (Done)")).toBeVisible();
+  } catch (error) {
+    await captureScreenshot(page, "enrichment-run-completes-failure");
+    throw error;
+  } finally {
+    await closeApp(app);
+  }
+});
+
+test("fx-only run derives pair from account currency and base currency", async () => {
+  await runSql(
+    "INSERT INTO AppSetting (key, jsonValue, createdAt, updatedAt) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET jsonValue=excluded.jsonValue, updatedAt=CURRENT_TIMESTAMP",
+    ["baseCurrency", '"CAD"']
+  );
+
+  const app = await launchApp({ ENRICHMENT_PROVIDER: "yahoo" });
+  const page = await getMainWindow(app);
+  attachDebugLogging(page, "enrichment-fx-pairs");
+
+  try {
+    await page.goto("http://localhost:3000/", { waitUntil: "domcontentloaded" });
+    await page.getByTestId("open-enrichment-panel").click();
+    await page.getByTestId("enrichment-panel").waitFor();
+
+    await expect(page.getByTestId("start-enrichment-run")).toBeEnabled();
+
+    await page.getByTestId("scope-security-metadata").uncheck();
+    await page.getByTestId("scope-security-prices").uncheck();
+    await page.getByTestId("start-enrichment-run").click();
+
+    await page.waitForFunction(async () => {
+      const state = await (window as any).electron.getEnrichmentPanelState();
+      const summary = state.latestSummary;
+      return Boolean(
+        summary &&
+          summary.status !== "running" &&
+          summary.categoryProgress?.fxRates?.total >= 1 &&
+          summary.categoryProgress?.fxRates?.processed === summary.categoryProgress?.fxRates?.total
+      );
+    });
+
+    await expect(page.getByText(/^FX:/)).toBeVisible();
+  } catch (error) {
+    await captureScreenshot(page, "enrichment-fx-pairs-failure");
     throw error;
   } finally {
     await closeApp(app);
