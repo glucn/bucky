@@ -51,10 +51,17 @@ This note captures practical findings from stabilizing flaky E2E runs, especiall
 - For import/idempotent workflows, prefer assertions that accept multiple valid outcomes (for example, imported rows vs. all rows skipped as duplicates) unless the test explicitly controls initial DB state.
 - If a spec must verify a single path, reset or seed DB state inside that spec so prior tests cannot change expected behavior.
 - When a full suite fails but single-spec reruns pass, suspect cross-spec state leakage before changing product logic.
+- For async workflows, assert state transitions (for example, idle -> starting -> running/completed) instead of only final static UI text.
+- When validating progress UIs, avoid asserting the first immediate snapshot after a click; poll/wait for the first refreshed snapshot to reduce false failures from transient placeholder values.
 
 ## Harness and contract alignment
 
 - Keep test harness contracts in sync with runtime IPC/preload contracts; adding a new required bridge method can surface as unrelated E2E or integration failures.
+
+## Coverage strategy for E2E
+
+- Keep seed/test-hook scenarios, but pair them with at least one true user-flow E2E that triggers the real runtime path; hook-only coverage can miss integration wiring bugs.
+- For features that call external providers/services, include at least one test that validates internal planning/selection logic independently from external response success.
 
 ## Validation standard for flaky tests
 
