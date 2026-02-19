@@ -350,3 +350,115 @@ This file tracks deferred product improvements that are intentionally out of cur
 - **Open Questions**:
   - Should unresolved state be computed live each run or persisted as explicit status?
   - Where is the best primary remediation entry point (security detail, holdings table, refresh panel)?
+
+## BL-016 - Saved Refresh Scope Presets
+
+- **ID**: BL-016
+- **Title**: Add saved scope presets for enrichment runs
+- **Status**: planned
+- **Priority**: low
+- **Related Docs**: `doc/F-017-data-enrichment-mvp/design.md`
+- **Context (What / Why)**:
+  - F-017 MVP uses ad hoc category checkboxes each run.
+  - Repeated workflows (for example FX-only or prices+FX) require manual re-selection every time.
+  - Presets reduce friction and make repeated refresh flows more consistent.
+- **Proposed UX / Behavior**:
+  - Let users save named scope presets from current selection.
+  - Allow one-click preset apply in refresh panel.
+  - Keep ad hoc editing available after preset apply.
+- **Scope Notes**:
+  - Preserve current default full-scope behavior for first-time users.
+  - Keep preset storage lightweight and user-editable.
+- **Open Questions**:
+  - Should there be a default "last used" preset auto-apply option?
+  - Should presets be local-only or profile-scoped if multi-user arrives later?
+
+## BL-017 - Manual Metadata Resync Controls
+
+- **ID**: BL-017
+- **Title**: Add metadata force-refresh and overwrite controls
+- **Status**: planned
+- **Priority**: medium
+- **Related Docs**: `doc/F-017-data-enrichment-mvp/design.md`
+- **Context (What / Why)**:
+  - F-017 MVP metadata policy is fill-missing only.
+  - If provider metadata changes (name/type/currency corrections), users cannot force an overwrite path.
+  - Manual controls improve correction and recovery workflows.
+- **Proposed UX / Behavior**:
+  - Add explicit action to force metadata refresh for selected security/all securities.
+  - Offer overwrite policy choices (fill-missing vs overwrite non-null fields).
+  - Surface affected fields preview before destructive overwrite.
+- **Scope Notes**:
+  - Must preserve auditability of changed metadata fields.
+  - Keep default run path unchanged for normal refreshes.
+- **Open Questions**:
+  - Should overwrite be all-fields or field-by-field selectable?
+  - Should force-resync run immediately or be queued as a scoped run?
+
+## BL-018 - Full Historical Rebuild Mode
+
+- **ID**: BL-018
+- **Title**: Add optional full historical rebuild mode for prices/FX
+- **Status**: planned
+- **Priority**: low
+- **Related Docs**: `doc/F-017-data-enrichment-mvp/design.md`, `doc/F-017-data-enrichment-mvp/requirements.md`
+- **Context (What / Why)**:
+  - F-017 MVP is incremental and immutable per key+date.
+  - Users may need controlled rebuilds after provider corrections, symbol migrations, or major data quality incidents.
+  - Rebuild mode provides deterministic recovery beyond gap backfill.
+- **Proposed UX / Behavior**:
+  - Add explicit rebuild action with clear scope/date range controls.
+  - Re-fetch historical ranges and reconcile existing points using selected policy.
+  - Show impact summary before apply (rows to replace/keep).
+- **Scope Notes**:
+  - Must guard against accidental destructive operations.
+  - Should preserve clear distinction between incremental runs and rebuild runs.
+- **Open Questions**:
+  - Should rebuild replace rows directly or write new versioned snapshots?
+  - How should rebuild conflicts with active runs be handled?
+
+## BL-019 - Base Currency Impact Across Reports
+
+- **ID**: BL-019
+- **Title**: Expand base-currency change handling across reporting surfaces
+- **Status**: planned
+- **Priority**: medium
+- **Related Docs**: `doc/F-017-data-enrichment-mvp/design.md`
+- **Context (What / Why)**:
+  - F-017 MVP establishes base currency and refresh prompts, but broader reporting/recalculation UX remains limited.
+  - Base currency semantics also affect data-entry and setup workflows (new account/portfolio/category creation), not only read-only reporting.
+  - Users need consistent formatting, valuation, and stale-data cues across pages after base currency changes.
+  - Clear cross-page behavior reduces confusion and trust issues.
+- **Proposed UX / Behavior**:
+  - Standardize base-currency display and conversion status across key report pages.
+  - Define base-currency-aware defaults/validation hints in create flows (account/portfolio/category) so new entities align with current currency model.
+  - Highlight impacted widgets/sections when required FX data is missing.
+  - Provide direct refresh entry points from affected views.
+- **Scope Notes**:
+  - Requires cross-page UX alignment across both read and create/edit surfaces.
+  - Must avoid silent value shifts without clear user-visible context.
+- **Open Questions**:
+  - Which surfaces should be prioritized first (overview/positions vs account/portfolio/category create flows)?
+  - Should recalculation be immediate or staged with user confirmation?
+
+## BL-020 - Market Reference Master Data
+
+- **ID**: BL-020
+- **Title**: Introduce exchange/market reference data for validation and display
+- **Status**: planned
+- **Priority**: low
+- **Related Docs**: `doc/F-017-data-enrichment-mvp/design.md`
+- **Context (What / Why)**:
+  - MVP accepts market identifiers from provider responses/user selection without a local market master.
+  - Inconsistent exchange labels can reduce validation quality and UI clarity.
+  - Reference data enables stronger normalization and user-friendly market display.
+- **Proposed UX / Behavior**:
+  - Maintain normalized market catalog (code, display name, region, asset support).
+  - Validate security market values against catalog where applicable.
+  - Use standardized display labels in setup, holdings, and refresh summaries.
+- **Scope Notes**:
+  - Keep provider-specific mappings maintainable and testable.
+  - Should tolerate unknown markets gracefully when catalog coverage is incomplete.
+- **Open Questions**:
+  - Should market reference data be static in-app, periodically synced, or hybrid?
+  - How should provider-specific exchange aliases be mapped and versioned?
