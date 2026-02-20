@@ -417,10 +417,10 @@ This file tracks deferred product improvements that are intentionally out of cur
   - Should rebuild replace rows directly or write new versioned snapshots?
   - How should rebuild conflicts with active runs be handled?
 
-## BL-019 - Base Currency Impact Across Reports
+## BL-019 - Base Currency Impact
 
 - **ID**: BL-019
-- **Title**: Expand base-currency change handling across reporting surfaces
+- **Title**: Expand base-currency change handling
 - **Status**: planned
 - **Priority**: medium
 - **Related Docs**: `doc/F-017-data-enrichment-mvp/design.md`
