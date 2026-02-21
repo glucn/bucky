@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Account } from "../types";
-import { formatCurrencyAmount } from "../utils/currencyUtils";
+import { formatCurrencyAmountDetail } from "../utils/currencyUtils";
 
 type Props = {
   account: Account;
@@ -80,7 +80,7 @@ const AccountNavItem: React.FC<Props> = ({ account, selected, balance }) => {
         <span>{account.name}</span>
         {typeof balance === "number" && !isCreditCard && (
           <span className="text-sm text-gray-600">
-            {formatCurrencyAmount(balance, account.currency, { showSymbol: true, showCode: true })}
+            {formatCurrencyAmountDetail(balance, account.currency)}
           </span>
         )}
       </div>
@@ -92,14 +92,14 @@ const AccountNavItem: React.FC<Props> = ({ account, selected, balance }) => {
             <span className="text-gray-600">Balance:</span>
             <span className="font-medium">
               {typeof balance === "number" 
-                ? formatCurrencyAmount(Math.abs(balance), account.currency, { showSymbol: true, showCode: true })
-                : formatCurrencyAmount(0, account.currency, { showSymbol: true, showCode: true })}
+                ? formatCurrencyAmountDetail(Math.abs(balance), account.currency)
+                : formatCurrencyAmountDetail(0, account.currency)}
             </span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Available:</span>
             <span className="font-medium text-blue-600">
-              {formatCurrencyAmount(creditCardMetrics.availableCredit, account.currency, { showSymbol: true, showCode: true })}
+              {formatCurrencyAmountDetail(creditCardMetrics.availableCredit, account.currency)}
             </span>
           </div>
           <div className="flex justify-between items-center">

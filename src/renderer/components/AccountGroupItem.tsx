@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { AccountGroup, Account } from "../types";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
-import { formatCurrencyAmount, formatMultiCurrencyBalances } from "../utils/currencyUtils";
+import { formatCurrencyAmount, formatCurrencyAmountDetail, formatMultiCurrencyBalances } from "../utils/currencyUtils";
 import { normalizeAccountBalance } from "../utils/displayNormalization";
 import { useNavigate } from "react-router-dom";
 
@@ -43,7 +43,7 @@ export const AccountGroupItem: React.FC<AccountGroupItemProps> = ({
     if (group.accountType === AccountType.User) {
       const balance = accountBalances[account.id] ?? account.balance;
       if (typeof balance === "number") {
-        return formatCurrencyAmount(balance, account.currency, { showSymbol: true });
+        return formatCurrencyAmount(balance, account.currency);
       }
       return "-";
     }
@@ -174,7 +174,7 @@ export const AccountGroupItem: React.FC<AccountGroupItemProps> = ({
     if (typeof aggregateBalance === "object" && !Array.isArray(aggregateBalance)) {
       return (
         <span className={`text-sm font-medium ${colorClass}`}>
-          {formatMultiCurrencyBalances(aggregateBalance, { showSymbol: true, showCode: true })}
+          {formatMultiCurrencyBalances(aggregateBalance)}
         </span>
       );
     }
@@ -187,7 +187,7 @@ export const AccountGroupItem: React.FC<AccountGroupItemProps> = ({
     
     return (
       <span className={`text-sm font-medium ${colorClass}`}>
-        {formatCurrencyAmount(displayBalance, currency, { showSymbol: true, showCode: true })}
+        {formatCurrencyAmountDetail(displayBalance, currency)}
       </span>
     );
   };

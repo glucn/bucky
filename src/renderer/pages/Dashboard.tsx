@@ -7,10 +7,7 @@ function formatMoney(amount: number | null, currency: string): string {
   if (amount === null) {
     return "N/A";
   }
-  return formatCurrencyAmount(amount, currency, {
-    showSymbol: true,
-    showCode: true,
-  });
+  return formatCurrencyAmount(amount, currency);
 }
 
 export const Dashboard: React.FC = () => {

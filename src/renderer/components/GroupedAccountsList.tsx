@@ -39,7 +39,7 @@ export const GroupedAccountsList: React.FC<GroupedAccountsListProps> = ({
     if (accountType === AccountType.User) {
       const balance = accountBalances[account.id] ?? account.balance;
       if (typeof balance === "number") {
-        return formatCurrencyAmount(balance, account.currency, { showSymbol: true });
+        return formatCurrencyAmount(balance, account.currency);
       }
       return "-";
     }

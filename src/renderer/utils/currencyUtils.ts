@@ -46,52 +46,112 @@ export function getCurrencySymbol(currencyCode: string): string {
  * Format a single currency amount with proper symbol/code
  * @param amount - The numeric amount
  * @param currency - The currency code (e.g., 'USD', 'EUR')
- * @param options - Formatting options
- * @returns Formatted string like "$1,234.56" or "1,234.56 EUR"
+ * @returns Formatted string like "$1,234.56"
  */
 export function formatCurrencyAmount(
   amount: number,
-  currency: string,
-  options: {
-    showSymbol?: boolean;
-    showCode?: boolean;
-    decimals?: number;
-    useGrouping?: boolean;
-  } = {}
+  currency: string
 ): string {
-  const {
-    showSymbol = true,
-    showCode = true,
-    decimals = 2,
-    useGrouping = true,
-  } = options;
+  return formatCurrencyAmountWithPreset(amount, currency, 'summary');
+}
+
+export function formatCurrencyAmountDetail(amount: number, currency: string): string {
+  return formatCurrencyAmountWithPreset(amount, currency, 'code');
+}
+
+export function formatCurrencyAmountCode(amount: number, currency: string): string {
+  return formatCurrencyAmountWithPreset(amount, currency, 'code');
+}
+
+type CurrencyPreset = 'summary' | 'code';
+
+/**
+ * Currency preset display intent:
+ * - `summary`: concise single-value display (symbol only when available)
+ *   - USD 200 -> "$200.00"
+ *   - CAD -100 -> "-CA$100.00"
+ * - `code`: code-first display for explicit transaction contexts
+ *   - USD 200 -> "USD 200.00"
+ *   - CAD -100 -> "-CAD 100.00"
+ */
+
+function formatCurrencyAmountWithPreset(
+  amount: number,
+  currency: string,
+  preset: CurrencyPreset,
+  decimals = 2,
+  useGrouping = true
+): string {
+  const code = currency.toUpperCase();
 
   // Fix floating-point precision issues: treat very small numbers as zero
   // This prevents "-0.00" display for balances like -6.7302587114515e-13
   const threshold = Math.pow(10, -(decimals + 2)); // e.g., 0.0001 for 2 decimals
   const normalizedAmount = Math.abs(amount) < threshold ? 0 : amount;
 
-  // Format the number with proper decimals and grouping
-  const formattedAmount = normalizedAmount.toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-    useGrouping,
-  });
+  const formatPlainAmount = () =>
+    normalizedAmount.toLocaleString('en-US', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+      useGrouping,
+    });
 
-  const symbol = getCurrencySymbol(currency);
-  const code = currency.toUpperCase();
+  const formatWithCode = () => {
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: code,
+        currencyDisplay: 'code',
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+        useGrouping,
+      }).format(normalizedAmount);
+    } catch {
+      return `${formatPlainAmount()} ${code}`;
+    }
+  };
 
-  // If symbol is different from code, show symbol before amount
-  if (showSymbol && symbol !== code) {
-    return `${symbol}${formattedAmount}`;
+  if (preset === 'code') {
+    return formatWithCode();
   }
 
-  // Otherwise show amount with code after
-  if (showCode) {
-    return `${formattedAmount} ${code}`;
-  }
+  try {
+    const formatter = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: code,
+      currencyDisplay: 'symbol',
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+      useGrouping,
+    });
 
-  return formattedAmount;
+    const withSymbol = formatter.format(normalizedAmount);
+    if (preset === 'summary') {
+      return withSymbol;
+    }
+
+    const symbolPart = formatter
+      .formatToParts(normalizedAmount)
+      .find((part) => part.type === 'currency')?.value;
+
+    const shouldAppendCode = !symbolPart || symbolPart === '$';
+    return shouldAppendCode ? `${withSymbol} ${code}` : withSymbol;
+  } catch {
+    const symbol = getCurrencySymbol(code);
+    const absAmount = Math.abs(normalizedAmount).toLocaleString('en-US', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+      useGrouping,
+    });
+    const signedWithSymbol = normalizedAmount < 0 ? `-${symbol}${absAmount}` : `${symbol}${absAmount}`;
+
+    if (preset === 'summary') {
+      return signedWithSymbol;
+    }
+
+    const shouldAppendCode = symbol === '$' || symbol === code;
+    return shouldAppendCode ? `${signedWithSymbol} ${code}` : signedWithSymbol;
+  }
 }
 
 /**
@@ -105,17 +165,15 @@ export function formatMultiCurrencyBalances(
   options: {
     separator?: string;
     sortCurrencies?: boolean;
-    showSymbol?: boolean;
-    showCode?: boolean;
     decimals?: number;
+    preset?: CurrencyPreset;
   } = {}
 ): string {
   const {
     separator = ', ',
     sortCurrencies = true,
-    showSymbol = true,
-    showCode = true,
     decimals = 2,
+    preset = 'code',
   } = options;
 
   if (!balances || Object.keys(balances).length === 0) {
@@ -131,11 +189,7 @@ export function formatMultiCurrencyBalances(
 
   // Format each currency balance
   const formattedBalances = entries.map(([currency, amount]) =>
-    formatCurrencyAmount(amount, currency, {
-      showSymbol,
-      showCode,
-      decimals,
-    })
+    formatCurrencyAmountWithPreset(amount, currency, preset, decimals)
   );
 
   return formattedBalances.join(separator);
@@ -202,10 +256,7 @@ export function formatTransactionCurrency(
   amount: number,
   currency: string
 ): string {
-  return formatCurrencyAmount(amount, currency, {
-    showSymbol: false,
-    showCode: true,
-  });
+  return formatCurrencyAmountCode(amount, currency);
 }
 
 /**
@@ -226,8 +277,7 @@ export function formatNormalizedTransactionAmount(
   accountSubtype: AccountSubtype,
   isCurrentAccount: boolean,
   options: {
-    showSymbol?: boolean;
-    showCode?: boolean;
+    preset?: CurrencyPreset;
     decimals?: number;
     useGrouping?: boolean;
   } = {}
@@ -241,7 +291,14 @@ export function formatNormalizedTransactionAmount(
   );
 
   // Format with currency
-  return formatCurrencyAmount(normalizedAmount, currency, options);
+  const preset = options.preset || 'summary';
+  return formatCurrencyAmountWithPreset(
+    normalizedAmount,
+    currency,
+    preset,
+    options.decimals,
+    options.useGrouping
+  );
 }
 
 /**
@@ -260,8 +317,7 @@ export function formatNormalizedBalance(
   accountType: AccountType,
   accountSubtype: AccountSubtype,
   options: {
-    showSymbol?: boolean;
-    showCode?: boolean;
+    preset?: CurrencyPreset;
     decimals?: number;
     useGrouping?: boolean;
   } = {}
@@ -274,5 +330,12 @@ export function formatNormalizedBalance(
   );
 
   // Format with currency
-  return formatCurrencyAmount(normalizedBalance, currency, options);
+  const preset = options.preset || 'summary';
+  return formatCurrencyAmountWithPreset(
+    normalizedBalance,
+    currency,
+    preset,
+    options.decimals,
+    options.useGrouping
+  );
 }

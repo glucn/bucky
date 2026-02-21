@@ -7,6 +7,7 @@ import {
   formatNormalizedTransactionAmount,
   formatNormalizedBalance,
   formatCurrencyAmount,
+  formatCurrencyAmountDetail,
   getCurrencySymbol,
 } from './currencyUtils';
 import { AccountType, AccountSubtype } from '../../shared/accountTypes';
@@ -23,7 +24,7 @@ describe('currencyUtils - Normalized Formatting', () => {
           AccountSubtype.Asset,
           true
         );
-        expect(result).toContain('-100.50');
+        expect(result).toMatch(/-\D*100\.50/);
         expect(result).toContain('$');
       });
 
@@ -76,7 +77,7 @@ describe('currencyUtils - Normalized Formatting', () => {
           AccountSubtype.Liability,
           true
         );
-        expect(result).toContain('-200.00');
+        expect(result).toMatch(/-\D*200\.00/);
         expect(result).toContain('$');
       });
 
@@ -101,8 +102,7 @@ describe('currencyUtils - Normalized Formatting', () => {
           'USD',
           AccountType.User,
           AccountSubtype.Asset,
-          true,
-          { showSymbol: true, showCode: true }
+          true
         );
         expect(result).toContain('$');
       });
@@ -113,8 +113,7 @@ describe('currencyUtils - Normalized Formatting', () => {
           'XYZ',
           AccountType.User,
           AccountSubtype.Asset,
-          true,
-          { showSymbol: true, showCode: true }
+          true
         );
         expect(result).toContain('XYZ');
       });
@@ -126,7 +125,7 @@ describe('currencyUtils - Normalized Formatting', () => {
           AccountType.User,
           AccountSubtype.Asset,
           true,
-          { showSymbol: false, showCode: true }
+          { preset: 'code' }
         );
         expect(result).not.toContain('$');
         expect(result).toContain('USD');
@@ -138,8 +137,7 @@ describe('currencyUtils - Normalized Formatting', () => {
           'EUR',
           AccountType.User,
           AccountSubtype.Asset,
-          true,
-          { showSymbol: true }
+          true
         );
         expect(result).toContain('€');
       });
@@ -150,8 +148,7 @@ describe('currencyUtils - Normalized Formatting', () => {
           'GBP',
           AccountType.User,
           AccountSubtype.Asset,
-          true,
-          { showSymbol: true }
+          true
         );
         expect(result).toContain('£');
       });
@@ -256,7 +253,7 @@ describe('currencyUtils - Normalized Formatting', () => {
           AccountType.User,
           AccountSubtype.Asset
         );
-        expect(result).toContain('-250.50');
+        expect(result).toMatch(/-\D*250\.50/);
         expect(result).toContain('$');
       });
 
@@ -293,7 +290,7 @@ describe('currencyUtils - Normalized Formatting', () => {
           AccountType.User,
           AccountSubtype.Liability
         );
-        expect(result).toContain('-100.00');
+        expect(result).toMatch(/-\D*100\.00/);
         expect(result).toContain('$');
       });
 
@@ -316,8 +313,7 @@ describe('currencyUtils - Normalized Formatting', () => {
           1000,
           'USD',
           AccountType.User,
-          AccountSubtype.Asset,
-          { showSymbol: true, showCode: true }
+          AccountSubtype.Asset
         );
         expect(result).toContain('$');
       });
@@ -328,7 +324,7 @@ describe('currencyUtils - Normalized Formatting', () => {
           'USD',
           AccountType.User,
           AccountSubtype.Asset,
-          { showSymbol: false, showCode: true, decimals: 2 }
+          { preset: 'code', decimals: 2 }
         );
         expect(result).not.toContain('$');
         expect(result).toContain('USD');
@@ -385,6 +381,28 @@ describe('currencyUtils - Normalized Formatting', () => {
       expect(getCurrencySymbol('USD')).toBe('$');
       expect(getCurrencySymbol('EUR')).toBe('€');
       expect(getCurrencySymbol('GBP')).toBe('£');
+    });
+
+    it('uses code-first format in detail mode for USD', () => {
+      const result = formatCurrencyAmountDetail(200, 'USD');
+
+      expect(result).toContain('USD');
+      expect(result).not.toContain('$200.00 USD');
+    });
+
+    it('uses code-first format in detail mode for CAD', () => {
+      const result = formatCurrencyAmountDetail(-100, 'CAD');
+
+      expect(result).toContain('CAD');
+      expect(result).not.toContain('CA$');
+    });
+
+    it('formats negative symbol amounts with leading minus sign', () => {
+      const result = formatCurrencyAmount(-100, 'USD');
+
+      expect(result.startsWith('-')).toBe(true);
+      expect(result).toContain('$');
+      expect(result).not.toContain('$-');
     });
   });
 });

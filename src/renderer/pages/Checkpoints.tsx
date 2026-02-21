@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Account } from "../types";
 import { useAccounts } from "../context/AccountsContext";
-import { formatCurrencyAmount } from "../utils/currencyUtils";
+import { formatCurrencyAmountDetail } from "../utils/currencyUtils";
 
 interface Checkpoint {
   id: string;
@@ -197,10 +197,7 @@ This action cannot be undone.`;
   };
 
   const formatCurrency = (amount: number, currency: string = "USD") => {
-    return formatCurrencyAmount(amount, currency, {
-      showSymbol: true,
-      showCode: true,
-    });
+    return formatCurrencyAmountDetail(amount, currency);
   };
 
   if (isLoading) {
