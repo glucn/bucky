@@ -105,7 +105,7 @@
   - Acceptance: E2E covers base-currency change -> pending banner -> FX-only refresh -> resolved clear.
   - Acceptance: E2E covers dismiss-for-session and relaunch reappearance behavior.
 
-- [/] 19. Final regression and documentation sync
+- [x] 19. Final regression and documentation sync
   - Acceptance: relevant unit/service/renderer/E2E suites pass for BL-019 scope.
   - Acceptance: `requirements.md`, `design.md`, and `tasks.md` are aligned with agreed behavior.
   - Acceptance: implementation deviations are documented explicitly (if any).
