@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAccounts } from "../context/AccountsContext";
+import { formatValuationAmount } from "../utils/valuationFormatting";
 
 interface Portfolio {
   id: string;
@@ -28,6 +29,7 @@ export const InvestmentPortfolios: React.FC = () => {
   const [newPortfolioCurrency, setNewPortfolioCurrency] = useState("USD");
   const [baseCurrencyAtModalOpen, setBaseCurrencyAtModalOpen] = useState("USD");
   const [creating, setCreating] = useState(false);
+  const [baseCurrency, setBaseCurrency] = useState("USD");
 
   const openCreatePortfolioModal = async () => {
     const impactState = await window.electron.getBaseCurrencyImpactState();
@@ -39,6 +41,9 @@ export const InvestmentPortfolios: React.FC = () => {
 
   useEffect(() => {
     fetchPortfolios();
+    void window.electron.getBaseCurrencyImpactState().then((state) => {
+      setBaseCurrency(state.baseCurrency || "USD");
+    });
   }, []);
 
   const fetchPortfolios = async () => {
@@ -103,18 +108,6 @@ export const InvestmentPortfolios: React.FC = () => {
     navigate(`/investments/${portfolioId}`);
   };
 
-  const formatCurrency = (amount: number): string => {
-    // Fix floating-point precision issues: treat very small numbers as zero
-    // This prevents "-0.00" display for balances like -6.7302587114515e-13
-    const threshold = 0.0001; // 0.01^2 for 2 decimal places
-    const normalizedAmount = Math.abs(amount) < threshold ? 0 : amount;
-    
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(normalizedAmount);
-  };
-
   const formatPercent = (percent: number): string => {
     return `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%`;
   };
@@ -176,7 +169,7 @@ export const InvestmentPortfolios: React.FC = () => {
                     <div>
                       <p className="text-sm text-gray-500">Total Value</p>
                       <p className="text-2xl font-bold text-gray-900">
-                        {formatCurrency(totalValue)}
+                         {formatValuationAmount(totalValue, baseCurrency)}
                       </p>
                     </div>
                     
@@ -185,7 +178,7 @@ export const InvestmentPortfolios: React.FC = () => {
                       <p className={`text-lg font-semibold ${
                         unrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
                       }`}>
-                        {formatCurrency(unrealizedGain)} ({formatPercent(unrealizedGainPercent)})
+                         {formatValuationAmount(unrealizedGain, baseCurrency)} ({formatPercent(unrealizedGainPercent)})
                       </p>
                     </div>
                     
@@ -193,11 +186,11 @@ export const InvestmentPortfolios: React.FC = () => {
                       <div className="pt-3 border-t border-gray-200">
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-500">Cash:</span>
-                          <span className="font-medium">{formatCurrency(value.cashBalance)}</span>
+                           <span className="font-medium">{formatValuationAmount(value.cashBalance, baseCurrency)}</span>
                         </div>
                         <div className="flex justify-between text-sm mt-1">
                           <span className="text-gray-500">Securities:</span>
-                          <span className="font-medium">{formatCurrency(value.totalMarketValue)}</span>
+                           <span className="font-medium">{formatValuationAmount(value.totalMarketValue, baseCurrency)}</span>
                         </div>
                       </div>
                     )}

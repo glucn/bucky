@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { TransactionEntryModal } from "../components/TransactionEntryModal";
 import { useAccounts } from "../context/AccountsContext";
+import { formatValuationAmount } from "../utils/valuationFormatting";
 
 interface PositionDetails {
   tickerSymbol: string;
@@ -34,11 +35,15 @@ export const PositionDetailsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [selectedTransactionType, setSelectedTransactionType] = useState<TransactionType>('buy');
+  const [baseCurrency, setBaseCurrency] = useState("USD");
 
   useEffect(() => {
     if (portfolioId && tickerSymbol) {
       fetchPositionData();
     }
+    void window.electron.getBaseCurrencyImpactState().then((state) => {
+      setBaseCurrency(state.baseCurrency || "USD");
+    });
   }, [portfolioId, tickerSymbol]);
 
   const fetchPositionData = async () => {
@@ -107,18 +112,6 @@ export const PositionDetailsPage: React.FC = () => {
     await fetchPositionData();
     // Refresh accounts context so balances update everywhere
     await refreshAccounts();
-  };
-
-  const formatCurrency = (amount: number): string => {
-    // Fix floating-point precision issues: treat very small numbers as zero
-    // This prevents "-0.00" display for balances like -6.7302587114515e-13
-    const threshold = 0.0001; // 0.01^2 for 2 decimal places
-    const normalizedAmount = Math.abs(amount) < threshold ? 0 : amount;
-    
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(normalizedAmount);
   };
 
   const formatPercent = (percent: number): string => {
@@ -208,22 +201,22 @@ export const PositionDetailsPage: React.FC = () => {
           <div>
             <p className="text-sm text-gray-500">Cost Basis</p>
             <p className="text-xl font-semibold text-gray-900">
-              {formatCurrency(position.costBasis)}
+              {formatValuationAmount(position.costBasis, baseCurrency)}
             </p>
             <p className="text-sm text-gray-500">
-              {formatCurrency(position.costPerShare)} per share
+              {formatValuationAmount(position.costPerShare, baseCurrency)} per share
             </p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Market Value</p>
             <p className="text-xl font-semibold text-gray-900">
               {position.marketValue !== null
-                ? formatCurrency(position.marketValue)
-                : formatCurrency(position.costBasis)}
+                ? formatValuationAmount(position.marketValue, baseCurrency)
+                : formatValuationAmount(position.costBasis, baseCurrency)}
             </p>
             {position.marketPrice !== null && (
               <p className="text-sm text-gray-500">
-                {formatCurrency(position.marketPrice)} per share
+                  {formatValuationAmount(position.marketPrice, baseCurrency)} per share
               </p>
             )}
           </div>
@@ -233,7 +226,7 @@ export const PositionDetailsPage: React.FC = () => {
               (position.unrealizedGain || 0) >= 0 ? 'text-green-600' : 'text-red-600'
             }`}>
               {position.unrealizedGain !== null
-                ? formatCurrency(position.unrealizedGain)
+                ? formatValuationAmount(position.unrealizedGain, baseCurrency)
                 : '-'}
             </p>
             {position.unrealizedGainPercent !== null && (
@@ -289,7 +282,7 @@ export const PositionDetailsPage: React.FC = () => {
                     <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-medium ${
                       txn.amount >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {formatCurrency(Math.abs(txn.amount))}
+                      {formatValuationAmount(Math.abs(txn.amount), baseCurrency)}
                       {txn.amount >= 0 ? ' (debit)' : ' (credit)'}
                     </td>
                   </tr>

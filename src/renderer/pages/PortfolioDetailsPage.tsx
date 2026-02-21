@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { TransactionEntryModal } from "../components/TransactionEntryModal";
 import { useAccounts } from "../context/AccountsContext";
 import { formatMultiCurrencyBalances } from "../utils/currencyUtils";
+import { formatValuationAmount } from "../utils/valuationFormatting";
 
 interface Position {
   tickerSymbol: string;
@@ -42,6 +43,7 @@ export const PortfolioDetailsPage: React.FC = () => {
   const [newCashCurrency, setNewCashCurrency] = useState("USD");
   const [baseCurrencyAtModalOpen, setBaseCurrencyAtModalOpen] = useState("USD");
   const [addingCash, setAddingCash] = useState(false);
+  const [baseCurrency, setBaseCurrency] = useState("USD");
 
   const openAddTradeCashModal = async () => {
     const impactState = await window.electron.getBaseCurrencyImpactState();
@@ -55,6 +57,9 @@ export const PortfolioDetailsPage: React.FC = () => {
     if (portfolioId) {
       fetchPortfolioData();
     }
+    void window.electron.getBaseCurrencyImpactState().then((state) => {
+      setBaseCurrency(state.baseCurrency || "USD");
+    });
   }, [portfolioId]);
 
   const fetchPortfolioData = async () => {
@@ -143,18 +148,6 @@ export const PortfolioDetailsPage: React.FC = () => {
     }
   };
 
-  const formatCurrency = (amount: number): string => {
-    // Fix floating-point precision issues: treat very small numbers as zero
-    // This prevents "-0.00" display for balances like -6.7302587114515e-13
-    const threshold = 0.0001; // 0.01^2 for 2 decimal places
-    const normalizedAmount = Math.abs(amount) < threshold ? 0 : amount;
-    
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(normalizedAmount);
-  };
-
   const formatPercent = (percent: number): string => {
     return `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%`;
   };
@@ -208,7 +201,7 @@ export const PortfolioDetailsPage: React.FC = () => {
               <div>
                 <p className="text-sm text-gray-500">Total Value</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(totalValue)}
+                  {formatValuationAmount(totalValue, baseCurrency)}
                 </p>
               </div>
               <div>
@@ -216,20 +209,20 @@ export const PortfolioDetailsPage: React.FC = () => {
                 <div className="text-xl font-semibold text-gray-900">
                   {portfolioValue.cashBalancesByCurrency && Object.keys(portfolioValue.cashBalancesByCurrency).length > 1 ? (
                     <div>
-                      <div>{formatCurrency(portfolioValue.cashBalance)}</div>
+                      <div>{formatValuationAmount(portfolioValue.cashBalance, baseCurrency)}</div>
                       <div className="text-sm text-gray-600 font-normal">
                         {formatMultiCurrencyBalances(portfolioValue.cashBalancesByCurrency)}
                       </div>
                     </div>
                   ) : (
-                    formatCurrency(portfolioValue.cashBalance)
+                    formatValuationAmount(portfolioValue.cashBalance, baseCurrency)
                   )}
                 </div>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Securities Value</p>
                 <p className="text-xl font-semibold text-gray-900">
-                  {formatCurrency(portfolioValue.totalMarketValue)}
+                  {formatValuationAmount(portfolioValue.totalMarketValue, baseCurrency)}
                 </p>
               </div>
             </div>
@@ -240,7 +233,7 @@ export const PortfolioDetailsPage: React.FC = () => {
                   <p className={`text-xl font-semibold ${
                     portfolioValue.totalUnrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
-                    {formatCurrency(portfolioValue.totalUnrealizedGain)}
+                    {formatValuationAmount(portfolioValue.totalUnrealizedGain, baseCurrency)}
                   </p>
                   <p className={`text-sm ${
                     portfolioValue.totalUnrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
@@ -253,13 +246,13 @@ export const PortfolioDetailsPage: React.FC = () => {
                   <p className={`text-xl font-semibold ${
                     realizedGains >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
-                    {formatCurrency(realizedGains)}
+                    {formatValuationAmount(realizedGains, baseCurrency)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Dividend Income</p>
                   <p className="text-xl font-semibold text-green-600">
-                    {formatCurrency(dividendIncome)}
+                    {formatValuationAmount(dividendIncome, baseCurrency)}
                   </p>
                 </div>
               </div>
@@ -320,23 +313,23 @@ export const PortfolioDetailsPage: React.FC = () => {
                       {position.quantity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                      {formatCurrency(position.costBasis)}
+                      {formatValuationAmount(position.costBasis, baseCurrency, { disambiguate: true })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
                       {position.marketPrice !== null
-                        ? formatCurrency(position.marketPrice)
+                        ? formatValuationAmount(position.marketPrice, baseCurrency, { disambiguate: true })
                         : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
                       {position.marketValue !== null
-                        ? formatCurrency(position.marketValue)
-                        : formatCurrency(position.costBasis)}
+                        ? formatValuationAmount(position.marketValue, baseCurrency, { disambiguate: true })
+                        : formatValuationAmount(position.costBasis, baseCurrency, { disambiguate: true })}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-medium ${
                       (position.unrealizedGain || 0) >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
                       {position.unrealizedGain !== null
-                        ? formatCurrency(position.unrealizedGain)
+                        ? formatValuationAmount(position.unrealizedGain, baseCurrency, { disambiguate: true })
                         : '-'}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-medium ${

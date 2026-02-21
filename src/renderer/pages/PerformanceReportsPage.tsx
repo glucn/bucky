@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { formatValuationAmount } from "../utils/valuationFormatting";
 
 interface PerformanceData {
   totalReturn: number;
@@ -37,6 +38,7 @@ export const PerformanceReportsPage: React.FC = () => {
   const [assetAllocation, setAssetAllocation] = useState<AssetAllocation[]>([]);
   const [realizedGains, setRealizedGains] = useState<RealizedGain[]>([]);
   const [loading, setLoading] = useState(true);
+  const [baseCurrency, setBaseCurrency] = useState("USD");
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
     date.setFullYear(date.getFullYear() - 1);
@@ -48,6 +50,9 @@ export const PerformanceReportsPage: React.FC = () => {
     if (portfolioId) {
       fetchReportData();
     }
+    void window.electron.getBaseCurrencyImpactState().then((state) => {
+      setBaseCurrency(state.baseCurrency || "USD");
+    });
   }, [portfolioId, startDate, endDate]);
 
   const fetchReportData = async () => {
@@ -85,18 +90,6 @@ export const PerformanceReportsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatCurrency = (amount: number): string => {
-    // Fix floating-point precision issues: treat very small numbers as zero
-    // This prevents "-0.00" display for balances like -6.7302587114515e-13
-    const threshold = 0.0001; // 0.01^2 for 2 decimal places
-    const normalizedAmount = Math.abs(amount) < threshold ? 0 : amount;
-    
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(normalizedAmount);
   };
 
   const formatPercent = (percent: number): string => {
@@ -167,7 +160,7 @@ export const PerformanceReportsPage: React.FC = () => {
               <p className={`text-xl font-semibold ${
                 performance.totalReturn >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {formatCurrency(performance.totalReturn)}
+                {formatValuationAmount(performance.totalReturn, baseCurrency)}
               </p>
               <p className={`text-sm ${
                 performance.totalReturnPercent >= 0 ? 'text-green-600' : 'text-red-600'
@@ -180,7 +173,7 @@ export const PerformanceReportsPage: React.FC = () => {
               <p className={`text-xl font-semibold ${
                 performance.realizedGains >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {formatCurrency(performance.realizedGains)}
+                {formatValuationAmount(performance.realizedGains, baseCurrency)}
               </p>
             </div>
             <div>
@@ -188,17 +181,17 @@ export const PerformanceReportsPage: React.FC = () => {
               <p className={`text-xl font-semibold ${
                 performance.unrealizedGains >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {formatCurrency(performance.unrealizedGains)}
+                {formatValuationAmount(performance.unrealizedGains, baseCurrency)}
               </p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Income</p>
               <p className="text-xl font-semibold text-gray-900">
-                {formatCurrency(performance.dividendIncome + performance.interestIncome)}
+                {formatValuationAmount(performance.dividendIncome + performance.interestIncome, baseCurrency)}
               </p>
               <p className="text-xs text-gray-500">
-                Div: {formatCurrency(performance.dividendIncome)}<br />
-                Int: {formatCurrency(performance.interestIncome)}
+                Div: {formatValuationAmount(performance.dividendIncome, baseCurrency)}<br />
+                Int: {formatValuationAmount(performance.interestIncome, baseCurrency)}
               </p>
             </div>
           </div>
@@ -231,7 +224,7 @@ export const PerformanceReportsPage: React.FC = () => {
                   </div>
                 </div>
                 <span className="ml-4 text-sm text-gray-600">
-                  {formatCurrency(allocation.marketValue)}
+                  {formatValuationAmount(allocation.marketValue, baseCurrency, { disambiguate: true })}
                 </span>
               </div>
             ))}
@@ -271,15 +264,15 @@ export const PerformanceReportsPage: React.FC = () => {
                       {gain.quantity.toFixed(6)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      {formatCurrency(gain.costBasis)}
+                      {formatValuationAmount(gain.costBasis, baseCurrency, { disambiguate: true })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      {formatCurrency(gain.saleProceeds)}
+                      {formatValuationAmount(gain.saleProceeds, baseCurrency, { disambiguate: true })}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium text-right ${
                       gain.realizedGain >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {formatCurrency(gain.realizedGain)}
+                      {formatValuationAmount(gain.realizedGain, baseCurrency, { disambiguate: true })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
                       {gain.holdingPeriod === 'long' ? 'Long' : gain.holdingPeriod === 'short' ? 'Short' : '-'}
