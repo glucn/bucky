@@ -50,7 +50,7 @@
   - Acceptance: user can still manually adjust scope before starting run.
   - Acceptance: renderer tests verify preset is applied only for this entry path.
 
-- [ ] 8. Standardize conversion engine contract for valuation services
+- [x] 8. Standardize conversion engine contract for valuation services
   - Acceptance: conversion policy is centralized: as-of rate first, latest fallback second, otherwise unavailable.
   - Acceptance: same-currency conversion returns implicit `1.0`.
   - Acceptance: conversion result includes enough metadata for `N/A` decisions (without per-value fallback marker UI).
@@ -75,7 +75,7 @@
   - Acceptance: performance/position detail sections adopt base + native pattern where space allows.
   - Acceptance: affected screens keep clear non-blocking warning context while reconciliation is pending.
 
-- [ ] 13. Replace hardcoded USD render formatters with Intl-driven shared utilities
+- [x] 13. Replace hardcoded USD render formatters with Intl-driven shared utilities
   - Acceptance: renderer no longer hardcodes `"USD"` in valuation/total formatters for BL-019 surfaces.
   - Acceptance: single-currency summary formatting uses symbol-style display.
   - Acceptance: multi-currency detail formatting is disambiguated (code or explicit code label).
@@ -100,7 +100,7 @@
   - Acceptance: before base currency is configured, initialization fallback behavior remains safe and deterministic.
   - Acceptance: existing historical rows are not rewritten during this change.
 
-- [ ] 18. Add deterministic test hooks and E2E coverage for BL-019 flows
+- [/] 18. Add deterministic test hooks and E2E coverage for BL-019 flows
   - Acceptance: stable test hooks exist for global banner, dismiss action, and FX-only refresh CTA path.
   - Acceptance: E2E covers base-currency change -> pending banner -> FX-only refresh -> resolved clear.
   - Acceptance: E2E covers dismiss-for-session and relaunch reappearance behavior.
