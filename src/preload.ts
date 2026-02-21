@@ -83,4 +83,6 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("get-app-setting", key),
   setAppSetting: (key: string, value: unknown) =>
     ipcRenderer.invoke("set-app-setting", { key, value }),
+  getBaseCurrencyImpactState: () =>
+    ipcRenderer.invoke("get-base-currency-impact-state"),
 });

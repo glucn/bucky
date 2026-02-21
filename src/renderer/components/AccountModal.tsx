@@ -21,6 +21,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   });
   const [selectedGroupId, setSelectedGroupId] = useState<string>("");
   const [availableGroups, setAvailableGroups] = useState<any[]>([]);
+  const [baseCurrencyAtOpen, setBaseCurrencyAtOpen] = useState("USD");
   const [loading, setLoading] = useState(false);
   const [openingBalanceAmount, setOpeningBalanceAmount] = useState("");
   const [openingBalanceDate, setOpeningBalanceDate] = useState(
@@ -34,14 +35,26 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   // Fetch available groups
   useEffect(() => {
     if (isOpen) {
-      fetchGroups();
-      // Reset form when modal opens
-      setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
-      setSelectedTypeValue("cash");
-      setSelectedGroupId("");
-      setOpeningBalanceAmount("");
-      setOpeningBalanceDate(new Date().toISOString().split("T")[0]);
-      setOpeningBalanceError(null);
+      const initialize = async () => {
+        await fetchGroups();
+        const impactState = await window.electron.getBaseCurrencyImpactState();
+        const baseCurrency = impactState.baseCurrency || "USD";
+        setBaseCurrencyAtOpen(baseCurrency);
+        // Reset form when modal opens
+        setNewAccount({
+          name: "",
+          type: AccountType.User,
+          currency: baseCurrency,
+          subtype: AccountSubtype.Asset,
+        });
+        setSelectedTypeValue("cash");
+        setSelectedGroupId("");
+        setOpeningBalanceAmount("");
+        setOpeningBalanceDate(new Date().toISOString().split("T")[0]);
+        setOpeningBalanceError(null);
+      };
+
+      void initialize();
     }
   }, [isOpen]);
 
@@ -122,7 +135,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
           }
         }
         // For non-credit card accounts, close immediately
-        setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
+        setNewAccount({ name: "", type: AccountType.User, currency: baseCurrencyAtOpen, subtype: AccountSubtype.Asset });
         setSelectedTypeValue("cash");
         setSelectedGroupId("");
         onAccountCreated();
@@ -138,7 +151,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const handleCreditCardSetupComplete = () => {
     setShowCreditCardSetup(false);
     setCreatedAccountId(null);
-    setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
+    setNewAccount({ name: "", type: AccountType.User, currency: baseCurrencyAtOpen, subtype: AccountSubtype.Asset });
     setSelectedTypeValue("cash");
     setSelectedGroupId("");
     onAccountCreated();
@@ -148,7 +161,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const handleCreditCardSetupSkip = () => {
     setShowCreditCardSetup(false);
     setCreatedAccountId(null);
-    setNewAccount({ name: "", type: AccountType.User, currency: "USD", subtype: AccountSubtype.Asset });
+    setNewAccount({ name: "", type: AccountType.User, currency: baseCurrencyAtOpen, subtype: AccountSubtype.Asset });
     setSelectedTypeValue("cash");
     setSelectedGroupId("");
     onAccountCreated();

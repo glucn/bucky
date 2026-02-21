@@ -40,7 +40,16 @@ export const PortfolioDetailsPage: React.FC = () => {
   const [selectedTransactionType, setSelectedTransactionType] = useState<TransactionType>('buy');
   const [showAddCashModal, setShowAddCashModal] = useState(false);
   const [newCashCurrency, setNewCashCurrency] = useState("USD");
+  const [baseCurrencyAtModalOpen, setBaseCurrencyAtModalOpen] = useState("USD");
   const [addingCash, setAddingCash] = useState(false);
+
+  const openAddTradeCashModal = async () => {
+    const impactState = await window.electron.getBaseCurrencyImpactState();
+    const baseCurrency = impactState.baseCurrency || "USD";
+    setBaseCurrencyAtModalOpen(baseCurrency);
+    setNewCashCurrency(baseCurrency);
+    setShowAddCashModal(true);
+  };
 
   useEffect(() => {
     if (portfolioId) {
@@ -120,7 +129,7 @@ export const PortfolioDetailsPage: React.FC = () => {
       
       if (result.success) {
         setShowAddCashModal(false);
-        setNewCashCurrency("USD");
+        setNewCashCurrency(baseCurrencyAtModalOpen);
         await fetchPortfolioData();
         await refreshAccounts();
       } else {
@@ -386,7 +395,9 @@ export const PortfolioDetailsPage: React.FC = () => {
             Deposit/Withdraw Cash
           </button>
           <button
-            onClick={() => setShowAddCashModal(true)}
+            onClick={() => {
+              void openAddTradeCashModal();
+            }}
             className="px-4 py-3 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Add Currency
@@ -451,7 +462,7 @@ export const PortfolioDetailsPage: React.FC = () => {
               <button
                 onClick={() => {
                   setShowAddCashModal(false);
-                  setNewCashCurrency("USD");
+                  setNewCashCurrency(baseCurrencyAtModalOpen);
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
                 disabled={addingCash}

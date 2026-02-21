@@ -197,6 +197,23 @@ class DatabaseService {
     await this.prisma.$disconnect();
   }
 
+  private async getConfiguredBaseCurrency(prisma: PrismaClient | TransactionClient): Promise<string | null> {
+    const setting = await prisma.appSetting.findUnique({ where: { key: "baseCurrency" } });
+    if (!setting) {
+      return null;
+    }
+
+    try {
+      const value = JSON.parse(setting.jsonValue);
+      if (typeof value === "string" && /^[A-Z]{3}$/.test(value)) {
+        return value;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   // Account operations
   public async createAccount(
     data: {
@@ -208,11 +225,12 @@ class DatabaseService {
     tx?: TransactionClient
   ) {
     const prisma = tx || this.prisma;
+    const defaultCurrency = (await this.getConfiguredBaseCurrency(prisma)) || "USD";
     return prisma.account.create({
       data: {
         name: data.name,
         type: data.type as AccountType,
-        currency: data.currency || "USD",
+        currency: data.currency || defaultCurrency,
         subtype: (data.subtype as AccountSubtype) || AccountSubtype.Asset,
       },
     });
@@ -1871,6 +1889,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
    */
   public async ensureDefaultAccounts(tx?: TransactionClient) {
     const prisma = tx || this.prisma;
+    const initializationCurrency = (await this.getConfiguredBaseCurrency(prisma)) || "USD";
     
     // First, ensure account groups exist
     const defaultGroups = [
@@ -2078,7 +2097,10 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
         currency: "USD",
         groupId: groupMap["[Expense] Other Expense"],
       },
-    ];
+    ].map((account) => ({
+      ...account,
+      currency: initializationCurrency,
+    }));
     
     for (const acc of defaultAccounts) {
       const exists = await prisma.account.findFirst({

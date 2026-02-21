@@ -26,7 +26,16 @@ export const InvestmentPortfolios: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPortfolioName, setNewPortfolioName] = useState("");
   const [newPortfolioCurrency, setNewPortfolioCurrency] = useState("USD");
+  const [baseCurrencyAtModalOpen, setBaseCurrencyAtModalOpen] = useState("USD");
   const [creating, setCreating] = useState(false);
+
+  const openCreatePortfolioModal = async () => {
+    const impactState = await window.electron.getBaseCurrencyImpactState();
+    const baseCurrency = impactState.baseCurrency || "USD";
+    setBaseCurrencyAtModalOpen(baseCurrency);
+    setNewPortfolioCurrency(baseCurrency);
+    setShowCreateModal(true);
+  };
 
   useEffect(() => {
     fetchPortfolios();
@@ -72,11 +81,11 @@ export const InvestmentPortfolios: React.FC = () => {
         { name: newPortfolioName, currency: newPortfolioCurrency }
       );
       
-      if (result.success) {
-        setShowCreateModal(false);
-        setNewPortfolioName("");
-        setNewPortfolioCurrency("USD");
-        await fetchPortfolios();
+        if (result.success) {
+          setShowCreateModal(false);
+          setNewPortfolioName("");
+          setNewPortfolioCurrency(baseCurrencyAtModalOpen);
+          await fetchPortfolios();
         // Refresh accounts context so sidebar and other components update
         await refreshAccounts();
       } else {
@@ -124,7 +133,9 @@ export const InvestmentPortfolios: React.FC = () => {
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">Investment Portfolios</h2>
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => {
+              void openCreatePortfolioModal();
+            }}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
             Create Portfolio
@@ -135,7 +146,9 @@ export const InvestmentPortfolios: React.FC = () => {
           <div className="text-center py-12">
             <p className="text-gray-500 mb-4">No investment portfolios yet</p>
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => {
+                void openCreatePortfolioModal();
+              }}
               className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
             >
               Create Your First Portfolio
@@ -258,7 +271,7 @@ export const InvestmentPortfolios: React.FC = () => {
                 onClick={() => {
                   setShowCreateModal(false);
                   setNewPortfolioName("");
-                  setNewPortfolioCurrency("USD");
+                  setNewPortfolioCurrency(baseCurrencyAtModalOpen);
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
                 disabled={creating}

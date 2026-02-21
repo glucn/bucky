@@ -30,22 +30,22 @@
   - Acceptance: non-FX runs, canceled runs, or FX runs with failures keep state `pending`.
   - Acceptance: if reconciliation record is missing or already resolved, runtime update path is safe no-op.
 
-- [/] 4. Expose base currency + reconciliation state through IPC/preload
+- [x] 4. Expose base currency + reconciliation state through IPC/preload
   - Acceptance: renderer can read current base currency and reconciliation status in one stable contract.
   - Acceptance: preload/types are aligned and strongly typed.
   - Acceptance: IPC tests cover happy path and missing-state fallback behavior.
 
-- [ ] 5. Add app-shell global warning banner infrastructure
+- [x] 5. Add app-shell global warning banner infrastructure
   - Acceptance: persistent top banner renders app-wide when reconciliation is `pending`.
   - Acceptance: warning severity is non-blocking (`warning`) and does not disable core actions.
   - Acceptance: banner is hidden when reconciliation is `resolved`.
 
-- [ ] 6. Implement banner actions and session-only dismiss semantics
+- [x] 6. Implement banner actions and session-only dismiss semantics
   - Acceptance: `Refresh FX now` opens existing enrichment panel.
   - Acceptance: `Dismiss for now` hides banner for current app session only.
   - Acceptance: on app relaunch, banner reappears if persisted reconciliation is still `pending`.
 
-- [ ] 7. Add FX-only preset entry path for refresh panel
+- [x] 7. Add FX-only preset entry path for refresh panel
   - Acceptance: opening panel from banner preselects `fxRates=true`, `securityMetadata=false`, `securityPrices=false`.
   - Acceptance: user can still manually adjust scope before starting run.
   - Acceptance: renderer tests verify preset is applied only for this entry path.
@@ -80,22 +80,22 @@
   - Acceptance: single-currency summary formatting uses symbol-style display.
   - Acceptance: multi-currency detail formatting is disambiguated (code or explicit code label).
 
-- [ ] 14. Align create/edit defaults with base currency at modal-open time
+- [x] 14. Align create/edit defaults with base currency at modal-open time
   - Acceptance: new investment portfolio default currency = current base currency.
   - Acceptance: new non-investment account currency is prefilled from base currency and remains editable.
   - Acceptance: defaults are resolved at modal open time (not live-updated while modal is open).
 
-- [ ] 15. Remove category currency selector in create/edit flows (compat storage retained)
+- [x] 15. Remove category currency selector in create/edit flows (compat storage retained)
   - Acceptance: category currency field is hidden/removed in both create and edit category UI.
   - Acceptance: existing category currency values remain unchanged.
   - Acceptance: create/edit behavior continues to preserve accounting rules for category transactions.
 
-- [ ] 16. Make first-time base currency setup mandatory
+- [x] 16. Make first-time base currency setup mandatory
   - Acceptance: first-time setup requires selecting base currency before valuation/reporting experience is considered configured.
   - Acceptance: if base currency is unset, user sees explicit setup prompt with path to configure.
   - Acceptance: no silent hidden base currency assumption in UI flows.
 
-- [ ] 17. Align seed/default/system account currency initialization behavior
+- [x] 17. Align seed/default/system account currency initialization behavior
   - Acceptance: after base currency is configured, seed/default/system account creation uses base currency rather than hardcoded USD.
   - Acceptance: before base currency is configured, initialization fallback behavior remains safe and deterministic.
   - Acceptance: existing historical rows are not rewritten during this change.

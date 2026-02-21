@@ -31,6 +31,14 @@ describe("Navbar enrichment panel", () => {
         status: "completed",
       }),
       sendEnrichmentRunToBackground: vi.fn().mockResolvedValue({ success: true }),
+      getBaseCurrencyImpactState: vi.fn().mockResolvedValue({
+        baseCurrency: "CAD",
+        reconciliation: {
+          targetBaseCurrency: "CAD",
+          status: "pending",
+          changedAt: "2026-02-20T10:00:00.000Z",
+        },
+      }),
     };
   });
 
@@ -88,5 +96,87 @@ describe("Navbar enrichment panel", () => {
     await waitFor(() => {
       expect(screen.getByTestId("enrichment-background-toast")).toBeTruthy();
     }, { timeout: 3000 });
+  });
+
+  it("shows global base currency warning banner with session dismiss", async () => {
+    const { unmount } = render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("base-currency-warning-banner")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId("base-currency-dismiss"));
+    expect(screen.queryByTestId("base-currency-warning-banner")).toBeNull();
+
+    unmount();
+
+    render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("base-currency-warning-banner")).toBeTruthy();
+    });
+  });
+
+  it("uses FX-only scope when opening refresh from warning banner", async () => {
+    (globalThis.window as any).electron.getEnrichmentConfigState = vi.fn().mockResolvedValue({
+      providerConfigured: true,
+      baseCurrencyConfigured: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("base-currency-refresh-fx")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId("base-currency-refresh-fx"));
+    await waitFor(() => expect(screen.getByTestId("enrichment-panel")).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId("start-enrichment-run"));
+
+    await waitFor(() => {
+      expect((globalThis.window as any).electron.startEnrichmentRun).toHaveBeenCalledWith({
+        securityMetadata: false,
+        securityPrices: false,
+        fxRates: true,
+      });
+    });
+  });
+
+  it("keeps full scope for normal refresh entry path", async () => {
+    (globalThis.window as any).electron.getEnrichmentConfigState = vi.fn().mockResolvedValue({
+      providerConfigured: true,
+      baseCurrencyConfigured: true,
+    });
+
+    render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByTestId("open-enrichment-panel"));
+    await waitFor(() => expect(screen.getByTestId("enrichment-panel")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("start-enrichment-run"));
+
+    await waitFor(() => {
+      expect((globalThis.window as any).electron.startEnrichmentRun).toHaveBeenCalledWith({
+        securityMetadata: true,
+        securityPrices: true,
+        fxRates: true,
+      });
+    });
   });
 });

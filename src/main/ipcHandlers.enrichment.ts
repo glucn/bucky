@@ -24,6 +24,7 @@ export const setupEnrichmentIpcHandlers = () => {
   ipcMain.removeHandler("seed-enrichment-run-summary");
   ipcMain.removeHandler("get-app-setting");
   ipcMain.removeHandler("set-app-setting");
+  ipcMain.removeHandler("get-base-currency-impact-state");
 
   ipcMain.handle("get-enrichment-panel-state", async () => {
     const panelState = await enrichmentRuntimeService.getPanelState();
@@ -98,5 +99,17 @@ export const setupEnrichmentIpcHandlers = () => {
 
     await appSettingsService.setAppSetting(data.key, data.value as any);
     return { success: true };
+  });
+
+  ipcMain.handle("get-base-currency-impact-state", async () => {
+    const [baseCurrency, reconciliation] = await Promise.all([
+      appSettingsService.getBaseCurrency(),
+      appSettingsService.getBaseCurrencyReconciliationState(),
+    ]);
+
+    return {
+      baseCurrency,
+      reconciliation,
+    };
   });
 };

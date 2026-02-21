@@ -2,10 +2,29 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { EnrichmentPanel } from "./EnrichmentPanel";
 
+type PanelOpenDetail = {
+  scopePreset?: {
+    securityMetadata: boolean;
+    securityPrices: boolean;
+    fxRates: boolean;
+  };
+};
+
 const Navbar: React.FC = () => {
   const [isEnrichmentPanelOpen, setIsEnrichmentPanelOpen] = React.useState(false);
+  const [scopePreset, setScopePreset] = React.useState<PanelOpenDetail["scopePreset"] | null>(null);
   const [backgroundRunId, setBackgroundRunId] = React.useState<string | null>(null);
   const [completedBackgroundSummary, setCompletedBackgroundSummary] = React.useState<any | null>(null);
+  const [baseCurrencyBannerDismissed, setBaseCurrencyBannerDismissed] = React.useState(false);
+  const [baseCurrencyImpact, setBaseCurrencyImpact] = React.useState<{
+    baseCurrency: string | null;
+    reconciliation: {
+      targetBaseCurrency: string;
+      status: "pending" | "resolved";
+      changedAt: string;
+      resolvedAt?: string;
+    } | null;
+  } | null>(null);
 
   // Only show the reset button in development mode
   const isDev = process.env.NODE_ENV === "development";
@@ -26,10 +45,39 @@ const Navbar: React.FC = () => {
   };
 
   React.useEffect(() => {
-    const handleOpenPanel = () => setIsEnrichmentPanelOpen(true);
+    const handleOpenPanel = (event: Event) => {
+      const customEvent = event as CustomEvent<PanelOpenDetail>;
+      setScopePreset(customEvent.detail?.scopePreset || null);
+      setIsEnrichmentPanelOpen(true);
+    };
     window.addEventListener("open-enrichment-panel", handleOpenPanel);
     return () => window.removeEventListener("open-enrichment-panel", handleOpenPanel);
   }, []);
+
+  React.useEffect(() => {
+    let disposed = false;
+
+    const load = async () => {
+      const state = await window.electron.getBaseCurrencyImpactState();
+      if (!disposed) {
+        setBaseCurrencyImpact(state);
+      }
+    };
+
+    void load();
+    const timer = window.setInterval(() => {
+      void load();
+    }, 3000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const shouldShowBaseCurrencyBanner =
+    !baseCurrencyBannerDismissed && baseCurrencyImpact?.reconciliation?.status === "pending";
+  const shouldShowBaseCurrencySetupPrompt = baseCurrencyImpact?.baseCurrency === null;
 
   React.useEffect(() => {
     if (!backgroundRunId) {
@@ -88,9 +136,12 @@ const Navbar: React.FC = () => {
               </Link>
             </div>
           </div>
-          <div className="flex items-center">
+            <div className="flex items-center">
               <button
-                onClick={() => setIsEnrichmentPanelOpen(true)}
+                onClick={() => {
+                  setScopePreset(null);
+                  setIsEnrichmentPanelOpen(true);
+                }}
                 className="ml-4 rounded bg-primary-600 px-3 py-1 text-white transition hover:bg-primary-700"
                 data-testid="open-enrichment-panel"
               >
@@ -108,9 +159,57 @@ const Navbar: React.FC = () => {
           </div>
         </div>
       </div>
+      {shouldShowBaseCurrencySetupPrompt ? (
+        <div
+          className="border-t border-blue-300 bg-blue-50 px-4 py-2 text-sm text-blue-900"
+          data-testid="base-currency-setup-prompt"
+        >
+          Base currency is not configured yet. Configure it to enable valuation and reporting.
+          <Link
+            to="/settings/auto-categorization"
+            className="ml-3 rounded border border-blue-500 px-2 py-1 text-xs"
+            data-testid="configure-base-currency"
+          >
+            Configure now
+          </Link>
+        </div>
+      ) : null}
+      {shouldShowBaseCurrencyBanner ? (
+        <div
+          className="border-t border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900"
+          data-testid="base-currency-warning-banner"
+        >
+          <span>
+            Base currency changed to {baseCurrencyImpact?.reconciliation?.targetBaseCurrency}. Refresh FX rates to
+            reconcile valuations.
+          </span>
+          <button
+            className="ml-3 rounded border border-amber-500 px-2 py-1 text-xs"
+            data-testid="base-currency-refresh-fx"
+            onClick={() => {
+              setScopePreset({
+                securityMetadata: false,
+                securityPrices: false,
+                fxRates: true,
+              });
+              setIsEnrichmentPanelOpen(true);
+            }}
+          >
+            Refresh FX now
+          </button>
+          <button
+            className="ml-2 text-xs text-amber-800 underline"
+            data-testid="base-currency-dismiss"
+            onClick={() => setBaseCurrencyBannerDismissed(true)}
+          >
+            Dismiss for now
+          </button>
+        </div>
+      ) : null}
       <EnrichmentPanel
         isOpen={isEnrichmentPanelOpen}
         onClose={() => setIsEnrichmentPanelOpen(false)}
+        scopePreset={scopePreset}
         onContinueInBackground={(runId) => {
           setBackgroundRunId(runId);
           setIsEnrichmentPanelOpen(false);

@@ -25,6 +25,10 @@ describe("AccountModal opening balance", () => {
           on: vi.fn(),
         },
         setOpeningBalance: mockSetOpeningBalance,
+        getBaseCurrencyImpactState: vi.fn().mockResolvedValue({
+          baseCurrency: "CAD",
+          reconciliation: null,
+        }),
       },
       configurable: true,
     });

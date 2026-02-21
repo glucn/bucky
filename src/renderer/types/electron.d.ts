@@ -40,6 +40,13 @@ interface EnrichmentRunSummary {
   }>;
 }
 
+interface BaseCurrencyReconciliationState {
+  targetBaseCurrency: string;
+  status: "pending" | "resolved";
+  changedAt: string;
+  resolvedAt?: string;
+}
+
 export interface IElectronAPI {
   ipcRenderer: {
     invoke(channel: string, ...args: any[]): Promise<any>;
@@ -103,6 +110,10 @@ export interface IElectronAPI {
   // Generic app settings operations
   getAppSetting(key: string): Promise<unknown | null>;
   setAppSetting(key: string, value: unknown): Promise<{ success: boolean }>;
+  getBaseCurrencyImpactState(): Promise<{
+    baseCurrency: string | null;
+    reconciliation: BaseCurrencyReconciliationState | null;
+  }>;
 }
 
 declare global {

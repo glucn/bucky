@@ -5,6 +5,7 @@ type Props = {
   onClose: () => void;
   onContinueInBackground?: (runId: string) => void;
   externalSummary?: any | null;
+  scopePreset?: Scope | null;
 };
 
 type Scope = {
@@ -44,6 +45,7 @@ export const EnrichmentPanel: React.FC<Props> = ({
   onClose,
   onContinueInBackground,
   externalSummary,
+  scopePreset,
 }) => {
   const [scope, setScope] = useState<Scope>(defaultScope);
   const [panelState, setPanelState] = useState<any>(null);
@@ -56,6 +58,13 @@ export const EnrichmentPanel: React.FC<Props> = ({
     providerConfigured: false,
     baseCurrencyConfigured: false,
   });
+
+  useEffect(() => {
+    if (!isOpen || !scopePreset) {
+      return;
+    }
+    setScope(scopePreset);
+  }, [isOpen, scopePreset]);
 
   useEffect(() => {
     if (!isOpen) {

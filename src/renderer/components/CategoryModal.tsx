@@ -19,7 +19,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
   const { refreshAccounts } = useAccounts();
   const [categoryName, setCategoryName] = useState("");
   const [categoryType, setCategoryType] = useState<"income" | "expense">("expense");
-  const [defaultCurrency, setDefaultCurrency] = useState("USD");
+  const [storedCurrency, setStoredCurrency] = useState("USD");
   const [selectedGroupId, setSelectedGroupId] = useState<string>("");
   const [availableGroups, setAvailableGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -48,14 +48,18 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
     if (editingCategory) {
       setCategoryName(editingCategory.name);
       setCategoryType(editingCategory.subtype === AccountSubtype.Asset ? "income" : "expense");
-      setDefaultCurrency(editingCategory.currency);
+      setStoredCurrency(editingCategory.currency);
       setSelectedGroupId(editingCategory.groupId || "");
     } else {
       // Reset form for new category
       setCategoryName("");
       setCategoryType("expense");
-      setDefaultCurrency("USD");
       setSelectedGroupId("");
+      const loadBaseCurrency = async () => {
+        const impactState = await window.electron.getBaseCurrencyImpactState();
+        setStoredCurrency(impactState.baseCurrency || "USD");
+      };
+      void loadBaseCurrency();
     }
     setError(null);
   }, [editingCategory, isOpen]);
@@ -78,7 +82,6 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
         const result = await window.electron.ipcRenderer.invoke("update-account", {
           id: editingCategory.id,
           name: categoryName.trim(),
-          currency: defaultCurrency,
         });
 
         if (result.success) {
@@ -119,7 +122,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
           name: categoryName.trim(),
           type: AccountType.Category,
           subtype: subtype,
-          currency: defaultCurrency,
+          currency: storedCurrency,
         });
 
         if (result.success && result.account) {
@@ -155,7 +158,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
     // Reset form state
     setCategoryName("");
     setCategoryType("expense");
-    setDefaultCurrency("USD");
+    setStoredCurrency("USD");
     setError(null);
     onClose();
   };
@@ -220,31 +223,6 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
             </p>
           </div>
           
-          <div>
-            <label
-              htmlFor="defaultCurrency"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Default Currency
-            </label>
-            <select
-              id="defaultCurrency"
-              value={defaultCurrency}
-              onChange={(e) => setDefaultCurrency(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            >
-              <option value="USD">USD</option>
-              <option value="CAD">CAD</option>
-              <option value="CNY">CNY</option>
-              <option value="EUR">EUR</option>
-              <option value="GBP">GBP</option>
-              <option value="JPY">JPY</option>
-            </select>
-            <p className="mt-1 text-xs text-gray-500">
-              This category can be used with any currency
-            </p>
-          </div>
-
           {!editingCategory && availableGroups.length > 0 && (
             <div>
               <label
