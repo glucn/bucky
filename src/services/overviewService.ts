@@ -1,7 +1,9 @@
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { OverviewDashboardPayload } from "../shared/overview";
+import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { investmentService } from "./investmentService";
+import { valuationConversionService } from "./valuationConversionService";
 
 function getLocalDateString(date: Date): string {
   const year = date.getFullYear();
@@ -24,15 +26,6 @@ function getRecentMonthKeys(asOfDate: string, count: number): string[] {
   }
 
   return result;
-}
-
-type FxRateMap = Map<string, { date: string; rate: number }>;
-
-function setLatestRate(map: FxRateMap, pair: string, date: string, rate: number): void {
-  const existing = map.get(pair);
-  if (!existing || date > existing.date) {
-    map.set(pair, { date, rate });
-  }
 }
 
 class OverviewService {
@@ -61,9 +54,51 @@ class OverviewService {
       orderBy: { createdAt: "asc" },
     });
 
-    const reportingCurrency = userAccounts[0]?.currency ?? "USD";
+    const reportingCurrency = (await appSettingsService.getBaseCurrency()) ?? "USD";
     let assetTotal = 0;
     let liabilityTotal = 0;
+    let netWorthUnavailable = false;
+
+    let usedEstimatedFxRate = false;
+    const missingFxPairs = new Set<string>();
+    const conversionRateCache = new Map<string, { rate: number | null; source: string; pair: string | null }>();
+
+    const convertToReportingCurrency = async (
+      amount: number,
+      fromCurrency: string
+    ): Promise<number | null> => {
+      const cacheKey = `${fromCurrency}->${reportingCurrency}@${effectiveAsOfDate}`;
+      let conversion = conversionRateCache.get(cacheKey);
+
+      if (!conversion) {
+        const result = await valuationConversionService.convertAmount({
+          amount: 1,
+          sourceCurrency: fromCurrency,
+          targetCurrency: reportingCurrency,
+          asOfDate: effectiveAsOfDate,
+        });
+
+        conversion = {
+          rate: result.rate,
+          source: result.source,
+          pair: result.pair,
+        };
+        conversionRateCache.set(cacheKey, conversion);
+      }
+
+      if (conversion.source === "latest_fallback") {
+        usedEstimatedFxRate = true;
+      }
+
+      if (conversion.source === "unavailable" || conversion.rate === null) {
+        if (conversion.pair) {
+          missingFxPairs.add(conversion.pair);
+        }
+        return null;
+      }
+
+      return amount * conversion.rate;
+    };
 
     for (const account of userAccounts) {
       let balance = await this.getBalanceAsOfDate(account.id, effectiveAsOfDate);
@@ -76,17 +111,24 @@ class OverviewService {
         balance = positionDetails.marketValue ?? positionDetails.costBasis;
       }
 
+      const convertedBalance = await convertToReportingCurrency(balance, account.currency);
+      if (convertedBalance === null) {
+        netWorthUnavailable = true;
+        continue;
+      }
+
       if (account.subtype === AccountSubtype.Liability) {
-        liabilityTotal += Math.abs(balance);
+        liabilityTotal += Math.abs(convertedBalance);
       } else {
-        assetTotal += balance;
+        assetTotal += convertedBalance;
       }
     }
 
     const monthKeys = getRecentMonthKeys(effectiveAsOfDate, 6);
-    const trendByMonth = new Map(
-      monthKeys.map((monthKey) => [monthKey, { monthKey, income: 0, expense: 0 }])
-    );
+    const trendByMonth = new Map<
+      string,
+      { monthKey: string; income: number | null; expense: number | null }
+    >(monthKeys.map((monthKey) => [monthKey, { monthKey, income: 0, expense: 0 }]));
 
     const firstMonthKey = monthKeys[0];
     const trendEntries = await databaseService.prismaClient.journalEntry.findMany({
@@ -120,114 +162,47 @@ class OverviewService {
         if (line.account.type !== AccountType.Category) {
           continue;
         }
-        if (line.currency !== reportingCurrency) {
+
+        const convertedAmount = await convertToReportingCurrency(Math.abs(line.amount), line.currency);
+        if (convertedAmount === null) {
+          if (line.account.subtype === AccountSubtype.Asset) {
+            month.income = null;
+          } else {
+            month.expense = null;
+          }
           continue;
         }
 
         if (line.account.subtype === AccountSubtype.Asset) {
-          month.income = round2(month.income + Math.abs(line.amount));
+          if (month.income !== null) {
+            month.income = round2(month.income + convertedAmount);
+          }
         } else {
-          month.expense = round2(month.expense + Math.abs(line.amount));
+          if (month.expense !== null) {
+            month.expense = round2(month.expense + convertedAmount);
+          }
         }
       }
     }
-
-    const fxEntries = await databaseService.prismaClient.journalEntry.findMany({
-      where: {
-        type: "currency_transfer",
-      },
-      include: {
-        lines: true,
-      },
-      orderBy: {
-        date: "asc",
-      },
-    });
-
-    const fxRatesAsOf: FxRateMap = new Map();
-    const fxRatesLatest: FxRateMap = new Map();
-
-    for (const entry of fxEntries) {
-      const linesByCurrency = new Map<string, { amount: number }>();
-
-      for (const line of entry.lines) {
-        if (!linesByCurrency.has(line.currency)) {
-          linesByCurrency.set(line.currency, { amount: line.amount });
-        }
-      }
-
-      const currencies = Array.from(linesByCurrency.keys());
-      if (currencies.length < 2) {
-        continue;
-      }
-
-      const fromCurrency = currencies[0];
-      const toCurrency = currencies[1];
-      const fromAmount = Math.abs(linesByCurrency.get(fromCurrency)!.amount);
-      const toAmount = Math.abs(linesByCurrency.get(toCurrency)!.amount);
-
-      if (fromAmount <= 0 || toAmount <= 0) {
-        continue;
-      }
-
-      const fromToRate = toAmount / fromAmount;
-      const toFromRate = fromAmount / toAmount;
-
-      const fromToPair = `${fromCurrency}->${toCurrency}`;
-      const toFromPair = `${toCurrency}->${fromCurrency}`;
-
-      setLatestRate(fxRatesLatest, fromToPair, entry.date, fromToRate);
-      setLatestRate(fxRatesLatest, toFromPair, entry.date, toFromRate);
-
-      if (entry.date <= effectiveAsOfDate) {
-        setLatestRate(fxRatesAsOf, fromToPair, entry.date, fromToRate);
-        setLatestRate(fxRatesAsOf, toFromPair, entry.date, toFromRate);
-      }
-    }
-
-    let usedEstimatedFxRate = false;
-    const missingFxPairs = new Set<string>();
-
-    const convertToReportingCurrency = (
-      amount: number,
-      fromCurrency: string
-    ): number | null => {
-      if (fromCurrency === reportingCurrency) {
-        return amount;
-      }
-
-      const pair = `${fromCurrency}->${reportingCurrency}`;
-      const asOfRate = fxRatesAsOf.get(pair);
-      if (asOfRate) {
-        return amount * asOfRate.rate;
-      }
-
-      const latestRate = fxRatesLatest.get(pair);
-      if (latestRate) {
-        usedEstimatedFxRate = true;
-        return amount * latestRate.rate;
-      }
-
-      missingFxPairs.add(pair);
-      return null;
-    };
 
     const allocationSlices: Array<{
       portfolioId: string;
       portfolioName: string;
-      amount: number;
-      ratio: number;
+      amount: number | null;
+      ratio: number | null;
     }> = [];
 
     const investmentPortfolios = await investmentService.getInvestmentPortfolios();
     for (const portfolio of investmentPortfolios) {
       const portfolioAccounts = await investmentService.getPortfolioAccounts(portfolio.id);
       let amount = 0;
+      let hasMissingConversion = false;
 
       for (const tradeCashAccount of portfolioAccounts.tradeCashAccounts) {
         const rawAmount = await this.getBalanceAsOfDate(tradeCashAccount.id, effectiveAsOfDate);
-        const convertedAmount = convertToReportingCurrency(rawAmount, tradeCashAccount.currency);
+        const convertedAmount = await convertToReportingCurrency(rawAmount, tradeCashAccount.currency);
         if (convertedAmount === null) {
+          hasMissingConversion = true;
           continue;
         }
         amount += convertedAmount;
@@ -239,30 +214,33 @@ class OverviewService {
           effectiveAsOfDate
         );
         const rawAmount = positionDetails.marketValue ?? positionDetails.costBasis;
-        const convertedAmount = convertToReportingCurrency(rawAmount, securityAccount.currency);
+        const convertedAmount = await convertToReportingCurrency(rawAmount, securityAccount.currency);
         if (convertedAmount === null) {
+          hasMissingConversion = true;
           continue;
         }
         amount += convertedAmount;
       }
 
       const roundedAmount = round2(amount);
-      if (roundedAmount <= 0) {
+      if (roundedAmount <= 0 && !hasMissingConversion) {
         continue;
       }
 
       allocationSlices.push({
         portfolioId: portfolio.id,
         portfolioName: portfolio.name,
-        amount: roundedAmount,
-        ratio: 0,
+        amount: hasMissingConversion ? null : roundedAmount,
+        ratio: null,
       });
     }
 
-    const allocationTotal = round2(
-      allocationSlices.reduce((total, slice) => total + slice.amount, 0)
-    );
-    const hasAllocationData = allocationSlices.length > 0 && allocationTotal > 0;
+    const hasAllocationConversionGap = allocationSlices.some((slice) => slice.amount === null);
+    const allocationTotal = hasAllocationConversionGap
+      ? null
+      : round2(allocationSlices.reduce((total, slice) => total + (slice.amount ?? 0), 0));
+    const hasAllocationData =
+      allocationSlices.length > 0 && (allocationTotal === null || allocationTotal > 0);
 
     const allocation = hasAllocationData
       ? {
@@ -271,13 +249,16 @@ class OverviewService {
           total: allocationTotal,
           slices: allocationSlices.map((slice) => ({
             ...slice,
-            ratio: round2(slice.amount / allocationTotal),
+            ratio:
+              allocationTotal === null || allocationTotal <= 0 || slice.amount === null
+                ? null
+                : round2(slice.amount / allocationTotal),
           })),
         }
       : {
           hasData: false,
           currency: reportingCurrency,
-          total: 0,
+          total: 0 as number | null,
           slices: [],
           emptyHintKey: "overview.investmentAllocation.empty",
         };
@@ -285,7 +266,7 @@ class OverviewService {
     return {
       asOfDate: effectiveAsOfDate,
       netWorth: {
-        amount: round2(assetTotal - liabilityTotal),
+        amount: netWorthUnavailable ? null : round2(assetTotal - liabilityTotal),
         currency: reportingCurrency,
       },
       incomeExpenseTrend6m: {

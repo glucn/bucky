@@ -1,13 +1,13 @@
 export type OverviewTrendMonth = {
   monthKey: string;
-  income: number;
-  expense: number;
+  income: number | null;
+  expense: number | null;
 };
 
 export type OverviewDashboardPayload = {
   asOfDate: string;
   netWorth: {
-    amount: number;
+    amount: number | null;
     currency: string;
   };
   incomeExpenseTrend6m: {
@@ -17,12 +17,12 @@ export type OverviewDashboardPayload = {
   investmentAllocation: {
     hasData: boolean;
     currency: string;
-    total: number;
+    total: number | null;
     slices: Array<{
       portfolioId: string;
       portfolioName: string;
-      amount: number;
-      ratio: number;
+      amount: number | null;
+      ratio: number | null;
     }>;
     emptyHintKey?: string;
   };

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
+import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { resetTestDatabase } from "./database.test.utils";
 import { investmentService } from "./investmentService";
@@ -82,6 +83,81 @@ describe("overviewService", () => {
 
     expect(payload.netWorth.currency).toBe("USD");
     expect(payload.netWorth.amount).toBe(60);
+  });
+
+  it("uses configured base currency for reporting totals", async () => {
+    const accounts = await databaseService.getAccounts(true);
+    const openingBalanceEquity = accounts.find((account) => account.name === "Opening Balances");
+    if (!openingBalanceEquity) {
+      throw new Error("Expected Opening Balances account to exist");
+    }
+
+    await appSettingsService.setBaseCurrency("CAD");
+
+    const usdWallet = await databaseService.createAccount({
+      name: "USD Wallet",
+      type: AccountType.User,
+      subtype: AccountSubtype.Asset,
+      currency: "USD",
+    });
+
+    const cadWallet = await databaseService.createAccount({
+      name: "CAD Wallet",
+      type: AccountType.User,
+      subtype: AccountSubtype.Asset,
+      currency: "CAD",
+    });
+
+    await databaseService.createJournalEntry({
+      date: dateOffset(-3),
+      amount: 100,
+      description: "Fund USD wallet",
+      fromAccountId: openingBalanceEquity.id,
+      toAccountId: usdWallet.id,
+    });
+
+    await databaseService.createJournalEntry({
+      date: dateOffset(-2),
+      description: "USD to CAD rate",
+      fromAccountId: usdWallet.id,
+      toAccountId: cadWallet.id,
+      type: "currency_transfer",
+      amountFrom: 100,
+      amountTo: 130,
+      exchangeRate: 1.3,
+    });
+
+    const payload = await overviewService.getOverviewDashboard(dateOffset(-1));
+
+    expect(payload.netWorth.currency).toBe("CAD");
+    expect(payload.netWorth.amount).toBe(130);
+  });
+
+  it("returns N/A net worth when required conversion is unavailable", async () => {
+    await appSettingsService.setBaseCurrency("USD");
+
+    const jpyWallet = await databaseService.createAccount({
+      name: "JPY Wallet",
+      type: AccountType.User,
+      subtype: AccountSubtype.Asset,
+      currency: "JPY",
+    });
+
+    await databaseService.createOpeningBalanceEntry(
+      [
+        {
+          accountId: jpyWallet.id,
+          balance: 10000,
+        },
+      ],
+      new Date(dateOffset(-1))
+    );
+
+    const payload = await overviewService.getOverviewDashboard();
+
+    expect(payload.netWorth.currency).toBe("USD");
+    expect(payload.netWorth.amount).toBeNull();
+    expect(payload.metadata.missingFxPairs).toContain("JPY->USD");
   });
 
   it("uses investment market value in net worth when a price exists", async () => {
@@ -350,8 +426,9 @@ describe("overviewService", () => {
 
     const payload = await overviewService.getOverviewDashboard(dateOffset(-1));
 
-    expect(payload.investmentAllocation.hasData).toBe(false);
-    expect(payload.investmentAllocation.total).toBe(0);
+    expect(payload.investmentAllocation.hasData).toBe(true);
+    expect(payload.investmentAllocation.total).toBeNull();
+    expect(payload.investmentAllocation.slices[0]?.amount).toBeNull();
     expect(payload.metadata.missingFxPairs).toContain("JPY->USD");
   });
 });
