@@ -5,6 +5,22 @@ import { databaseService } from './database';
 import { investmentService } from './investmentService';
 import { resetTestDatabase } from './database.test.utils';
 
+async function seedFxRate(
+  sourceCurrency: string,
+  targetCurrency: string,
+  marketDate: string,
+  rate: number
+): Promise<void> {
+  await databaseService.prismaClient.fxDailyRate.create({
+    data: {
+      sourceCurrency,
+      targetCurrency,
+      marketDate,
+      rate,
+    },
+  });
+}
+
 describe('InvestmentService - Multi-Currency Support', () => {
   beforeEach(async () => {
     await resetTestDatabase();
@@ -167,13 +183,6 @@ describe('InvestmentService - Multi-Currency Support', () => {
     it('converts cash summary to configured base currency', async () => {
       await appSettingsService.setBaseCurrency('CAD');
 
-      const cadWallet = await databaseService.createAccount({
-        name: 'CAD Wallet',
-        type: AccountType.User,
-        subtype: AccountSubtype.Asset,
-        currency: 'CAD',
-      });
-
       const usdWallet = await databaseService.createAccount({
         name: 'USD Wallet',
         type: AccountType.User,
@@ -204,27 +213,8 @@ describe('InvestmentService - Multi-Currency Support', () => {
         new Date('2025-01-10')
       );
 
-      await databaseService.createJournalEntry({
-        date: '2025-01-15',
-        description: 'USD to CAD rate',
-        fromAccountId: usdWallet.id,
-        toAccountId: cadWallet.id,
-        type: 'currency_transfer',
-        amountFrom: 100,
-        amountTo: 130,
-        exchangeRate: 1.3,
-      });
-
-      await databaseService.createJournalEntry({
-        date: '2025-01-15',
-        description: 'EUR to CAD rate',
-        fromAccountId: eurWallet.id,
-        toAccountId: cadWallet.id,
-        type: 'currency_transfer',
-        amountFrom: 100,
-        amountTo: 150,
-        exchangeRate: 1.5,
-      });
+      await seedFxRate('USD', 'CAD', '2025-01-15', 1.3);
+      await seedFxRate('EUR', 'CAD', '2025-01-15', 1.5);
 
       const portfolioValue = await investmentService.getPortfolioValue(portfolio.group.id);
 
@@ -263,13 +253,6 @@ describe('InvestmentService - Multi-Currency Support', () => {
         throw new Error('Expected Opening Balances account to exist');
       }
 
-      const cadWallet = await databaseService.createAccount({
-        name: 'CAD Wallet',
-        type: AccountType.User,
-        subtype: AccountSubtype.Asset,
-        currency: 'CAD',
-      });
-
       const usdWallet = await databaseService.createAccount({
         name: 'USD Wallet',
         type: AccountType.User,
@@ -277,16 +260,7 @@ describe('InvestmentService - Multi-Currency Support', () => {
         currency: 'USD',
       });
 
-      await databaseService.createJournalEntry({
-        date: '2025-01-15',
-        description: 'USD to CAD rate',
-        fromAccountId: usdWallet.id,
-        toAccountId: cadWallet.id,
-        type: 'currency_transfer',
-        amountFrom: 100,
-        amountTo: 130,
-        exchangeRate: 1.3,
-      });
+      await seedFxRate('USD', 'CAD', '2025-01-15', 1.3);
 
       const portfolio = await investmentService.createInvestmentPortfolio('Brokerage', 'USD');
       await databaseService.createOpeningBalanceEntry(

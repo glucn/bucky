@@ -19,6 +19,22 @@ function monthDateOffset(months: number, day: number = 10): string {
   return date.toISOString().slice(0, 10);
 }
 
+async function seedFxRate(
+  sourceCurrency: string,
+  targetCurrency: string,
+  marketDate: string,
+  rate: number
+): Promise<void> {
+  await databaseService.prismaClient.fxDailyRate.create({
+    data: {
+      sourceCurrency,
+      targetCurrency,
+      marketDate,
+      rate,
+    },
+  });
+}
+
 describe("overviewService", () => {
   beforeEach(async () => {
     await resetTestDatabase();
@@ -101,13 +117,6 @@ describe("overviewService", () => {
       currency: "USD",
     });
 
-    const cadWallet = await databaseService.createAccount({
-      name: "CAD Wallet",
-      type: AccountType.User,
-      subtype: AccountSubtype.Asset,
-      currency: "CAD",
-    });
-
     await databaseService.createJournalEntry({
       date: dateOffset(-3),
       amount: 100,
@@ -116,16 +125,7 @@ describe("overviewService", () => {
       toAccountId: usdWallet.id,
     });
 
-    await databaseService.createJournalEntry({
-      date: dateOffset(-2),
-      description: "USD to CAD rate",
-      fromAccountId: usdWallet.id,
-      toAccountId: cadWallet.id,
-      type: "currency_transfer",
-      amountFrom: 100,
-      amountTo: 130,
-      exchangeRate: 1.3,
-    });
+    await seedFxRate("USD", "CAD", dateOffset(-2), 1.3);
 
     const payload = await overviewService.getOverviewDashboard(dateOffset(-1));
 
@@ -351,27 +351,8 @@ describe("overviewService", () => {
       currency: "EUR",
     });
 
-    await databaseService.createJournalEntry({
-      date: dateOffset(-7),
-      description: "USD to EUR older rate",
-      fromAccountId: openingBalanceEquity.id,
-      toAccountId: eurWallet.id,
-      type: "currency_transfer",
-      amountFrom: 100,
-      amountTo: 80,
-      exchangeRate: 0.8,
-    });
-
-    await databaseService.createJournalEntry({
-      date: dateOffset(-3),
-      description: "USD to EUR latest rate",
-      fromAccountId: openingBalanceEquity.id,
-      toAccountId: eurWallet.id,
-      type: "currency_transfer",
-      amountFrom: 100,
-      amountTo: 90,
-      exchangeRate: 0.9,
-    });
+    await seedFxRate("USD", "EUR", dateOffset(-7), 0.8);
+    await seedFxRate("USD", "EUR", dateOffset(-3), 0.9);
 
     const euroPortfolio = await investmentService.createInvestmentPortfolio("Euro", "EUR");
     await investmentService.depositCash(

@@ -110,6 +110,12 @@
   - Acceptance: `requirements.md`, `design.md`, and `tasks.md` are aligned with agreed behavior.
   - Acceptance: implementation deviations are documented explicitly (if any).
 
+- [x] 20. Fix FX valuation source drift (post-BL-019 bugfix)
+  - Acceptance: valuation conversion for overview/investment totals reads canonical `FxDailyRate` data.
+  - Acceptance: valuation conversion no longer depends on `currency_transfer` journal entries.
+  - Acceptance: service tests cover as-of, latest fallback, and inverse-rate behavior via `FxDailyRate` inputs.
+
 ## Implementation Deviations
 
-- None identified yet.
+- Post-BL-019 fix applied: valuation conversion source was corrected from `currency_transfer` journal entries to canonical `FxDailyRate` per design.
+- Learning note for future agents: `doc/agent-learnings/source-of-truth-guardrails.md`.

@@ -24,7 +24,9 @@ const setLatestRate = (map: FxRateMap, pair: string, date: string, rate: number)
 class ValuationConversionService {
   constructor(
     private readonly deps: {
-      findFxEntries: () => Promise<Array<{ date: string; lines: Array<{ currency: string; amount: number }> }>>;
+      findFxRates: () => Promise<
+        Array<{ sourceCurrency: string; targetCurrency: string; marketDate: string; rate: number }>
+      >;
     }
   ) {}
 
@@ -43,45 +45,28 @@ class ValuationConversionService {
       };
     }
 
-    const fxEntries = await this.deps.findFxEntries();
+    const fxRates = await this.deps.findFxRates();
 
     const fxRatesAsOf: FxRateMap = new Map();
     const fxRatesLatest: FxRateMap = new Map();
 
-    for (const entry of fxEntries) {
-      const linesByCurrency = new Map<string, { amount: number }>();
-      for (const line of entry.lines) {
-        if (!linesByCurrency.has(line.currency)) {
-          linesByCurrency.set(line.currency, { amount: line.amount });
-        }
-      }
-
-      const currencies = Array.from(linesByCurrency.keys());
-      if (currencies.length < 2) {
+    for (const entry of fxRates) {
+      if (entry.rate <= 0) {
         continue;
       }
 
-      const fromCurrency = currencies[0];
-      const toCurrency = currencies[1];
-      const fromAmount = Math.abs(linesByCurrency.get(fromCurrency)!.amount);
-      const toAmount = Math.abs(linesByCurrency.get(toCurrency)!.amount);
+      const fromToRate = entry.rate;
+      const toFromRate = 1 / entry.rate;
 
-      if (fromAmount <= 0 || toAmount <= 0) {
-        continue;
-      }
+      const fromToPair = toPairKey(entry.sourceCurrency, entry.targetCurrency);
+      const toFromPair = toPairKey(entry.targetCurrency, entry.sourceCurrency);
 
-      const fromToRate = toAmount / fromAmount;
-      const toFromRate = fromAmount / toAmount;
+      setLatestRate(fxRatesLatest, fromToPair, entry.marketDate, fromToRate);
+      setLatestRate(fxRatesLatest, toFromPair, entry.marketDate, toFromRate);
 
-      const fromToPair = toPairKey(fromCurrency, toCurrency);
-      const toFromPair = toPairKey(toCurrency, fromCurrency);
-
-      setLatestRate(fxRatesLatest, fromToPair, entry.date, fromToRate);
-      setLatestRate(fxRatesLatest, toFromPair, entry.date, toFromRate);
-
-      if (entry.date <= input.asOfDate) {
-        setLatestRate(fxRatesAsOf, fromToPair, entry.date, fromToRate);
-        setLatestRate(fxRatesAsOf, toFromPair, entry.date, toFromRate);
+      if (entry.marketDate <= input.asOfDate) {
+        setLatestRate(fxRatesAsOf, fromToPair, entry.marketDate, fromToRate);
+        setLatestRate(fxRatesAsOf, toFromPair, entry.marketDate, toFromRate);
       }
     }
 
@@ -119,14 +104,18 @@ export const createValuationConversionService = (
   deps: Partial<ConstructorParameters<typeof ValuationConversionService>[0]> = {}
 ) =>
   new ValuationConversionService({
-    findFxEntries:
-      deps.findFxEntries ||
+    findFxRates:
+      deps.findFxRates ||
       (async () =>
-        databaseService.prismaClient.journalEntry.findMany({
-          where: { type: "currency_transfer" },
-          include: { lines: true },
-          orderBy: { date: "asc" },
-        }) as any),
+        databaseService.prismaClient.fxDailyRate.findMany({
+          orderBy: { marketDate: "asc" },
+          select: {
+            sourceCurrency: true,
+            targetCurrency: true,
+            marketDate: true,
+            rate: true,
+          },
+        })),
   });
 
 export const valuationConversionService = createValuationConversionService();

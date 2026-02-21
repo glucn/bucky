@@ -8,25 +8,20 @@ describe("valuationConversionService", () => {
 
   it("uses as-of date rate first", async () => {
     const valuationConversionService = createValuationConversionService({
-      findFxEntries: async () =>
-        [
-      {
-        date: "2026-02-01",
-        type: "currency_transfer",
-        lines: [
-          { currency: "USD", amount: -100 } as any,
-          { currency: "CAD", amount: 130 } as any,
-        ],
-      },
-      {
-        date: "2026-02-10",
-        type: "currency_transfer",
-        lines: [
-          { currency: "USD", amount: -100 } as any,
-          { currency: "CAD", amount: 140 } as any,
-        ],
-      },
-    ] as any,
+      findFxRates: async () => [
+        {
+          sourceCurrency: "USD",
+          targetCurrency: "CAD",
+          marketDate: "2026-02-01",
+          rate: 1.3,
+        },
+        {
+          sourceCurrency: "USD",
+          targetCurrency: "CAD",
+          marketDate: "2026-02-10",
+          rate: 1.4,
+        },
+      ],
     });
 
     const result = await valuationConversionService.convertAmount({
@@ -46,17 +41,14 @@ describe("valuationConversionService", () => {
 
   it("falls back to latest rate when as-of rate unavailable", async () => {
     const valuationConversionService = createValuationConversionService({
-      findFxEntries: async () =>
-        [
-      {
-        date: "2026-02-10",
-        type: "currency_transfer",
-        lines: [
-          { currency: "USD", amount: -100 } as any,
-          { currency: "CAD", amount: 140 } as any,
-        ],
-      },
-    ] as any,
+      findFxRates: async () => [
+        {
+          sourceCurrency: "USD",
+          targetCurrency: "CAD",
+          marketDate: "2026-02-10",
+          rate: 1.4,
+        },
+      ],
     });
 
     const result = await valuationConversionService.convertAmount({
@@ -93,7 +85,7 @@ describe("valuationConversionService", () => {
 
   it("returns unavailable metadata when conversion pair is missing", async () => {
     const valuationConversionService = createValuationConversionService({
-      findFxEntries: async () => [] as any,
+      findFxRates: async () => [],
     });
 
     const result = await valuationConversionService.convertAmount({
@@ -109,5 +101,30 @@ describe("valuationConversionService", () => {
       source: "unavailable",
       pair: "USD->CAD",
     });
+  });
+
+  it("uses inverse rate when only reverse pair exists", async () => {
+    const valuationConversionService = createValuationConversionService({
+      findFxRates: async () => [
+        {
+          sourceCurrency: "USD",
+          targetCurrency: "CAD",
+          marketDate: "2026-02-10",
+          rate: 1.4,
+        },
+      ],
+    });
+
+    const result = await valuationConversionService.convertAmount({
+      amount: 140,
+      sourceCurrency: "CAD",
+      targetCurrency: "USD",
+      asOfDate: "2026-02-10",
+    });
+
+    expect(result.source).toBe("as_of");
+    expect(result.pair).toBe("CAD->USD");
+    expect(result.rate).toBeCloseTo(1 / 1.4, 10);
+    expect(result.convertedAmount).toBeCloseTo(100, 10);
   });
 });
