@@ -55,22 +55,22 @@
   - Acceptance: same-currency conversion returns implicit `1.0`.
   - Acceptance: conversion result includes enough metadata for `N/A` decisions (without per-value fallback marker UI).
 
-- [ ] 9. Refactor overview totals to base-currency-first aggregation
+- [x] 9. Refactor overview totals to base-currency-first aggregation
   - Acceptance: overview reporting currency source is `baseCurrency` (not first user account currency).
   - Acceptance: compact summary totals become base-converted or `N/A` if any required conversion is unavailable.
   - Acceptance: trend/allocation logic follows same conversion policy and preserves accounting correctness.
 
-- [ ] 10. Refactor investment portfolio valuation aggregation
+- [x] 10. Refactor investment portfolio valuation aggregation
   - Acceptance: `getPortfolioValue` no longer directly sums mixed-currency amounts.
   - Acceptance: summary totals return base-converted values or `N/A` under missing conversion.
   - Acceptance: native-currency breakdown remains available for detail surfaces.
 
-- [ ] 11. Apply summary-vs-detail display policy in portfolio pages
+- [x] 11. Apply summary-vs-detail display policy in portfolio pages
   - Acceptance: compact totals use base-currency single-value display.
   - Acceptance: detail-capable tables/sections show `Value (Base)` then `Value (Native)`.
   - Acceptance: if any row is unconvertible, section base aggregate is `N/A` and native aggregate breakdown remains visible.
 
-- [ ] 12. Apply display policy in dashboard and performance/position surfaces
+- [/] 12. Apply display policy in dashboard and performance/position surfaces
   - Acceptance: dashboard summary cards use base-converted values or `N/A`.
   - Acceptance: performance/position detail sections adopt base + native pattern where space allows.
   - Acceptance: affected screens keep clear non-blocking warning context while reconciliation is pending.

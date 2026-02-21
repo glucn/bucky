@@ -7,22 +7,26 @@ import { formatValuationAmount } from "../utils/valuationFormatting";
 
 interface Position {
   tickerSymbol: string;
+  currency: string;
   quantity: number;
   costBasis: number;
+  costBasisBase: number | null;
   costPerShare: number;
   marketPrice: number | null;
   marketValue: number | null;
+  marketValueBase: number | null;
   unrealizedGain: number | null;
   unrealizedGainPercent: number | null;
 }
 
 interface PortfolioValue {
-  totalCostBasis: number;
-  totalMarketValue: number;
-  totalUnrealizedGain: number;
-  totalUnrealizedGainPercent: number;
-  cashBalance: number;
+  totalCostBasis: number | null;
+  totalMarketValue: number | null;
+  totalUnrealizedGain: number | null;
+  totalUnrealizedGainPercent: number | null;
+  cashBalance: number | null;
   cashBalancesByCurrency: Record<string, number>;
+  securityMarketValueByCurrency: Record<string, number>;
 }
 
 type TransactionType = 'buy' | 'sell' | 'dividend' | 'dividend_reinvest' | 'interest' | 'fee' | 'cash_deposit' | 'cash_withdrawal';
@@ -152,6 +156,13 @@ export const PortfolioDetailsPage: React.FC = () => {
     return `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%`;
   };
 
+  const formatSummaryValue = (amount: number | null): string => {
+    if (amount === null) {
+      return "N/A";
+    }
+    return formatValuationAmount(amount, baseCurrency);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -169,7 +180,9 @@ export const PortfolioDetailsPage: React.FC = () => {
   }
 
   const totalValue = portfolioValue
-    ? portfolioValue.totalMarketValue + portfolioValue.cashBalance
+    ? portfolioValue.totalMarketValue === null || portfolioValue.cashBalance === null
+      ? null
+      : portfolioValue.totalMarketValue + portfolioValue.cashBalance
     : 0;
 
   return (
@@ -201,7 +214,7 @@ export const PortfolioDetailsPage: React.FC = () => {
               <div>
                 <p className="text-sm text-gray-500">Total Value</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatValuationAmount(totalValue, baseCurrency)}
+                  {formatSummaryValue(totalValue)}
                 </p>
               </div>
               <div>
@@ -209,21 +222,27 @@ export const PortfolioDetailsPage: React.FC = () => {
                 <div className="text-xl font-semibold text-gray-900">
                   {portfolioValue.cashBalancesByCurrency && Object.keys(portfolioValue.cashBalancesByCurrency).length > 1 ? (
                     <div>
-                      <div>{formatValuationAmount(portfolioValue.cashBalance, baseCurrency)}</div>
+                      <div>{formatSummaryValue(portfolioValue.cashBalance)}</div>
                       <div className="text-sm text-gray-600 font-normal">
                         {formatMultiCurrencyBalances(portfolioValue.cashBalancesByCurrency)}
                       </div>
                     </div>
                   ) : (
-                    formatValuationAmount(portfolioValue.cashBalance, baseCurrency)
+                    formatSummaryValue(portfolioValue.cashBalance)
                   )}
                 </div>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Securities Value</p>
-                <p className="text-xl font-semibold text-gray-900">
-                  {formatValuationAmount(portfolioValue.totalMarketValue, baseCurrency)}
-                </p>
+                <div className="text-xl font-semibold text-gray-900">
+                  <div>{formatSummaryValue(portfolioValue.totalMarketValue)}</div>
+                  {portfolioValue.securityMarketValueByCurrency &&
+                  Object.keys(portfolioValue.securityMarketValueByCurrency).length > 0 ? (
+                    <div className="text-sm text-gray-600 font-normal">
+                      {formatMultiCurrencyBalances(portfolioValue.securityMarketValueByCurrency)}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
             <div className="border-t pt-4">
@@ -231,14 +250,16 @@ export const PortfolioDetailsPage: React.FC = () => {
                 <div>
                   <p className="text-sm text-gray-500">Unrealized Gain/Loss</p>
                   <p className={`text-xl font-semibold ${
-                    portfolioValue.totalUnrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
+                    (portfolioValue.totalUnrealizedGain ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
-                    {formatValuationAmount(portfolioValue.totalUnrealizedGain, baseCurrency)}
+                    {formatSummaryValue(portfolioValue.totalUnrealizedGain)}
                   </p>
                   <p className={`text-sm ${
-                    portfolioValue.totalUnrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
+                    (portfolioValue.totalUnrealizedGain ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
-                    {formatPercent(portfolioValue.totalUnrealizedGainPercent)}
+                    {portfolioValue.totalUnrealizedGainPercent === null
+                      ? 'N/A'
+                      : formatPercent(portfolioValue.totalUnrealizedGainPercent)}
                   </p>
                 </div>
                 <div>
@@ -281,16 +302,13 @@ export const PortfolioDetailsPage: React.FC = () => {
                     Quantity
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cost Basis
+                    Value (Base)
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Market Price
+                    Value (Native)
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Market Value
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Gain/Loss
+                    Gain/Loss (Native)
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Return %
@@ -313,17 +331,16 @@ export const PortfolioDetailsPage: React.FC = () => {
                       {position.quantity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                      {formatValuationAmount(position.costBasis, baseCurrency, { disambiguate: true })}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                      {position.marketPrice !== null
-                        ? formatValuationAmount(position.marketPrice, baseCurrency, { disambiguate: true })
-                        : '-'}
+                      {position.marketValueBase !== null
+                        ? formatValuationAmount(position.marketValueBase, baseCurrency, { disambiguate: true })
+                        : position.costBasisBase !== null
+                          ? formatValuationAmount(position.costBasisBase, baseCurrency, { disambiguate: true })
+                          : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
                       {position.marketValue !== null
-                        ? formatValuationAmount(position.marketValue, baseCurrency, { disambiguate: true })
-                        : formatValuationAmount(position.costBasis, baseCurrency, { disambiguate: true })}
+                        ? formatValuationAmount(position.marketValue, position.currency, { disambiguate: true })
+                        : formatValuationAmount(position.costBasis, position.currency, { disambiguate: true })}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-medium ${
                       (position.unrealizedGain || 0) >= 0 ? 'text-green-600' : 'text-red-600'

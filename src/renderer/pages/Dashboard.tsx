@@ -3,7 +3,10 @@ import { OverviewDashboardPayload } from "../../shared/overview";
 import { useAccounts } from "../context/AccountsContext";
 import { formatCurrencyAmount } from "../utils/currencyUtils";
 
-function formatMoney(amount: number, currency: string): string {
+function formatMoney(amount: number | null, currency: string): string {
+  if (amount === null) {
+    return "N/A";
+  }
   return formatCurrencyAmount(amount, currency, {
     showSymbol: true,
     showCode: true,

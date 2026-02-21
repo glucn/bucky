@@ -129,6 +129,52 @@ describe("Dashboard", () => {
     });
   });
 
+  it("renders N/A for summary and trend values when conversions are unavailable", async () => {
+    mockGetOverviewDashboard.mockResolvedValue({
+      asOfDate: "2026-02-13",
+      netWorth: {
+        currency: "USD",
+        amount: null,
+      },
+      incomeExpenseTrend6m: {
+        currency: "USD",
+        months: [
+          { monthKey: "2025-09", income: null, expense: null },
+          { monthKey: "2025-10", income: 100, expense: 50 },
+          { monthKey: "2025-11", income: 100, expense: 50 },
+          { monthKey: "2025-12", income: 100, expense: 50 },
+          { monthKey: "2026-01", income: 100, expense: 50 },
+          { monthKey: "2026-02", income: 100, expense: 50 },
+        ],
+      },
+      investmentAllocation: {
+        hasData: true,
+        currency: "USD",
+        total: null,
+        slices: [
+          {
+            portfolioId: "p1",
+            portfolioName: "Core",
+            amount: null,
+            ratio: null,
+          },
+        ],
+      },
+      metadata: {
+        usedEstimatedFxRate: false,
+        missingFxPairs: ["JPY->USD"],
+      },
+    });
+
+    render(<Dashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-net-worth-card")).toBeTruthy();
+    });
+
+    expect(screen.getAllByText("N/A").length).toBeGreaterThanOrEqual(4);
+  });
+
   it("renders error state when overview request fails", async () => {
     mockGetOverviewDashboard.mockRejectedValue(new Error("boom"));
 

@@ -11,11 +11,11 @@ interface Portfolio {
 }
 
 interface PortfolioValue {
-  totalCostBasis: number;
-  totalMarketValue: number;
-  totalUnrealizedGain: number;
-  totalUnrealizedGainPercent: number;
-  cashBalance: number;
+  totalCostBasis: number | null;
+  totalMarketValue: number | null;
+  totalUnrealizedGain: number | null;
+  totalUnrealizedGainPercent: number | null;
+  cashBalance: number | null;
 }
 
 export const InvestmentPortfolios: React.FC = () => {
@@ -112,6 +112,13 @@ export const InvestmentPortfolios: React.FC = () => {
     return `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%`;
   };
 
+  const formatSummaryValue = (amount: number | null): string => {
+    if (amount === null) {
+      return "N/A";
+    }
+    return formatValuationAmount(amount, baseCurrency);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -151,9 +158,15 @@ export const InvestmentPortfolios: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {portfolios.map((portfolio) => {
               const value = portfolioValues[portfolio.id];
-              const totalValue = value ? value.totalMarketValue + value.cashBalance : 0;
-              const unrealizedGain = value?.totalUnrealizedGain || 0;
-              const unrealizedGainPercent = value?.totalUnrealizedGainPercent || 0;
+              const hasIncompleteSummary =
+                !!value && (value.totalMarketValue === null || value.cashBalance === null);
+              const totalValue = value
+                ? hasIncompleteSummary
+                  ? null
+                  : (value.totalMarketValue ?? 0) + (value.cashBalance ?? 0)
+                : 0;
+              const unrealizedGain = value?.totalUnrealizedGain ?? 0;
+              const unrealizedGainPercent = value?.totalUnrealizedGainPercent;
 
               return (
                 <div
@@ -169,7 +182,7 @@ export const InvestmentPortfolios: React.FC = () => {
                     <div>
                       <p className="text-sm text-gray-500">Total Value</p>
                       <p className="text-2xl font-bold text-gray-900">
-                         {formatValuationAmount(totalValue, baseCurrency)}
+                        {formatSummaryValue(totalValue)}
                       </p>
                     </div>
                     
@@ -178,7 +191,10 @@ export const InvestmentPortfolios: React.FC = () => {
                       <p className={`text-lg font-semibold ${
                         unrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
                       }`}>
-                         {formatValuationAmount(unrealizedGain, baseCurrency)} ({formatPercent(unrealizedGainPercent)})
+                        {formatSummaryValue(value?.totalUnrealizedGain ?? 0)}
+                        {unrealizedGainPercent !== null && unrealizedGainPercent !== undefined
+                          ? ` (${formatPercent(unrealizedGainPercent)})`
+                          : ""}
                       </p>
                     </div>
                     
@@ -186,11 +202,11 @@ export const InvestmentPortfolios: React.FC = () => {
                       <div className="pt-3 border-t border-gray-200">
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-500">Cash:</span>
-                           <span className="font-medium">{formatValuationAmount(value.cashBalance, baseCurrency)}</span>
+                          <span className="font-medium">{formatSummaryValue(value.cashBalance)}</span>
                         </div>
                         <div className="flex justify-between text-sm mt-1">
                           <span className="text-gray-500">Securities:</span>
-                           <span className="font-medium">{formatValuationAmount(value.totalMarketValue, baseCurrency)}</span>
+                          <span className="font-medium">{formatSummaryValue(value.totalMarketValue)}</span>
                         </div>
                       </div>
                     )}
