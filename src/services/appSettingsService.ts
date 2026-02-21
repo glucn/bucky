@@ -23,6 +23,57 @@ export const ALLOWED_BASE_CURRENCIES = [
 
 const ALLOWED_BASE_CURRENCY_SET = new Set<string>(ALLOWED_BASE_CURRENCIES);
 
+const BASE_CURRENCY_RECONCILIATION_KEY = "baseCurrencyReconciliationState";
+
+export type BaseCurrencyReconciliationState = {
+  targetBaseCurrency: string;
+  status: "pending" | "resolved";
+  changedAt: string;
+  resolvedAt?: string;
+};
+
+const isIsoDateString = (value: string): boolean => {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp);
+};
+
+const parseBaseCurrencyReconciliationState = (
+  value: JsonValue | null
+): BaseCurrencyReconciliationState | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, JsonValue>;
+  const targetBaseCurrency = record.targetBaseCurrency;
+  const status = record.status;
+  const changedAt = record.changedAt;
+  const resolvedAt = record.resolvedAt;
+
+  if (typeof targetBaseCurrency !== "string" || !BASE_CURRENCY_PATTERN.test(targetBaseCurrency)) {
+    return null;
+  }
+
+  if (status !== "pending" && status !== "resolved") {
+    return null;
+  }
+
+  if (typeof changedAt !== "string" || !isIsoDateString(changedAt)) {
+    return null;
+  }
+
+  if (resolvedAt !== undefined && (typeof resolvedAt !== "string" || !isIsoDateString(resolvedAt))) {
+    return null;
+  }
+
+  return {
+    targetBaseCurrency,
+    status,
+    changedAt,
+    ...(resolvedAt ? { resolvedAt } : {}),
+  };
+};
+
 class AppSettingsService {
   async getAppSetting(key: string): Promise<JsonValue | null> {
     const row = await databaseService.prismaClient.appSetting.findUnique({
@@ -51,6 +102,20 @@ class AppSettingsService {
         jsonValue: JSON.stringify(value),
       },
     });
+  }
+
+  async getBaseCurrencyReconciliationState(): Promise<BaseCurrencyReconciliationState | null> {
+    const value = await this.getAppSetting(BASE_CURRENCY_RECONCILIATION_KEY);
+    return parseBaseCurrencyReconciliationState(value);
+  }
+
+  async setBaseCurrencyReconciliationState(state: BaseCurrencyReconciliationState): Promise<void> {
+    const existing = await this.getBaseCurrencyReconciliationState();
+    if (existing && JSON.stringify(existing) === JSON.stringify(state)) {
+      return;
+    }
+
+    await this.setAppSetting(BASE_CURRENCY_RECONCILIATION_KEY, state as unknown as JsonValue);
   }
 
   async getBaseCurrency(): Promise<string | null> {

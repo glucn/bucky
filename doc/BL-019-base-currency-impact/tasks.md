@@ -15,12 +15,12 @@
 
 ## Tasks
 
-- [ ] 1. Add persisted reconciliation state contract in app settings service
+- [x] 1. Add persisted reconciliation state contract in app settings service
   - Acceptance: add typed read/write helpers for `baseCurrencyReconciliationState`.
   - Acceptance: state shape supports `targetBaseCurrency`, `status` (`pending | resolved`), `changedAt`, optional `resolvedAt`.
   - Acceptance: service tests cover valid parse, invalid payload fallback, and idempotent writes.
 
-- [ ] 2. Mark reconciliation pending on base currency change
+- [/] 2. Mark reconciliation pending on base currency change
   - Acceptance: changing base currency value sets reconciliation state to `pending` for the new target currency.
   - Acceptance: saving unchanged base currency does not reset timestamps or re-open pending state.
   - Acceptance: accounting data (accounts/journal lines) is not mutated by this operation.
