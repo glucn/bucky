@@ -65,7 +65,7 @@ class InvestmentService {
 
     // Create the trade cash Account linked to the group
     const tradeCashAccount = await databaseService.createAccount({
-      name: `Trade Cash - ${name}`,
+      name: `Trade Cash - ${name} (${currency})`,
       type: AccountType.User,
       subtype: AccountSubtype.Asset,
       currency,

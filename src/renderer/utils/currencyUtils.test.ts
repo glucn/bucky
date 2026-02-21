@@ -8,6 +8,7 @@ import {
   formatNormalizedBalance,
   formatCurrencyAmount,
   formatCurrencyAmountDetail,
+  formatAccountLabelWithCurrency,
   getCurrencySymbol,
 } from './currencyUtils';
 import { AccountType, AccountSubtype } from '../../shared/accountTypes';
@@ -403,6 +404,24 @@ describe('currencyUtils - Normalized Formatting', () => {
       expect(result.startsWith('-')).toBe(true);
       expect(result).toContain('$');
       expect(result).not.toContain('$-');
+    });
+  });
+
+  describe('Account label formatting', () => {
+    it('appends currency when account name has no suffix', () => {
+      expect(formatAccountLabelWithCurrency('Main Checking', 'USD')).toBe('Main Checking (USD)');
+    });
+
+    it('does not duplicate currency when name already ends with same suffix', () => {
+      expect(formatAccountLabelWithCurrency('Trade Cash - Growth (USD)', 'USD')).toBe(
+        'Trade Cash - Growth (USD)'
+      );
+    });
+
+    it('appends currency when name ends with a different suffix', () => {
+      expect(formatAccountLabelWithCurrency('Trade Cash - Growth (CAD)', 'USD')).toBe(
+        'Trade Cash - Growth (CAD) (USD)'
+      );
     });
   });
 });

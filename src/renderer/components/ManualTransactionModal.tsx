@@ -418,8 +418,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                         fromAccount.currency,
                         fromAccount.type,
                         fromAccount.subtype as AccountSubtype,
-                        true,
-                        { showSymbol: true, showCode: false }
+                        true
                       )}
                     </span>
                   </div>
@@ -433,8 +432,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
                         toAccount.currency,
                         toAccount.type,
                         toAccount.subtype as AccountSubtype,
-                        false,
-                        { showSymbol: true, showCode: false }
+                        false
                       )}
                     </span>
                   </div>

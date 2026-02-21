@@ -37,7 +37,7 @@ describe('InvestmentService - Multi-Currency Support', () => {
       expect(result.group.name).toBe('Euro Portfolio');
       expect(result.tradeCashAccount).toBeDefined();
       expect(result.tradeCashAccount.currency).toBe('EUR');
-      expect(result.tradeCashAccount.name).toBe('Trade Cash - Euro Portfolio');
+      expect(result.tradeCashAccount.name).toBe('Trade Cash - Euro Portfolio (EUR)');
     });
 
     it('should create portfolio with default USD currency when not specified', async () => {

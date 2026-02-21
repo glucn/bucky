@@ -63,6 +63,19 @@ export function formatCurrencyAmountCode(amount: number, currency: string): stri
   return formatCurrencyAmountWithPreset(amount, currency, 'code');
 }
 
+export function formatAccountLabelWithCurrency(accountName: string, currency: string): string {
+  const code = currency.toUpperCase();
+  const normalizedName = accountName.trim();
+  const suffixRegex = /\(([A-Z]{3})\)\s*$/;
+  const match = normalizedName.match(suffixRegex);
+
+  if (match && match[1] === code) {
+    return normalizedName;
+  }
+
+  return `${normalizedName} (${code})`;
+}
+
 type CurrencyPreset = 'summary' | 'code';
 
 /**

@@ -22,7 +22,7 @@ describe("InvestmentService - Portfolio Management", () => {
 
       // Verify trade cash account was created
       expect(result.tradeCashAccount).toBeDefined();
-      expect(result.tradeCashAccount.name).toBe("Trade Cash - Test Portfolio");
+      expect(result.tradeCashAccount.name).toBe("Trade Cash - Test Portfolio (USD)");
       expect(result.tradeCashAccount.type).toBe("user");
       expect(result.tradeCashAccount.subtype).toBe("asset");
       expect(result.tradeCashAccount.currency).toBe("USD");
@@ -122,7 +122,7 @@ describe("InvestmentService - Portfolio Management", () => {
       const accounts = await investmentService.getPortfolioAccounts(group.id);
 
       expect(accounts.tradeCash).toBeDefined();
-      expect(accounts.tradeCash.name).toBe("Trade Cash - Test Portfolio");
+      expect(accounts.tradeCash.name).toBe("Trade Cash - Test Portfolio (USD)");
       expect(accounts.securities).toEqual([]);
     });
 

@@ -2,7 +2,10 @@ import React, { useState, useEffect } from "react";
 import { useAccounts } from "../context/AccountsContext";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { normalizeTransactionAmount } from "../utils/displayNormalization";
-import { formatCurrencyAmount } from "../utils/currencyUtils";
+import {
+  formatAccountLabelWithCurrency,
+  formatCurrencyAmountDetail,
+} from "../utils/currencyUtils";
 
 interface TransferModalProps {
   onClose: () => void;
@@ -250,7 +253,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
               </option>
               {userAccounts.map((acc) => (
                 <option key={acc.id} value={acc.id}>
-                  {acc.name} ({acc.currency})
+                  {formatAccountLabelWithCurrency(acc.name, acc.currency)}
                 </option>
               ))}
             </select>
@@ -284,7 +287,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                 .filter((acc) => acc.id !== transferData.fromAccountId)
                 .map((acc) => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.currency})
+                    {formatAccountLabelWithCurrency(acc.name, acc.currency)}
                   </option>
                 ))}
             </select>
@@ -464,15 +467,14 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                         : "text-green-600 font-medium"
                     }
                   >
-                    {formatCurrencyAmount(
+                    {formatCurrencyAmountDetail(
                       normalizeTransactionAmount(
                         -transferData.amount,
                         AccountType.User,
                         fromAccount.subtype as AccountSubtype,
                         true
                       ),
-                      fromAccount.currency,
-                      { showSymbol: true, showCode: true }
+                      fromAccount.currency
                     )}
                   </span>
                 </div>
@@ -490,15 +492,14 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                         : "text-green-600 font-medium"
                     }
                   >
-                    {formatCurrencyAmount(
+                    {formatCurrencyAmountDetail(
                       normalizeTransactionAmount(
                         isMultiCurrency ? targetAmount : transferData.amount,
                         AccountType.User,
                         toAccount.subtype as AccountSubtype,
                         true
                       ),
-                      toAccount.currency,
-                      { showSymbol: true, showCode: true }
+                      toAccount.currency
                     )}
                   </span>
                 </div>
