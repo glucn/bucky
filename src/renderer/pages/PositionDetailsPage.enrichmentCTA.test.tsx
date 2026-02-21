@@ -51,6 +51,21 @@ describe("PositionDetailsPage missing enrichment CTA", () => {
         };
       }
 
+      if (channel === "get-all-positions") {
+        return {
+          success: true,
+          positions: [
+            {
+              tickerSymbol: "AAPL",
+              currency: "USD",
+              costBasisBase: null,
+              marketValueBase: null,
+              marketValue: null,
+            },
+          ],
+        };
+      }
+
       if (channel === "get-transactions") {
         return [];
       }
@@ -65,6 +80,10 @@ describe("PositionDetailsPage missing enrichment CTA", () => {
           invoke,
           on: vi.fn(),
         },
+        getBaseCurrencyImpactState: vi.fn().mockResolvedValue({
+          baseCurrency: "CAD",
+          reconciliation: null,
+        }),
       },
     });
   });

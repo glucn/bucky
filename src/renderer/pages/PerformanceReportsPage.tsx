@@ -17,8 +17,18 @@ interface PerformanceData {
 
 interface AssetAllocation {
   tickerSymbol: string;
-  marketValue: number;
+  marketValueBase: number | null;
+  marketValueNative: number;
+  currency: string;
   percentOfPortfolio: number;
+}
+
+interface PositionAllocationSnapshot {
+  tickerSymbol: string;
+  currency: string;
+  costBasisBase: number | null;
+  marketValue: number | null;
+  marketValueBase: number | null;
 }
 
 interface RealizedGain {
@@ -60,28 +70,58 @@ export const PerformanceReportsPage: React.FC = () => {
 
     setLoading(true);
     try {
-      // Fetch performance data
-      const perfResult = await window.electron.ipcRenderer.invoke('get-portfolio-performance', {
-        portfolioId,
-        startDate,
-        endDate,
-      });
+      const [perfResult, allocResult, gainsResult, positionsResult] = await Promise.all([
+        window.electron.ipcRenderer.invoke('get-portfolio-performance', {
+          portfolioId,
+          startDate,
+          endDate,
+        }),
+        window.electron.ipcRenderer.invoke('get-asset-allocation', portfolioId),
+        window.electron.ipcRenderer.invoke('get-realized-gains', {
+          portfolioId,
+          startDate,
+          endDate,
+        }),
+        window.electron.ipcRenderer.invoke('get-all-positions', {
+          portfolioId,
+        }),
+      ]);
+
       if (perfResult.success) {
         setPerformance(perfResult.performance);
       }
 
-      // Fetch asset allocation
-      const allocResult = await window.electron.ipcRenderer.invoke('get-asset-allocation', portfolioId);
       if (allocResult.success) {
-        setAssetAllocation(allocResult.allocation);
+        const positionEntries: Array<[string, PositionAllocationSnapshot]> = Array.isArray(positionsResult.positions)
+          ? positionsResult.positions.map((position: PositionAllocationSnapshot) => [
+              position.tickerSymbol,
+              position,
+            ])
+          : [];
+        const positionsByTicker = new Map<string, PositionAllocationSnapshot>(positionEntries);
+
+        const mergedAllocation: AssetAllocation[] = allocResult.allocation.map((allocation: any) => {
+          const position = positionsByTicker.get(allocation.tickerSymbol);
+          const marketValueNative =
+            position?.marketValue !== null && position?.marketValue !== undefined
+              ? position.marketValue
+              : allocation.marketValue;
+
+          return {
+            tickerSymbol: allocation.tickerSymbol,
+            marketValueBase:
+              position?.marketValueBase !== null && position?.marketValueBase !== undefined
+                ? position.marketValueBase
+                : position?.costBasisBase ?? null,
+            marketValueNative,
+            currency: position?.currency || baseCurrency,
+            percentOfPortfolio: allocation.percentOfPortfolio,
+          };
+        });
+
+        setAssetAllocation(mergedAllocation);
       }
 
-      // Fetch realized gains
-      const gainsResult = await window.electron.ipcRenderer.invoke('get-realized-gains', {
-        portfolioId,
-        startDate,
-        endDate,
-      });
       if (gainsResult.success) {
         setRealizedGains(gainsResult.gains);
       }
@@ -204,30 +244,44 @@ export const PerformanceReportsPage: React.FC = () => {
         {assetAllocation.length === 0 ? (
           <p className="text-sm text-gray-500">No positions</p>
         ) : (
-          <div className="space-y-3">
-            {assetAllocation.map((allocation) => (
-              <div key={allocation.tickerSymbol} className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-900">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Symbol</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Weight</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Value (Base)</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Value (Native)</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {assetAllocation.map((allocation) => (
+                  <tr key={allocation.tickerSymbol}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {allocation.tickerSymbol}
-                    </span>
-                    <span className="text-sm text-gray-600">
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
                       {allocation.percentOfPortfolio.toFixed(2)}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-primary-600 h-2 rounded-full"
-                      style={{ width: `${allocation.percentOfPortfolio}%` }}
-                    />
-                  </div>
-                </div>
-                <span className="ml-4 text-sm text-gray-600">
-                  {formatValuationAmount(allocation.marketValue, baseCurrency, { disambiguate: true })}
-                </span>
-              </div>
-            ))}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                      {allocation.marketValueBase !== null
+                        ? formatValuationAmount(allocation.marketValueBase, baseCurrency, { disambiguate: true })
+                        : "N/A"}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                      {formatValuationAmount(allocation.marketValueNative, allocation.currency, {
+                        disambiguate: true,
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {assetAllocation.some((allocation) => allocation.marketValueBase === null) ? (
+              <p className="mt-3 text-xs text-amber-700">
+                Base totals are unavailable for one or more positions because FX conversion data is missing.
+              </p>
+            ) : null}
           </div>
         )}
       </div>

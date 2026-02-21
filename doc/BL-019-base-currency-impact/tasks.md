@@ -70,7 +70,7 @@
   - Acceptance: detail-capable tables/sections show `Value (Base)` then `Value (Native)`.
   - Acceptance: if any row is unconvertible, section base aggregate is `N/A` and native aggregate breakdown remains visible.
 
-- [/] 12. Apply display policy in dashboard and performance/position surfaces
+- [x] 12. Apply display policy in dashboard and performance/position surfaces
   - Acceptance: dashboard summary cards use base-converted values or `N/A`.
   - Acceptance: performance/position detail sections adopt base + native pattern where space allows.
   - Acceptance: affected screens keep clear non-blocking warning context while reconciliation is pending.
@@ -100,12 +100,12 @@
   - Acceptance: before base currency is configured, initialization fallback behavior remains safe and deterministic.
   - Acceptance: existing historical rows are not rewritten during this change.
 
-- [/] 18. Add deterministic test hooks and E2E coverage for BL-019 flows
+- [x] 18. Add deterministic test hooks and E2E coverage for BL-019 flows
   - Acceptance: stable test hooks exist for global banner, dismiss action, and FX-only refresh CTA path.
   - Acceptance: E2E covers base-currency change -> pending banner -> FX-only refresh -> resolved clear.
   - Acceptance: E2E covers dismiss-for-session and relaunch reappearance behavior.
 
-- [ ] 19. Final regression and documentation sync
+- [/] 19. Final regression and documentation sync
   - Acceptance: relevant unit/service/renderer/E2E suites pass for BL-019 scope.
   - Acceptance: `requirements.md`, `design.md`, and `tasks.md` are aligned with agreed behavior.
   - Acceptance: implementation deviations are documented explicitly (if any).

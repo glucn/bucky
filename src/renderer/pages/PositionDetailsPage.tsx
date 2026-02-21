@@ -15,6 +15,12 @@ interface PositionDetails {
   unrealizedGainPercent: number | null;
 }
 
+interface PositionValuationSnapshot {
+  currency: string;
+  costBasisBase: number | null;
+  marketValueBase: number | null;
+}
+
 interface Transaction {
   id: string;
   date: string;
@@ -36,6 +42,7 @@ export const PositionDetailsPage: React.FC = () => {
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [selectedTransactionType, setSelectedTransactionType] = useState<TransactionType>('buy');
   const [baseCurrency, setBaseCurrency] = useState("USD");
+  const [positionValuation, setPositionValuation] = useState<PositionValuationSnapshot | null>(null);
 
   useEffect(() => {
     if (portfolioId && tickerSymbol) {
@@ -73,6 +80,25 @@ export const PositionDetailsPage: React.FC = () => {
           
           if (positionResult.success) {
             setPosition(positionResult.position);
+          }
+
+          const allPositionsResult = await window.electron.ipcRenderer.invoke(
+            "get-all-positions",
+            { portfolioId }
+          );
+
+          if (allPositionsResult.success && Array.isArray(allPositionsResult.positions)) {
+            const matchedPosition = allPositionsResult.positions.find(
+              (entry: any) => entry.tickerSymbol === tickerSymbol
+            );
+
+            if (matchedPosition) {
+              setPositionValuation({
+                currency: matchedPosition.currency,
+                costBasisBase: matchedPosition.costBasisBase,
+                marketValueBase: matchedPosition.marketValueBase,
+              });
+            }
           }
 
           // Get transaction history for this security
@@ -117,6 +143,13 @@ export const PositionDetailsPage: React.FC = () => {
   const formatPercent = (percent: number): string => {
     return `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%`;
   };
+
+  const nativeCurrency = positionValuation?.currency || baseCurrency;
+  const costBasisBase = positionValuation?.costBasisBase ?? null;
+  const marketValueBase = positionValuation?.marketValueBase ?? null;
+  const nativeMarketValue = position?.marketValue ?? position?.costBasis ?? 0;
+  const unrealizedGainBase =
+    costBasisBase !== null && marketValueBase !== null ? marketValueBase - costBasisBase : null;
 
   if (loading) {
     return (
@@ -201,33 +234,45 @@ export const PositionDetailsPage: React.FC = () => {
           <div>
             <p className="text-sm text-gray-500">Cost Basis</p>
             <p className="text-xl font-semibold text-gray-900">
-              {formatValuationAmount(position.costBasis, baseCurrency)}
+              {costBasisBase !== null ? formatValuationAmount(costBasisBase, baseCurrency) : "N/A"}
             </p>
             <p className="text-sm text-gray-500">
-              {formatValuationAmount(position.costPerShare, baseCurrency)} per share
+              Native: {formatValuationAmount(position.costBasis, nativeCurrency, { disambiguate: true })}
             </p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Market Value</p>
             <p className="text-xl font-semibold text-gray-900">
-              {position.marketValue !== null
-                ? formatValuationAmount(position.marketValue, baseCurrency)
-                : formatValuationAmount(position.costBasis, baseCurrency)}
+              {marketValueBase !== null
+                ? formatValuationAmount(marketValueBase, baseCurrency)
+                : position.marketValue === null && costBasisBase !== null
+                  ? formatValuationAmount(costBasisBase, baseCurrency)
+                  : "N/A"}
+            </p>
+            <p className="text-sm text-gray-500">
+              Native: {formatValuationAmount(nativeMarketValue, nativeCurrency, { disambiguate: true })}
             </p>
             {position.marketPrice !== null && (
               <p className="text-sm text-gray-500">
-                  {formatValuationAmount(position.marketPrice, baseCurrency)} per share
+                  Price: {formatValuationAmount(position.marketPrice, nativeCurrency, { disambiguate: true })} per share
               </p>
             )}
           </div>
           <div>
             <p className="text-sm text-gray-500">Unrealized Gain/Loss</p>
             <p className={`text-xl font-semibold ${
+              (unrealizedGainBase || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+            }`}>
+              {unrealizedGainBase !== null
+                ? formatValuationAmount(unrealizedGainBase, baseCurrency)
+                : 'N/A'}
+            </p>
+            <p className={`text-sm ${
               (position.unrealizedGain || 0) >= 0 ? 'text-green-600' : 'text-red-600'
             }`}>
               {position.unrealizedGain !== null
-                ? formatValuationAmount(position.unrealizedGain, baseCurrency)
-                : '-'}
+                ? `Native: ${formatValuationAmount(position.unrealizedGain, nativeCurrency, { disambiguate: true })}`
+                : "Native: -"}
             </p>
             {position.unrealizedGainPercent !== null && (
               <p className={`text-sm ${
