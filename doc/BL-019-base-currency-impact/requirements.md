@@ -32,6 +32,7 @@ This scope combines both reporting and create/edit behavior in one deliverable.
 ## 5. Product Decisions (Locked)
 
 - Include both reporting surfaces and create/edit surfaces in this scope.
+- Base currency must be selected in first-time setup before valuation/reporting experiences are considered fully available.
 - Existing entities are never auto-updated when base currency changes.
 - New defaults:
   - new investment portfolio currency defaults to current base currency
@@ -48,6 +49,7 @@ This scope combines both reporting and create/edit behavior in one deliverable.
   - dismissed warning reappears on next app launch if still pending
 - Reporting/valuation display switches immediately to new base currency, with warnings while pending.
 - Warning severity is `warning` (not blocking error) by default.
+- Currency formatting should be locale-aware via `Intl.NumberFormat`; summary values may use symbol display while multi-currency detail values must be disambiguated.
 
 ## 6. Functional Requirements
 
@@ -56,6 +58,12 @@ This scope combines both reporting and create/edit behavior in one deliverable.
 - Saving base currency updates settings immediately.
 - If new value differs from previous value, set pending FX reconciliation state.
 - Save flow remains non-blocking.
+
+### R1.1 First-Time Setup Requirement
+
+- Base currency is mandatory for first-time setup.
+- Until base currency is configured, app must show a clear setup prompt and guide user to set it.
+- Base currency remains editable later via Settings.
 
 ### R2. App-Wide Pending Warning
 
@@ -77,6 +85,9 @@ This scope combines both reporting and create/edit behavior in one deliverable.
 - Dashboard, portfolio, position, and related valuation displays switch immediately to new base-currency display context.
 - While pending, affected surfaces show clear non-blocking warnings/indicators.
 - No hard-blocking restrictions on actions.
+- Formatting rules:
+  - single-currency summary values can use symbol display (for readability)
+  - multi-currency detail/breakdown values must use disambiguated currency display (code or explicit code label)
 
 ### R5. Create/Edit Defaults
 
@@ -122,6 +133,8 @@ This scope combines both reporting and create/edit behavior in one deliverable.
 
 ## 9. Acceptance Criteria
 
+- First-time user cannot finish setup without selecting base currency.
+- If base currency is missing, app shows clear setup guidance and does not silently assume a hidden base currency.
 - Changing base currency triggers pending FX reconciliation state.
 - App-wide warning appears after base-currency change.
 - `Refresh FX now` opens existing refresh panel with FX-only preselected.
