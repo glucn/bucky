@@ -19,6 +19,18 @@ type RuntimeDependencies = {
   coordinator: ReturnType<typeof createEnrichmentRunCoordinator>;
   repository: typeof enrichmentRepository;
   getBaseCurrency: () => Promise<string | null>;
+  getBaseCurrencyReconciliationState: () => Promise<{
+    targetBaseCurrency: string;
+    status: "pending" | "resolved";
+    changedAt: string;
+    resolvedAt?: string;
+  } | null>;
+  setBaseCurrencyReconciliationState: (state: {
+    targetBaseCurrency: string;
+    status: "pending" | "resolved";
+    changedAt: string;
+    resolvedAt?: string;
+  }) => Promise<void>;
   prismaClient: {
     account: {
       findMany: (args: unknown) => Promise<Array<{ currency: string }>>;
@@ -209,8 +221,19 @@ export class EnrichmentRuntimeService {
       }))
     );
 
+    let pipelineResult:
+      | {
+          status: string;
+          failedItems: Array<{
+            category: "securityMetadata" | "securityPrices" | "fxRates";
+            identifier: string;
+            reason: string;
+          }>;
+        }
+      | null = null;
+
     try {
-      await this.deps.executePipeline({
+      pipelineResult = await this.deps.executePipeline({
         runId,
         provider: providerResolution.provider,
         repository: this.deps.repository,
@@ -226,6 +249,30 @@ export class EnrichmentRuntimeService {
       this.canceledRunIds.delete(runId);
       this.latestSummary = this.deps.coordinator.getRunSummary(runId);
     }
+
+    if (!scope.fxRates || !pipelineResult || pipelineResult.status === "canceled") {
+      return;
+    }
+
+    const hasFxFailures = pipelineResult.failedItems.some((item) => item.category === "fxRates");
+    if (hasFxFailures) {
+      return;
+    }
+
+    const reconciliation = await this.deps.getBaseCurrencyReconciliationState();
+    if (
+      !reconciliation ||
+      reconciliation.status !== "pending" ||
+      reconciliation.targetBaseCurrency !== baseCurrency
+    ) {
+      return;
+    }
+
+    await this.deps.setBaseCurrencyReconciliationState({
+      ...reconciliation,
+      status: "resolved",
+      resolvedAt: new Date().toISOString(),
+    });
   }
 
   async getPanelState() {
@@ -283,6 +330,12 @@ export const createEnrichmentRuntimeService = (deps: Partial<RuntimeDependencies
     coordinator: deps.coordinator || createEnrichmentRunCoordinator(),
     repository: deps.repository || enrichmentRepository,
     getBaseCurrency: deps.getBaseCurrency || (() => appSettingsService.getBaseCurrency()),
+    getBaseCurrencyReconciliationState:
+      deps.getBaseCurrencyReconciliationState ||
+      (() => appSettingsService.getBaseCurrencyReconciliationState()),
+    setBaseCurrencyReconciliationState:
+      deps.setBaseCurrencyReconciliationState ||
+      ((state) => appSettingsService.setBaseCurrencyReconciliationState(state)),
     prismaClient:
       deps.prismaClient ||
       (databaseService.prismaClient as unknown as RuntimeDependencies["prismaClient"]),

@@ -10,6 +10,7 @@ const {
   getRunSummary,
   getAppSetting,
   setAppSetting,
+  setBaseCurrency,
   getBaseCurrency,
 } = vi.hoisted(() => ({
   removeHandler: vi.fn(),
@@ -21,6 +22,7 @@ const {
   getRunSummary: vi.fn(),
   getAppSetting: vi.fn(),
   setAppSetting: vi.fn(),
+  setBaseCurrency: vi.fn(),
   getBaseCurrency: vi.fn(),
 }));
 
@@ -45,6 +47,7 @@ vi.mock("../services/appSettingsService", () => ({
   appSettingsService: {
     getAppSetting,
     setAppSetting,
+    setBaseCurrency,
     getBaseCurrency,
   },
 }));
@@ -77,6 +80,7 @@ describe("setupEnrichmentIpcHandlers", () => {
     getRunSummary.mockReturnValue({ id: "run-1", status: "running" });
     getAppSetting.mockResolvedValue("CAD");
     setAppSetting.mockResolvedValue(undefined);
+    setBaseCurrency.mockResolvedValue(undefined);
     getBaseCurrency.mockResolvedValue("CAD");
 
     setupEnrichmentIpcHandlers();
@@ -131,7 +135,7 @@ describe("setupEnrichmentIpcHandlers", () => {
       expect(await setSettingHandler({}, { key: "baseCurrency", value: "CAD" })).toEqual({ success: true });
 
       expect(getAppSetting).toHaveBeenCalledWith("baseCurrency");
-      expect(setAppSetting).toHaveBeenCalledWith("baseCurrency", "CAD");
+      expect(setBaseCurrency).toHaveBeenCalledWith("CAD");
     } finally {
       if (previousProvider === undefined) {
         delete process.env.ENRICHMENT_PROVIDER;

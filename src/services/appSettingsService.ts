@@ -136,6 +136,24 @@ class AppSettingsService {
     return value;
   }
 
+  async setBaseCurrency(nextBaseCurrency: string): Promise<void> {
+    if (!BASE_CURRENCY_PATTERN.test(nextBaseCurrency) || !ALLOWED_BASE_CURRENCY_SET.has(nextBaseCurrency)) {
+      throw new Error(`Unsupported base currency: ${nextBaseCurrency}`);
+    }
+
+    const currentBaseCurrency = await this.getBaseCurrency();
+    if (currentBaseCurrency === nextBaseCurrency) {
+      return;
+    }
+
+    await this.setAppSetting("baseCurrency", nextBaseCurrency);
+    await this.setBaseCurrencyReconciliationState({
+      targetBaseCurrency: nextBaseCurrency,
+      status: "pending",
+      changedAt: new Date().toISOString(),
+    });
+  }
+
   getAllowedBaseCurrencies(): readonly string[] {
     return ALLOWED_BASE_CURRENCIES;
   }

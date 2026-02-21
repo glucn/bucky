@@ -20,17 +20,17 @@
   - Acceptance: state shape supports `targetBaseCurrency`, `status` (`pending | resolved`), `changedAt`, optional `resolvedAt`.
   - Acceptance: service tests cover valid parse, invalid payload fallback, and idempotent writes.
 
-- [/] 2. Mark reconciliation pending on base currency change
+- [x] 2. Mark reconciliation pending on base currency change
   - Acceptance: changing base currency value sets reconciliation state to `pending` for the new target currency.
   - Acceptance: saving unchanged base currency does not reset timestamps or re-open pending state.
   - Acceptance: accounting data (accounts/journal lines) is not mutated by this operation.
 
-- [ ] 3. Resolve reconciliation only on strict FX success
+- [x] 3. Resolve reconciliation only on strict FX success
   - Acceptance: enrichment completion updates reconciliation to `resolved` only when FX category runs with zero failed FX items.
   - Acceptance: non-FX runs, canceled runs, or FX runs with failures keep state `pending`.
   - Acceptance: if reconciliation record is missing or already resolved, runtime update path is safe no-op.
 
-- [ ] 4. Expose base currency + reconciliation state through IPC/preload
+- [/] 4. Expose base currency + reconciliation state through IPC/preload
   - Acceptance: renderer can read current base currency and reconciliation status in one stable contract.
   - Acceptance: preload/types are aligned and strongly typed.
   - Acceptance: IPC tests cover happy path and missing-state fallback behavior.

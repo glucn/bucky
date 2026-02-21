@@ -91,6 +91,11 @@ export const setupEnrichmentIpcHandlers = () => {
   });
 
   ipcMain.handle("set-app-setting", async (_, data: { key: string; value: unknown }) => {
+    if (data.key === "baseCurrency" && typeof data.value === "string") {
+      await appSettingsService.setBaseCurrency(data.value);
+      return { success: true };
+    }
+
     await appSettingsService.setAppSetting(data.key, data.value as any);
     return { success: true };
   });

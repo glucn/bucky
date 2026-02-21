@@ -96,4 +96,49 @@ describe("AppSettingsService", () => {
 
     expect(initialRow?.updatedAt).toEqual(afterRow?.updatedAt);
   });
+
+  it("marks reconciliation pending when base currency changes", async () => {
+    await appSettingsService.setBaseCurrency("USD");
+
+    expect(await appSettingsService.getBaseCurrency()).toBe("USD");
+    expect(await appSettingsService.getBaseCurrencyReconciliationState()).toEqual(
+      expect.objectContaining({
+        targetBaseCurrency: "USD",
+        status: "pending",
+      })
+    );
+  });
+
+  it("does not re-open pending state or reset timestamps when base currency is unchanged", async () => {
+    const existingState = {
+      targetBaseCurrency: "CAD",
+      status: "resolved" as const,
+      changedAt: "2026-02-20T10:00:00.000Z",
+      resolvedAt: "2026-02-20T10:05:00.000Z",
+    };
+
+    await appSettingsService.setAppSetting("baseCurrency", "CAD");
+    await appSettingsService.setBaseCurrencyReconciliationState(existingState);
+
+    await appSettingsService.setBaseCurrency("CAD");
+
+    expect(await appSettingsService.getBaseCurrencyReconciliationState()).toEqual(existingState);
+  });
+
+  it("does not mutate account or journal data when changing base currency", async () => {
+    const [accountsBefore, linesBefore] = await Promise.all([
+      databaseService.prismaClient.account.count(),
+      databaseService.prismaClient.journalLine.count(),
+    ]);
+
+    await appSettingsService.setBaseCurrency("CAD");
+
+    const [accountsAfter, linesAfter] = await Promise.all([
+      databaseService.prismaClient.account.count(),
+      databaseService.prismaClient.journalLine.count(),
+    ]);
+
+    expect(accountsAfter).toBe(accountsBefore);
+    expect(linesAfter).toBe(linesBefore);
+  });
 });
