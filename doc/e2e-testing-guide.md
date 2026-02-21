@@ -132,7 +132,7 @@ page.locator('input[type="file"]')
    - This was tied to unstable prep/shutdown behavior.
    - Pull latest `main` and rerun with `npx playwright test`.
 4. **Need deeper context**
-   - Read `doc/e2e-stabilization-learnings.md` before changing product code.
+   - Read `doc/agent-learnings/e2e-stabilization-learnings.md` before changing product code.
 
 ## Test Organization
 

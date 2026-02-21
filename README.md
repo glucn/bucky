@@ -210,6 +210,14 @@ npm test
 
 ### Development Database Issues
 
+#### Dashboard Net Worth shows `N/A` with FX data present
+**Cause**: Usually missing FX coverage for required pairs/dates, or a valuation conversion path that is not using canonical `FxDailyRate`.
+
+**Solution**:
+1. Confirm `AppSetting.baseCurrency`
+2. Confirm required currency pairs exist in `FxDailyRate` for the as-of date (or latest fallback)
+3. Review `doc/agent-learnings/source-of-truth-guardrails.md`
+
 #### Lost development data after running tests
 **Cause**: This should not happen with proper environment detection.
 **Solution**: 

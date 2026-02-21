@@ -48,7 +48,7 @@ Bucky is a personal bookkeeping desktop app built with Electron, React, and Pris
 
 - Unit/property tests live in `src/**/*.test.ts(x)`.
 - E2E tests live in `tests/e2e/*.spec.ts` using Playwright (see `doc/e2e-testing-guide.md`).
-- For E2E flakiness debugging and harness pitfalls, read `doc/e2e-stabilization-learnings.md` before changing product code.
+- For E2E flakiness debugging and harness pitfalls, read `doc/agent-learnings/e2e-stabilization-learnings.md` before changing product code.
 - Before running Playwright tests, check whether port `3000` is already in use.
   - If port `3000` is occupied, ask the user for confirmation before killing the process.
 - Investment features are covered by multiple service tests (e.g. `src/services/investmentService.*.test.ts`).
@@ -66,8 +66,9 @@ Bucky is a personal bookkeeping desktop app built with Electron, React, and Pris
 ## Notes
 - Avoid runtime failures by keeping server-only code (for example, Prisma, filesystem) out of client components; use server actions or API routes.
 - Before starting a task, think through all required changes and tests. If the scope is large, pause and align on breaking it down; otherwise complete the task end-to-end.
-- When E2E tests fail intermittently, check for preload hot-update 404s (for example `main_window.<hash>.hot-update.json`) and use the stabilization guidance in `doc/e2e-stabilization-learnings.md`.
+- When E2E tests fail intermittently, check for preload hot-update 404s (for example `main_window.<hash>.hot-update.json`) and use the stabilization guidance in `doc/agent-learnings/e2e-stabilization-learnings.md`.
 - If a file grows large (e.g., a monolithic page component), consider breaking it into smaller modules or components.
+- For FX valuation/reporting work, use `FxDailyRate` as source of truth; review `doc/agent-learnings/source-of-truth-guardrails.md` before changing conversion logic.
 - For tasks tracked in docs, commit when done without asking; for ad-hoc investigations/fixes, confirm outcome before committing.
 - For task-based work, commit as soon as you believe a task is done (do not wait for the next task).
 - For well-defined tasks, prefer using git worktrees so multiple changes can be developed in parallel with isolated workspaces.
