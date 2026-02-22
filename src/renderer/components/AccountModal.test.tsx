@@ -50,4 +50,10 @@ describe("AccountModal opening balance", () => {
     expect((dateInput as HTMLInputElement).required).toBe(true);
     expect(amountInput.getAttribute("type")).toBe("number");
   });
+
+  it("shows the shared currency option set", () => {
+    render(<AccountModal isOpen={true} onClose={vi.fn()} onAccountCreated={vi.fn()} />);
+
+    expect(screen.getByRole("option", { name: "HKD - Hong Kong Dollar" })).toBeTruthy();
+  });
 });

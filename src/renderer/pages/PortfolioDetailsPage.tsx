@@ -4,6 +4,7 @@ import { TransactionEntryModal } from "../components/TransactionEntryModal";
 import { useAccounts } from "../context/AccountsContext";
 import { formatMultiCurrencyBalances } from "../utils/currencyUtils";
 import { formatValuationAmount } from "../utils/valuationFormatting";
+import { SUPPORTED_CURRENCY_OPTIONS } from "../../shared/currencies";
 
 interface Position {
   tickerSymbol: string;
@@ -442,26 +443,11 @@ export const PortfolioDetailsPage: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 autoFocus
               >
-                <option value="USD">USD - US Dollar</option>
-                <option value="EUR">EUR - Euro</option>
-                <option value="GBP">GBP - British Pound</option>
-                <option value="JPY">JPY - Japanese Yen</option>
-                <option value="CAD">CAD - Canadian Dollar</option>
-                <option value="AUD">AUD - Australian Dollar</option>
-                <option value="CHF">CHF - Swiss Franc</option>
-                <option value="CNY">CNY - Chinese Yuan</option>
-                <option value="INR">INR - Indian Rupee</option>
-                <option value="KRW">KRW - South Korean Won</option>
-                <option value="BRL">BRL - Brazilian Real</option>
-                <option value="MXN">MXN - Mexican Peso</option>
-                <option value="SEK">SEK - Swedish Krona</option>
-                <option value="NOK">NOK - Norwegian Krone</option>
-                <option value="DKK">DKK - Danish Krone</option>
-                <option value="PLN">PLN - Polish Zloty</option>
-                <option value="TRY">TRY - Turkish Lira</option>
-                <option value="THB">THB - Thai Baht</option>
-                <option value="ZAR">ZAR - South African Rand</option>
-                <option value="RUB">RUB - Russian Ruble</option>
+                {SUPPORTED_CURRENCY_OPTIONS.map((currency) => (
+                  <option key={currency.code} value={currency.code}>
+                    {currency.code} - {currency.label}
+                  </option>
+                ))}
               </select>
               <p className="text-xs text-gray-500 mt-1">
                 This will create a new trade cash account in the selected currency for this portfolio.

@@ -384,6 +384,10 @@ describe('currencyUtils - Normalized Formatting', () => {
       expect(getCurrencySymbol('GBP')).toBe('£');
     });
 
+    it('returns fallback symbol for HKD', () => {
+      expect(getCurrencySymbol('HKD')).toBe('HK$');
+    });
+
     it('uses code-first format in detail mode for USD', () => {
       const result = formatCurrencyAmountDetail(200, 'USD');
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { AccountType, toAccountType, AccountSubtype } from "../../shared/accountTypes";
+import { SUPPORTED_CURRENCY_OPTIONS } from "../../shared/currencies";
 import { CreditCardSetupModal } from "./CreditCardSetupModal";
 
 interface AccountModalProps {
@@ -273,12 +274,11 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               }
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
             >
-              <option value="USD">USD</option>
-              <option value="CAD">CAD</option>
-              <option value="CNY">CNY</option>
-              <option value="EUR">EUR</option>
-              <option value="GBP">GBP</option>
-              <option value="JPY">JPY</option>
+              {SUPPORTED_CURRENCY_OPTIONS.map((currency) => (
+                <option key={currency.code} value={currency.code}>
+                  {currency.code} - {currency.label}
+                </option>
+              ))}
             </select>
           </div>
           

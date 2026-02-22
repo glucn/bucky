@@ -1,4 +1,5 @@
 import React from "react";
+import { SUPPORTED_CURRENCY_OPTIONS } from "../../shared/currencies";
 
 interface RuleListItem {
   id: string;
@@ -23,8 +24,6 @@ export const AutoCategorizationRules: React.FC = () => {
   const [pendingDeleteRuleId, setPendingDeleteRuleId] = React.useState<string | null>(null);
   const [baseCurrency, setBaseCurrency] = React.useState("");
   const [baseCurrencySaveMessage, setBaseCurrencySaveMessage] = React.useState<string | null>(null);
-
-  const allowedBaseCurrencies = ["USD", "CAD", "EUR", "GBP", "JPY", "CNY", "HKD", "AUD"];
 
   React.useEffect(() => {
     const loadRules = async () => {
@@ -141,9 +140,9 @@ export const AutoCategorizationRules: React.FC = () => {
             data-testid="base-currency-select"
           >
             <option value="">Select base currency</option>
-            {allowedBaseCurrencies.map((currency) => (
-              <option key={currency} value={currency}>
-                {currency}
+            {SUPPORTED_CURRENCY_OPTIONS.map((currency) => (
+              <option key={currency.code} value={currency.code}>
+                {currency.code}
               </option>
             ))}
           </select>

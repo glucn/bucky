@@ -7,39 +7,14 @@ import {
   normalizeAccountBalance,
 } from './displayNormalization';
 import { AccountType, AccountSubtype } from '../../shared/accountTypes';
-
-/**
- * Common currency symbols mapping
- */
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-  JPY: '¥',
-  CNY: '¥',
-  CAD: 'CAD$',
-  AUD: 'A$',
-  CHF: 'CHF',
-  INR: '₹',
-  KRW: '₩',
-  BRL: 'R$',
-  MXN: 'MX$',
-  RUB: '₽',
-  ZAR: 'R',
-  SEK: 'kr',
-  NOK: 'kr',
-  DKK: 'kr',
-  PLN: 'zł',
-  TRY: '₺',
-  THB: '฿',
-};
+import { FALLBACK_CURRENCY_SYMBOLS } from '../../shared/currencies';
 
 /**
  * Get the currency symbol for a given currency code
  * Falls back to the currency code if no symbol is found
  */
 export function getCurrencySymbol(currencyCode: string): string {
-  return CURRENCY_SYMBOLS[currencyCode.toUpperCase()] || currencyCode;
+  return FALLBACK_CURRENCY_SYMBOLS[currencyCode.toUpperCase()] || currencyCode;
 }
 
 /**
