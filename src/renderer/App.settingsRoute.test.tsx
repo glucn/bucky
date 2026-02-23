@@ -53,6 +53,10 @@ describe("App settings route", () => {
         getAutoCategorizationRules: vi.fn().mockResolvedValue([]),
         getAppSetting: vi.fn().mockResolvedValue(null),
         setAppSetting: vi.fn().mockResolvedValue(null),
+        getBaseCurrencyImpactState: vi.fn().mockResolvedValue({
+          baseCurrency: "USD",
+          reconciliation: null,
+        }),
         ipcRenderer: {
           invoke: vi.fn(),
           on: vi.fn(),
