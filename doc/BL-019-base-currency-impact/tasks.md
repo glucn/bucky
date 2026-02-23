@@ -119,3 +119,4 @@
 
 - Post-BL-019 fix applied: valuation conversion source was corrected from `currency_transfer` journal entries to canonical `FxDailyRate` per design.
 - Learning note for future agents: `doc/agent-learnings/source-of-truth-guardrails.md`.
+- Adjacent post-BL-019 fix: category group aggregate display was corrected to sum per-currency `balances` (when present) instead of relying on single-currency `balance`, preventing mixed-currency totals from being misreported.

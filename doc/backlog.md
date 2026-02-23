@@ -421,9 +421,9 @@ This file tracks deferred product improvements that are intentionally out of cur
 
 - **ID**: BL-019
 - **Title**: Expand base-currency change handling
-- **Status**: planned
+- **Status**: done
 - **Priority**: medium
-- **Related Docs**: `doc/F-017-data-enrichment-mvp/design.md`
+- **Related Docs**: `doc/BL-019-base-currency-impact/requirements.md`, `doc/BL-019-base-currency-impact/design.md`, `doc/BL-019-base-currency-impact/tasks.md`
 - **Context (What / Why)**:
   - F-017 MVP establishes base currency and refresh prompts, but broader reporting/recalculation UX remains limited.
   - Base currency semantics also affect data-entry and setup workflows (new account/portfolio/category creation), not only read-only reporting.
@@ -440,6 +440,7 @@ This file tracks deferred product improvements that are intentionally out of cur
 - **Open Questions**:
   - Which surfaces should be prioritized first (overview/positions vs account/portfolio/category create flows)?
   - Should recalculation be immediate or staged with user confirmation?
+  - Follow-up work moved to `BL-022` for first-time setup/reset semantics.
 
 ## BL-020 - Market Reference Master Data
 
@@ -512,3 +513,4 @@ This file tracks deferred product improvements that are intentionally out of cur
   - Should first-time users be blocked from account seeding until base currency is set, or should setup offer a guided default selection?
   - Which reset mode should be default in developer tools and test helpers?
   - How should partial setup state be represented to avoid ambiguous UX after resets?
+  - Should reset modes also define category/group/default-account reseed policy by onboarding state?
