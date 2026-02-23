@@ -56,4 +56,20 @@ describe("database base-currency defaults", () => {
 
     expect(account.currency).toBe("USD");
   });
+
+  it("preserves base currency on reset when requested", async () => {
+    await databaseService.prismaClient.appSetting.upsert({
+      where: { key: "baseCurrency" },
+      create: { key: "baseCurrency", jsonValue: JSON.stringify("CAD") },
+      update: { jsonValue: JSON.stringify("CAD") },
+    });
+
+    await databaseService.resetAllData({ preserveBaseCurrency: true });
+
+    const cash = await databaseService.prismaClient.account.findFirst({
+      where: { name: "Cash", type: AccountType.User },
+    });
+
+    expect(cash?.currency).toBe("CAD");
+  });
 });

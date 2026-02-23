@@ -2,7 +2,11 @@ import React, { useState, useEffect } from "react";
 import { AccountGroup, Account } from "../types";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { AccountGroupItem } from "./AccountGroupItem";
-import { formatCurrencyAmount, formatMultiCurrencyBalances } from "../utils/currencyUtils";
+import {
+  formatCurrencyAmount,
+  formatCurrencyAmountDetail,
+  formatMultiCurrencyBalances,
+} from "../utils/currencyUtils";
 import { normalizeAccountBalance } from "../utils/displayNormalization";
 import { useNavigate } from "react-router-dom";
 
@@ -19,6 +23,8 @@ interface GroupedAccountsListProps {
   accountBalances?: Record<string, number>;
 }
 
+const EMPTY_ACCOUNT_BALANCES: Record<string, number> = {};
+
 export const GroupedAccountsList: React.FC<GroupedAccountsListProps> = ({
   groups,
   ungroupedAccounts,
@@ -29,7 +35,7 @@ export const GroupedAccountsList: React.FC<GroupedAccountsListProps> = ({
   onGroupDelete,
   onAccountMove,
   onGroupReorder,
-  accountBalances = {},
+  accountBalances = EMPTY_ACCOUNT_BALANCES,
 }) => {
   const navigate = useNavigate();
 
@@ -71,7 +77,7 @@ export const GroupedAccountsList: React.FC<GroupedAccountsListProps> = ({
       account.subtype as AccountSubtype
     );
     
-    return formatCurrencyAmount(normalizedBalance, account.currency);
+    return formatCurrencyAmountDetail(normalizedBalance, account.currency);
   };
 
   // Get balance color for accounts and categories

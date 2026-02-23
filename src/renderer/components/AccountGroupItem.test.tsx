@@ -1,29 +1,36 @@
+// @vitest-environment jsdom
+
 /**
  * Unit Tests for AccountGroupItem Component
  * 
  * These tests verify expand/collapse behavior, balance display, and edit/delete actions.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import React from 'react';
+import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { AccountType } from '../../shared/accountTypes';
 import { AccountGroup } from '../types';
+import { AccountGroupItem } from './AccountGroupItem';
 
 // Mock the window.electron API
 const mockInvoke = vi.fn();
-global.window = {
-  electron: {
-    ipcRenderer: {
-      invoke: mockInvoke,
-      on: vi.fn(),
-    },
-  },
-  confirm: vi.fn(),
-} as any;
 
 describe('AccountGroupItem', () => {
   beforeEach(() => {
     mockInvoke.mockReset();
-    vi.mocked(window.confirm).mockReset();
+    (window as any).electron = {
+      ipcRenderer: {
+        invoke: mockInvoke,
+        on: vi.fn(),
+      },
+    };
+    vi.spyOn(window, 'confirm').mockReset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   /**
@@ -295,5 +302,48 @@ describe('AccountGroupItem', () => {
 
     const accountCount = group.accounts?.length || 0;
     expect(accountCount).toBe(0);
+  });
+
+  it('aggregates category group balances by per-currency balances', async () => {
+    const group: AccountGroup = {
+      id: 'group-cat-1',
+      name: '[Expense] Lifestyle',
+      accountType: AccountType.Category,
+      displayOrder: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      accounts: [
+        {
+          id: 'cat-1',
+          name: 'Dining Out',
+          type: AccountType.Category,
+          subtype: 'liability',
+          currency: 'CAD',
+          balance: 200,
+          isArchived: false,
+          balances: {
+            CAD: 100,
+            USD: 100,
+          },
+        } as any,
+      ],
+    };
+
+    render(
+      <MemoryRouter>
+        <AccountGroupItem
+          group={group}
+          isExpanded={false}
+          onToggle={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/USD/)).toBeTruthy();
+      expect(screen.getByText(/CAD/)).toBeTruthy();
+    });
   });
 });

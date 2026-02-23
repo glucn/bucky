@@ -20,6 +20,8 @@ interface AccountGroupItemProps {
   accountBalances?: Record<string, number>;
 }
 
+const EMPTY_ACCOUNT_BALANCES: Record<string, number> = {};
+
 export const AccountGroupItem: React.FC<AccountGroupItemProps> = ({
   group,
   isExpanded,
@@ -32,7 +34,7 @@ export const AccountGroupItem: React.FC<AccountGroupItemProps> = ({
   onMoveDown,
   isFirst = false,
   isLast = false,
-  accountBalances = {},
+  accountBalances = EMPTY_ACCOUNT_BALANCES,
 }) => {
   const navigate = useNavigate();
   const [aggregateBalance, setAggregateBalance] = useState<number | Record<string, number> | null>(null);
@@ -75,7 +77,7 @@ export const AccountGroupItem: React.FC<AccountGroupItemProps> = ({
       account.subtype as AccountSubtype
     );
     
-    return formatCurrencyAmount(normalizedBalance, account.currency);
+    return formatCurrencyAmountDetail(normalizedBalance, account.currency);
   };
 
   // Get balance color for accounts and categories
@@ -112,21 +114,27 @@ export const AccountGroupItem: React.FC<AccountGroupItemProps> = ({
     const balances: Record<string, number> = {};
     
     for (const account of group.accounts) {
-      const rawBalance = accountBalances[account.id] ?? account.balance ?? 0;
-      
-      // Normalize the balance for display (same logic as individual accounts)
-      let normalizedBalance: number;
       if (group.accountType === AccountType.Category) {
-        // Categories always display as positive
-        normalizedBalance = Math.abs(rawBalance);
-      } else {
-        // User accounts: normalize based on subtype
-        normalizedBalance = normalizeAccountBalance(
-          rawBalance,
-          account.type,
-          account.subtype as AccountSubtype
-        );
+        const categoryAccount = account as any;
+        if (categoryAccount.balances && Object.keys(categoryAccount.balances).length > 0) {
+          for (const [currency, balance] of Object.entries(categoryAccount.balances)) {
+            const normalizedBalance = normalizeAccountBalance(
+              balance as number,
+              account.type,
+              account.subtype as AccountSubtype
+            );
+            balances[currency] = (balances[currency] || 0) + normalizedBalance;
+          }
+          continue;
+        }
       }
+
+      const rawBalance = accountBalances[account.id] ?? account.balance ?? 0;
+      const normalizedBalance = normalizeAccountBalance(
+        rawBalance,
+        account.type,
+        account.subtype as AccountSubtype
+      );
       
       const currency = account.currency;
       balances[currency] = (balances[currency] || 0) + normalizedBalance;

@@ -65,9 +65,15 @@ class DatabaseService {
    * then re-creates the default accounts.
    * For development/testing use only!
    */
-  public async resetAllData() {
+  public async resetAllData(options: { preserveBaseCurrency?: boolean } = {}) {
     const prisma = this.prisma;
     await prisma.$transaction(async (tx) => {
+      // TODO(BL-022): Replace this boolean with explicit reset modes (e.g. `factoryReset` vs
+      // `dataOnlyReset`) so onboarding/setup state policy is intentional and easy to reason about.
+      const preservedBaseCurrencySetting = options.preserveBaseCurrency
+        ? await tx.appSetting.findUnique({ where: { key: "baseCurrency" } })
+        : null;
+
       // Delete all journal lines
       await tx.journalLine.deleteMany({});
       // Delete all journal entries
@@ -87,6 +93,18 @@ class DatabaseService {
       await tx.securityMetadata.deleteMany({});
       await tx.fxDailyRate.deleteMany({});
       await tx.appSetting.deleteMany({});
+
+      if (preservedBaseCurrencySetting) {
+        // TODO(BL-022): When preserving base currency, also define policy for related setup flags
+        // (e.g. reconciliation/onboarding completion) to avoid partial first-time UX state.
+        await tx.appSetting.create({
+          data: {
+            key: "baseCurrency",
+            jsonValue: preservedBaseCurrencySetting.jsonValue,
+          },
+        });
+      }
+
       // Delete all accounts
       await tx.account.deleteMany({});
       // Delete all account groups
@@ -1321,6 +1339,8 @@ class DatabaseService {
     }
 
     if (!equityAccount) {
+      // TODO(BL-022): Align this fallback with first-time setup policy so system-account currency
+      // does not silently default to USD when onboarding intends an explicit base-currency choice.
       equityAccount = await prisma.account.create({
         data: {
           name: "Opening Balances",
@@ -1889,6 +1909,8 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
    */
   public async ensureDefaultAccounts(tx?: TransactionClient) {
     const prisma = tx || this.prisma;
+    // TODO(BL-022): Decouple default-account seeding from implicit fallback currency selection.
+    // Prefer an explicit initialization context from onboarding once first-time setup UX is revised.
     const initializationCurrency = (await this.getConfiguredBaseCurrency(prisma)) || "USD";
     
     // First, ensure account groups exist

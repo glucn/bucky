@@ -486,3 +486,29 @@ This file tracks deferred product improvements that are intentionally out of cur
   - How should ticker-only legacy rows map to market when multiple exchanges are possible?
   - Should manual edits overwrite canonical daily points or write separate correction records?
   - What cutover sequence is safest for renderer + IPC + service layers?
+
+## BL-022 - First-Time Currency Setup And Reset Modes
+
+- **ID**: BL-022
+- **Title**: Clarify onboarding currency setup and reset semantics (data reset vs factory reset)
+- **Status**: planned
+- **Priority**: medium
+- **Related Docs**: `doc/BL-019-base-currency-impact/requirements.md`, `src/services/database.ts`, `src/main/index.ts`
+- **Context (What / Why)**:
+  - Current defaults can silently fall back to USD when base currency is absent, which is deterministic but can conflict with intended first-time setup UX.
+  - `reset-all-data` currently preserves base currency by convention, but reset behavior is controlled by a boolean and lacks explicit product-level reset modes.
+  - Onboarding state can become partially preserved (base currency retained while other setup signals are reset), which may confuse users.
+- **Proposed UX / Behavior**:
+  - Introduce explicit reset modes:
+    - **Data reset** (preserve onboarding/base-currency context)
+    - **Factory reset** (clear onboarding/base-currency context)
+  - Define first-time setup policy so base currency is explicitly selected before valuation-sensitive defaults are seeded.
+  - Align system/default account currency initialization with onboarding state transitions.
+- **Scope Notes**:
+  - Requires IPC contract update for reset mode selection and corresponding UI/dev tooling labels.
+  - Should include explicit policy for related settings (reconciliation/onboarding completion flags), not only `baseCurrency`.
+  - Must remain safe for test harnesses that rely on deterministic resets.
+- **Open Questions**:
+  - Should first-time users be blocked from account seeding until base currency is set, or should setup offer a guided default selection?
+  - Which reset mode should be default in developer tools and test helpers?
+  - How should partial setup state be represented to avoid ambiguous UX after resets?

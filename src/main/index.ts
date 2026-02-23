@@ -1015,7 +1015,9 @@ function setupIpcHandlers() {
   // DEV ONLY: Reset all data to initial state
   ipcMain.handle("reset-all-data", async () => {
     try {
-      await databaseService.resetAllData();
+      // TODO(BL-022): Expose reset mode in IPC contract so callers can choose preserve-setup vs
+      // full factory reset explicitly as onboarding UX evolves.
+      await databaseService.resetAllData({ preserveBaseCurrency: true });
       return { success: true };
     } catch (error) {
       console.error("Error resetting all data:", error);
