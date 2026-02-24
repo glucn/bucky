@@ -161,6 +161,15 @@ class LiabilityProfileService {
 
     const rawBalance = await databaseService.getAccountBalance(accountId, tx);
     const currentAmountOwed = Math.max(0, Math.round(-rawBalance * 100) / 100);
+    const hasPostedTransactions =
+      (await prisma.journalLine.count({
+        where: {
+          accountId,
+          entry: {
+            OR: [{ entryType: null }, { entryType: { not: "opening-balance" } }],
+          },
+        },
+      })) > 0;
 
     if (!profile) {
       const legacy = await creditCardService.getCurrentCreditCardProperties(accountId, tx);
@@ -185,6 +194,7 @@ class LiabilityProfileService {
         minimumPaymentPercent: legacy.minimumPaymentPercent ?? null,
         minimumPaymentAmount: legacy.minimumPaymentAmount ?? null,
         interestRate: legacy.interestRate,
+        hasPostedTransactions,
         source: "legacy-credit-card",
       };
     }
@@ -198,6 +208,7 @@ class LiabilityProfileService {
       ...profile.revolvingTerms,
       ...profile.installmentTerms,
       counterpartyName: profile.counterparty?.counterpartyName ?? null,
+      hasPostedTransactions,
       source: "liability-profile",
     };
   }

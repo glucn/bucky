@@ -37,6 +37,7 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
   const [history, setHistory] = useState<any[]>([]);
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [conversionTemplate, setConversionTemplate] = useState<LiabilityTemplate | null>(null);
+  const [hasPostedTransactions, setHasPostedTransactions] = useState(false);
   const [form, setForm] = useState<LiabilityProfileInput>({
     template: initialTemplate || LiabilityTemplate.Blank,
     asOfDate: new Date().toISOString().slice(0, 10),
@@ -65,6 +66,7 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
 
         if (profileResult.success && profileResult.profile) {
           const p = profileResult.profile;
+          setHasPostedTransactions(Boolean(p.hasPostedTransactions));
           setForm({
             template: p.template || initialTemplate || LiabilityTemplate.Blank,
             currentAmountOwed: p.currentAmountOwed,
@@ -88,6 +90,7 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
             originalPrincipal: p.originalPrincipal ?? undefined,
           });
         } else {
+          setHasPostedTransactions(false);
           setForm((prev) => ({
             ...prev,
             template: initialTemplate || prev.template,
@@ -261,6 +264,7 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
               step="0.01"
               className="mt-1 block w-full rounded-md border-gray-300"
               value={form.currentAmountOwed ?? ""}
+              disabled={hasPostedTransactions}
               onChange={(e) =>
                 setForm({
                   ...form,
@@ -268,6 +272,11 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
                 })
               }
             />
+            {hasPostedTransactions && (
+              <p className="mt-1 text-xs text-gray-500">
+                Balance owed is read-only once transactions exist. Use Opening Balance to adjust baseline.
+              </p>
+            )}
           </div>
 
           <div>
