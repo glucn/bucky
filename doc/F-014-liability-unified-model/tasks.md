@@ -25,33 +25,33 @@
   - Acceptance: type contracts are used consistently across service, IPC, preload, and renderer layers.
   - Acceptance: compile-time checks prevent invalid template/field combinations.
 
-- [ ] 3. Implement liability profile service (create/read/update)
+- [x] 3. Implement liability profile service (create/read/update)
   - Acceptance: service can create and fetch profile data for all liability templates.
   - Acceptance: template-specific required-field validation is enforced server-side.
   - Acceptance: profile updates preserve hidden/inactive fields instead of deleting them.
 
-- [ ] 4. Implement unified version snapshot write/read rules
+- [x] 4. Implement unified version snapshot write/read rules
   - Acceptance: each update writes a full effective-dated snapshot (not delta-only).
   - Acceptance: missing `effectiveDate` defaults to today.
   - Acceptance: duplicate `effectiveDate` for the same liability profile is rejected.
   - Acceptance: backdated version inserts are accepted and ordered correctly.
 
-- [ ] 5. Implement conversion workflow rules in service layer
+- [x] 5. Implement conversion workflow rules in service layer
   - Acceptance: conversion can only succeed when target-template required fields are present.
   - Acceptance: conversion away from a template keeps incompatible values persisted and hidden.
   - Acceptance: conversion does not mutate journal/accounting entries.
 
-- [ ] 6. Implement due-schedule and rate validation semantics
+- [x] 6. Implement due-schedule and rate validation semantics
   - Acceptance: monthly due day clamps to end-of-month behavior.
   - Acceptance: weekly/biweekly schedules require weekday plus anchor date.
   - Acceptance: interest rate is validated as percent in UI contract and decimal in persistence/service contract.
 
-- [ ] 7. Integrate opening-balance source-of-truth semantics
+- [x] 7. Integrate opening-balance source-of-truth semantics
   - Acceptance: `currentAmountOwed` setup path writes via opening-balance workflow with required `asOfDate`.
   - Acceptance: liability profile does not introduce a second balance source.
   - Acceptance: when account has transactions, profile balance input is read-only and displays computed ledger balance.
 
-- [ ] 8. Add liability IPC handlers and preload bridge
+- [x] 8. Add liability IPC handlers and preload bridge
   - Acceptance: main process exposes handlers for profile CRUD, conversion, snapshot update, metrics, and history retrieval.
   - Acceptance: preload methods and renderer typings are aligned and strongly typed.
   - Acceptance: IPC returns follow existing app success/error conventions.

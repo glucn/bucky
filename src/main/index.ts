@@ -7,8 +7,10 @@ import * as path from "path";
 import * as isDev from "electron-is-dev";
 import { databaseService } from "../services/database";
 import { creditCardService } from "../services/creditCardService";
+import { liabilityProfileService } from "../services/liabilityProfileService";
 import { resolveImportAccounts } from "../services/importUtils";
 import { AccountSubtype } from "../shared/accountTypes";
+import { LiabilityTemplate, type LiabilityProfileInput } from "../shared/liabilityTypes";
 import {
   autoCategorizationService,
   resolveImportAutoCategorization,
@@ -103,6 +105,12 @@ function setupIpcHandlers() {
   ipcMain.removeHandler("get-accounts-with-groups");
   ipcMain.removeHandler("reorder-account-groups");
   ipcMain.removeHandler("get-group-aggregate-balance");
+  ipcMain.removeHandler("get-liability-profile");
+  ipcMain.removeHandler("upsert-liability-profile");
+  ipcMain.removeHandler("save-liability-version");
+  ipcMain.removeHandler("convert-liability-template");
+  ipcMain.removeHandler("get-liability-version-history");
+  ipcMain.removeHandler("get-liability-metrics");
 
   ipcMain.handle(
     "get-accounts",
@@ -850,6 +858,100 @@ function setupIpcHandlers() {
       }
     }
   );
+
+  ipcMain.handle("get-liability-profile", async (_, accountId: string) => {
+    console.log("Handling get-liability-profile request for:", accountId);
+    try {
+      const profile = await liabilityProfileService.getLiabilityProfile(accountId);
+      return { success: true, profile };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  });
+
+  ipcMain.handle(
+    "upsert-liability-profile",
+    async (_, { accountId, profile }: { accountId: string; profile: LiabilityProfileInput }) => {
+      console.log("Handling upsert-liability-profile request:", { accountId });
+      try {
+        const saved = await liabilityProfileService.upsertLiabilityProfile(accountId, profile);
+        return { success: true, profile: saved };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "save-liability-version",
+    async (_, { accountId, profile }: { accountId: string; profile: LiabilityProfileInput }) => {
+      console.log("Handling save-liability-version request:", { accountId });
+      try {
+        const version = await liabilityProfileService.createVersionSnapshot(accountId, profile);
+        return { success: true, version };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    "convert-liability-template",
+    async (
+      _,
+      {
+        accountId,
+        targetTemplate,
+        profile,
+      }: { accountId: string; targetTemplate: LiabilityTemplate; profile: Omit<LiabilityProfileInput, "template"> }
+    ) => {
+      console.log("Handling convert-liability-template request:", { accountId, targetTemplate });
+      try {
+        const result = await liabilityProfileService.convertTemplate(accountId, targetTemplate, profile);
+        return { success: true, profile: result };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    }
+  );
+
+  ipcMain.handle("get-liability-version-history", async (_, accountId: string) => {
+    console.log("Handling get-liability-version-history request for:", accountId);
+    try {
+      const history = await liabilityProfileService.getVersionHistory(accountId);
+      return { success: true, history };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  });
+
+  ipcMain.handle("get-liability-metrics", async (_, accountId: string) => {
+    console.log("Handling get-liability-metrics request for:", accountId);
+    try {
+      const metrics = await liabilityProfileService.getLiabilityMetrics(accountId);
+      return { success: true, metrics };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  });
 
   // Account Group handlers
   ipcMain.handle(

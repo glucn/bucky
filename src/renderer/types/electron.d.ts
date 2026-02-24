@@ -1,5 +1,6 @@
 import { AccountGroup, Account, GroupedAccountsView } from '../types';
 import { OverviewDashboardPayload } from '../../shared/overview';
+import { LiabilityProfileInput, LiabilityTemplate } from '../../shared/liabilityTypes';
 
 interface AutoCategorizationRuleListItem {
   id: string;
@@ -114,6 +115,18 @@ export interface IElectronAPI {
     baseCurrency: string | null;
     reconciliation: BaseCurrencyReconciliationState | null;
   }>;
+
+  // Liability profile operations
+  getLiabilityProfile(accountId: string): Promise<{ success: boolean; profile?: any; error?: string }>;
+  upsertLiabilityProfile(data: { accountId: string; profile: LiabilityProfileInput }): Promise<{ success: boolean; profile?: any; error?: string }>;
+  saveLiabilityVersion(data: { accountId: string; profile: LiabilityProfileInput }): Promise<{ success: boolean; version?: any; error?: string }>;
+  convertLiabilityTemplate(data: {
+    accountId: string;
+    targetTemplate: LiabilityTemplate;
+    profile: Omit<LiabilityProfileInput, "template">;
+  }): Promise<{ success: boolean; profile?: any; error?: string }>;
+  getLiabilityVersionHistory(accountId: string): Promise<{ success: boolean; history?: any[]; error?: string }>;
+  getLiabilityMetrics(accountId: string): Promise<{ success: boolean; metrics?: any; error?: string }>;
 }
 
 declare global {

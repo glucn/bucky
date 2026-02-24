@@ -57,3 +57,28 @@ export type LiabilityVersionSnapshot = {
   repaymentMethod?: LiabilityRepaymentMethod | null;
   originalPrincipal?: number | null;
 };
+
+export type LiabilityProfileInput = {
+  template: LiabilityTemplate;
+  currentAmountOwed?: number;
+  asOfDate?: string;
+  changeNote?: string;
+  effectiveDate?: string;
+  counterpartyName?: string;
+  limitOrCeiling?: number;
+  statementClosingDay?: number;
+  paymentDueDay?: number;
+  minimumPaymentType?: LiabilityMinimumPaymentType;
+  minimumPaymentPercent?: number;
+  minimumPaymentAmount?: number;
+  interestRate?: number;
+  scheduledPaymentAmount?: number;
+  paymentFrequency?: LiabilityPaymentFrequency;
+  dueScheduleType?: LiabilityDueScheduleType;
+  dueDayOfMonth?: number;
+  dueWeekday?: number;
+  anchorDate?: string;
+  repaymentMethod?: LiabilityRepaymentMethod;
+  originalPrincipal?: number;
+  meta?: Record<string, unknown>;
+};

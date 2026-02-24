@@ -85,4 +85,21 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("set-app-setting", { key, value }),
   getBaseCurrencyImpactState: () =>
     ipcRenderer.invoke("get-base-currency-impact-state"),
+
+  // Liability profile operations
+  getLiabilityProfile: (accountId: string) =>
+    ipcRenderer.invoke("get-liability-profile", accountId),
+  upsertLiabilityProfile: (data: { accountId: string; profile: Record<string, unknown> }) =>
+    ipcRenderer.invoke("upsert-liability-profile", data),
+  saveLiabilityVersion: (data: { accountId: string; profile: Record<string, unknown> }) =>
+    ipcRenderer.invoke("save-liability-version", data),
+  convertLiabilityTemplate: (data: {
+    accountId: string;
+    targetTemplate: string;
+    profile: Record<string, unknown>;
+  }) => ipcRenderer.invoke("convert-liability-template", data),
+  getLiabilityVersionHistory: (accountId: string) =>
+    ipcRenderer.invoke("get-liability-version-history", accountId),
+  getLiabilityMetrics: (accountId: string) =>
+    ipcRenderer.invoke("get-liability-metrics", accountId),
 });
