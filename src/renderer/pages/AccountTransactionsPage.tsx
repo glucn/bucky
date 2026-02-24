@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { ManualTransactionModal } from "../components/ManualTransactionModal";
 import { ImportTransactionsWizard } from "../components/ImportTransactionsWizard";
 import { TransferModal } from "../components/TransferModal";
-import { CreditCardSetupModal } from "../components/CreditCardSetupModal";
+import LiabilityProfileModal from "../components/LiabilityProfileModal";
 import { InlineCounterpartyReassign } from "../components/InlineCounterpartyReassign";
 import { useAccounts } from "../context/AccountsContext";
 import { formatTransactionCurrency } from "../utils/currencyUtils";
@@ -376,13 +376,14 @@ export interface JournalLine {
   account: Account;
 }
 
-interface CreditCardMetrics {
+interface LiabilityMetrics {
   accountId: string;
-  currentBalance: number;
-  availableCredit: number;
-  creditUtilization: number;
-  minimumPayment: number;
-  creditLimit: number;
+  template?: string;
+  currentAmountOwed: number;
+  availableCredit: number | null;
+  utilization: number | null;
+  minimumPayment: number | null;
+  limitOrCeiling: number | null;
 }
 
 export const AccountTransactionsPage: React.FC = () => {
@@ -515,11 +516,10 @@ export const AccountTransactionsPage: React.FC = () => {
     }
   };
   
-  // Credit card state
-  const [creditCardMetrics, setCreditCardMetrics] = useState<CreditCardMetrics | null>(null);
-  const [isCreditCard, setIsCreditCard] = useState(false);
-  const [showCreditCardSetupModal, setShowCreditCardSetupModal] = useState(false);
-  const [creditCardProperties, setCreditCardProperties] = useState<any>(null);
+  // Liability profile state
+  const [liabilityMetrics, setLiabilityMetrics] = useState<LiabilityMetrics | null>(null);
+  const [isLiabilityAccount, setIsLiabilityAccount] = useState(false);
+  const [showLiabilityProfileModal, setShowLiabilityProfileModal] = useState(false);
   
   // Date filtering state
   const [transactionDateFrom, setTransactionDateFrom] = useState<string>("");
@@ -746,55 +746,34 @@ export const AccountTransactionsPage: React.FC = () => {
       const foundAccount = accounts.find((a) => a.id === accountId) || null;
       setAccount(foundAccount);
       
-      // Check if this account has credit card properties
       if (foundAccount) {
-        checkIfCreditCard();
+        if (foundAccount.subtype === AccountSubtype.Liability) {
+          setIsLiabilityAccount(true);
+          fetchLiabilityMetrics();
+        } else {
+          setIsLiabilityAccount(false);
+          setLiabilityMetrics(null);
+        }
       } else {
-        setIsCreditCard(false);
-        setCreditCardMetrics(null);
+        setIsLiabilityAccount(false);
+        setLiabilityMetrics(null);
       }
     } catch (err) {
       setAccount(null);
-      setIsCreditCard(false);
-      setCreditCardMetrics(null);
+      setIsLiabilityAccount(false);
+      setLiabilityMetrics(null);
     }
   };
 
-  const checkIfCreditCard = async () => {
+  const fetchLiabilityMetrics = async () => {
     if (!accountId) return;
     try {
-      const result = await window.electron.ipcRenderer.invoke(
-        "get-credit-card-properties",
-        accountId
-      );
-      if (result.success && result.properties) {
-        setIsCreditCard(true);
-        setCreditCardProperties(result.properties);
-        fetchCreditCardMetrics();
-      } else {
-        setIsCreditCard(false);
-        setCreditCardMetrics(null);
-        setCreditCardProperties(null);
+      const result = await window.electron.getLiabilityMetrics(accountId);
+      if (result.success && result.metrics) {
+        setLiabilityMetrics(result.metrics);
       }
     } catch (err) {
-      setIsCreditCard(false);
-      setCreditCardMetrics(null);
-      setCreditCardProperties(null);
-    }
-  };
-
-  const fetchCreditCardMetrics = async () => {
-    if (!accountId) return;
-    try {
-      const result = await window.electron.ipcRenderer.invoke(
-        "get-credit-card-metrics",
-        accountId
-      );
-      if (result.success) {
-        setCreditCardMetrics(result.metrics);
-      }
-    } catch (err) {
-      console.error("Failed to fetch credit card metrics", err);
+      console.error("Failed to fetch liability metrics", err);
     }
   };
 
@@ -894,60 +873,63 @@ export const AccountTransactionsPage: React.FC = () => {
         </div>
       </div>
       
-      {/* Credit Card Metrics Section */}
-      {isCreditCard && creditCardMetrics && (
+      {/* Liability Metrics Section */}
+      {isLiabilityAccount && liabilityMetrics && (
         <div className="bg-white shadow rounded-lg p-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Credit Card Overview</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Liability Overview</h2>
             <button
-              onClick={() => setShowCreditCardSetupModal(true)}
+              onClick={() => setShowLiabilityProfileModal(true)}
               className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
               type="button"
             >
-              Edit Settings
+              Edit Liability Profile
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Current Balance */}
+            {/* Current Amount Owed */}
             <div className="bg-gray-50 rounded-lg p-4">
-              <div className="text-sm font-medium text-gray-500 mb-1">Current Balance</div>
+              <div className="text-sm font-medium text-gray-500 mb-1">Current Amount Owed</div>
               <div className="text-2xl font-bold text-gray-900">
-                {formatTransactionCurrency(creditCardMetrics.currentBalance, account?.currency || "USD")}
+                {formatTransactionCurrency(liabilityMetrics.currentAmountOwed, account?.currency || "USD")}
               </div>
             </div>
             
-            {/* Credit Limit */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="text-sm font-medium text-gray-500 mb-1">Credit Limit</div>
-              <div className="text-2xl font-bold text-gray-900">
-                {formatTransactionCurrency(creditCardMetrics.creditLimit, account?.currency || "USD")}
-              </div>
-            </div>
-            
-            {/* Available Credit */}
-            <div className="bg-blue-50 rounded-lg p-4">
-              <div className="text-sm font-medium text-blue-700 mb-1">Available Credit</div>
-              <div className="text-2xl font-bold text-blue-900">
-                {formatTransactionCurrency(creditCardMetrics.availableCredit, account?.currency || "USD")}
-              </div>
-            </div>
-            
-            {/* Credit Utilization */}
-            <div className={`${getUtilizationBgColor(creditCardMetrics.creditUtilization)} rounded-lg p-4`}>
-              <div className="text-sm font-medium text-gray-700 mb-1">Credit Utilization</div>
-              <div className={`text-2xl font-bold ${getUtilizationColor(creditCardMetrics.creditUtilization)}`}>
-                {creditCardMetrics.creditUtilization.toFixed(1)}%
-              </div>
-              {creditCardMetrics.creditUtilization >= 70 && (
-                <div className="text-xs text-gray-600 mt-1">
-                  {creditCardMetrics.creditUtilization >= 90 ? "⚠️ Very High" : "⚠️ High"}
+            {typeof liabilityMetrics.limitOrCeiling === "number" && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-sm font-medium text-gray-500 mb-1">Limit / Ceiling</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {formatTransactionCurrency(liabilityMetrics.limitOrCeiling, account?.currency || "USD")}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+            
+            {typeof liabilityMetrics.availableCredit === "number" && (
+              <div className="bg-blue-50 rounded-lg p-4">
+                <div className="text-sm font-medium text-blue-700 mb-1">Available</div>
+                <div className="text-2xl font-bold text-blue-900">
+                  {formatTransactionCurrency(liabilityMetrics.availableCredit, account?.currency || "USD")}
+                </div>
+              </div>
+            )}
+            
+            {typeof liabilityMetrics.utilization === "number" && (
+              <div className={`${getUtilizationBgColor(liabilityMetrics.utilization)} rounded-lg p-4`}>
+                <div className="text-sm font-medium text-gray-700 mb-1">Utilization</div>
+                <div className={`text-2xl font-bold ${getUtilizationColor(liabilityMetrics.utilization)}`}>
+                  {liabilityMetrics.utilization.toFixed(1)}%
+                </div>
+                {liabilityMetrics.utilization >= 70 && (
+                  <div className="text-xs text-gray-600 mt-1">
+                    {liabilityMetrics.utilization >= 90 ? "⚠️ Very High" : "⚠️ High"}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           
           {/* Minimum Payment */}
-          {creditCardMetrics.minimumPayment > 0 && (
+          {typeof liabilityMetrics.minimumPayment === "number" && liabilityMetrics.minimumPayment > 0 && (
             <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
               <div className="flex items-center justify-between">
                 <div>
@@ -955,7 +937,7 @@ export const AccountTransactionsPage: React.FC = () => {
                   <div className="text-xs text-yellow-700 mt-1">Based on current balance</div>
                 </div>
                 <div className="text-xl font-bold text-yellow-900">
-                  {formatTransactionCurrency(creditCardMetrics.minimumPayment, account?.currency || "USD")}
+                  {formatTransactionCurrency(liabilityMetrics.minimumPayment, account?.currency || "USD")}
                 </div>
               </div>
             </div>
@@ -1432,17 +1414,15 @@ export const AccountTransactionsPage: React.FC = () => {
           }}
         />
       )}
-      {showCreditCardSetupModal && accountId && (
-        <CreditCardSetupModal
+      {showLiabilityProfileModal && accountId && (
+        <LiabilityProfileModal
           accountId={accountId}
-          isOpen={showCreditCardSetupModal}
-          onClose={() => setShowCreditCardSetupModal(false)}
+          isOpen={showLiabilityProfileModal}
+          onClose={() => setShowLiabilityProfileModal(false)}
           onSuccess={async () => {
-            setShowCreditCardSetupModal(false);
-            await checkIfCreditCard();
-            await fetchCreditCardMetrics();
+            setShowLiabilityProfileModal(false);
+            await fetchLiabilityMetrics();
           }}
-          existingProperties={creditCardProperties}
         />
       )}
     </div>

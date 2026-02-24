@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { AccountType, toAccountType, AccountSubtype } from "../../shared/accountTypes";
+import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { SUPPORTED_CURRENCY_OPTIONS } from "../../shared/currencies";
-import { CreditCardSetupModal } from "./CreditCardSetupModal";
+import LiabilityProfileModal from "./LiabilityProfileModal";
+import { LiabilityTemplate } from "../../shared/liabilityTypes";
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -29,9 +30,11 @@ export const AccountModal: React.FC<AccountModalProps> = ({
     new Date().toISOString().split("T")[0]
   );
   const [openingBalanceError, setOpeningBalanceError] = useState<string | null>(null);
-  const [showCreditCardSetup, setShowCreditCardSetup] = useState(false);
+  const [showLiabilitySetup, setShowLiabilitySetup] = useState(false);
   const [createdAccountId, setCreatedAccountId] = useState<string | null>(null);
-  const [selectedTypeValue, setSelectedTypeValue] = useState<string>("cash"); // Track raw dropdown value
+  const [selectedLiabilityTemplate, setSelectedLiabilityTemplate] = useState<LiabilityTemplate>(
+    LiabilityTemplate.Blank
+  );
 
   // Fetch available groups
   useEffect(() => {
@@ -48,7 +51,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
           currency: baseCurrency,
           subtype: AccountSubtype.Asset,
         });
-        setSelectedTypeValue("cash");
+        setSelectedLiabilityTemplate(LiabilityTemplate.Blank);
         setSelectedGroupId("");
         setOpeningBalanceAmount("");
         setOpeningBalanceDate(new Date().toISOString().split("T")[0]);
@@ -105,24 +108,9 @@ export const AccountModal: React.FC<AccountModalProps> = ({
         }
       }
       
-      // Check if this is a credit card account using the tracked dropdown value
-      const isCreditCard = selectedTypeValue === "credit" && newAccount.subtype === AccountSubtype.Liability;
-      
-      if (isCreditCard && result?.account?.id) {
-        if (parsedOpeningBalance !== null && parsedOpeningBalance !== 0) {
-          try {
-            await window.electron.setOpeningBalance({
-              accountId: result.account.id,
-              displayAmount: parsedOpeningBalance,
-              asOfDate: openingBalanceDate,
-            });
-          } catch (balanceError) {
-            console.error("Failed to set opening balance:", balanceError);
-          }
-        }
-        // Store the created account ID and show credit card setup modal
+      if (newAccount.subtype === AccountSubtype.Liability && result?.account?.id) {
         setCreatedAccountId(result.account.id);
-        setShowCreditCardSetup(true);
+        setShowLiabilitySetup(true);
       } else {
         if (parsedOpeningBalance !== null && parsedOpeningBalance !== 0) {
           try {
@@ -137,7 +125,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
         }
         // For non-credit card accounts, close immediately
         setNewAccount({ name: "", type: AccountType.User, currency: baseCurrencyAtOpen, subtype: AccountSubtype.Asset });
-        setSelectedTypeValue("cash");
+        setSelectedLiabilityTemplate(LiabilityTemplate.Blank);
         setSelectedGroupId("");
         onAccountCreated();
         onClose();
@@ -149,21 +137,21 @@ export const AccountModal: React.FC<AccountModalProps> = ({
     }
   };
 
-  const handleCreditCardSetupComplete = () => {
-    setShowCreditCardSetup(false);
+  const handleLiabilitySetupComplete = () => {
+    setShowLiabilitySetup(false);
     setCreatedAccountId(null);
     setNewAccount({ name: "", type: AccountType.User, currency: baseCurrencyAtOpen, subtype: AccountSubtype.Asset });
-    setSelectedTypeValue("cash");
+    setSelectedLiabilityTemplate(LiabilityTemplate.Blank);
     setSelectedGroupId("");
     onAccountCreated();
     onClose();
   };
 
-  const handleCreditCardSetupSkip = () => {
-    setShowCreditCardSetup(false);
+  const handleLiabilitySetupSkip = () => {
+    setShowLiabilitySetup(false);
     setCreatedAccountId(null);
     setNewAccount({ name: "", type: AccountType.User, currency: baseCurrencyAtOpen, subtype: AccountSubtype.Asset });
-    setSelectedTypeValue("cash");
+    setSelectedLiabilityTemplate(LiabilityTemplate.Blank);
     setSelectedGroupId("");
     onAccountCreated();
     onClose();
@@ -210,42 +198,13 @@ export const AccountModal: React.FC<AccountModalProps> = ({
           </div>
           <div>
             <label
-              htmlFor="type"
+              htmlFor="accountKind"
               className="block text-sm font-medium text-gray-700"
             >
-              Account Type
+              Account Kind
             </label>
             <select
-              id="type"
-              value={selectedTypeValue}
-              onChange={(e) => {
-                const value = e.target.value;
-                setSelectedTypeValue(value);
-                // Automatically set subtype to Liability for credit cards
-                const subtype = value === "credit" ? AccountSubtype.Liability : newAccount.subtype;
-                setNewAccount({
-                  ...newAccount,
-                  type: toAccountType(value),
-                  subtype,
-                });
-              }}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-            >
-              <option value="cash">Cash</option>
-              <option value="bank">Bank</option>
-              <option value="credit">Credit Card</option>
-              <option value="investment">Investment</option>
-            </select>
-          </div>
-          <div>
-            <label
-              htmlFor="subtype"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Account Subtype
-            </label>
-            <select
-              id="subtype"
+              id="accountKind"
               value={newAccount.subtype}
               onChange={(e) =>
                 setNewAccount({
@@ -259,6 +218,30 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               <option value={AccountSubtype.Liability}>Liability</option>
             </select>
           </div>
+
+          {newAccount.subtype === AccountSubtype.Liability && (
+            <div>
+              <label
+                htmlFor="liabilityTemplate"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Liability Template
+              </label>
+              <select
+                id="liabilityTemplate"
+                value={selectedLiabilityTemplate}
+                onChange={(e) =>
+                  setSelectedLiabilityTemplate(e.target.value as LiabilityTemplate)
+                }
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              >
+                <option value={LiabilityTemplate.CreditCard}>Credit Card</option>
+                <option value={LiabilityTemplate.LoanMortgage}>Loan/Mortgage</option>
+                <option value={LiabilityTemplate.PersonalDebt}>Personal Debt</option>
+                <option value={LiabilityTemplate.Blank}>Blank</option>
+              </select>
+            </div>
+          )}
           <div>
             <label
               htmlFor="currency"
@@ -326,7 +309,13 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   placeholder="0.00"
                   data-testid="opening-balance-amount-input"
+                  disabled={newAccount.subtype === AccountSubtype.Liability}
                 />
+                {newAccount.subtype === AccountSubtype.Liability && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Set balance owed during liability profile setup.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -354,15 +343,16 @@ export const AccountModal: React.FC<AccountModalProps> = ({
         </form>
       </div>
       
-      {/* Credit Card Setup Modal */}
-      {showCreditCardSetup && createdAccountId && (
-        <CreditCardSetupModal
-          accountId={createdAccountId}
-          isOpen={showCreditCardSetup}
-          onClose={handleCreditCardSetupSkip}
-          onSuccess={handleCreditCardSetupComplete}
-        />
-      )}
+       {showLiabilitySetup && createdAccountId && (
+         <LiabilityProfileModal
+           accountId={createdAccountId}
+           isOpen={showLiabilitySetup}
+           initialTemplate={selectedLiabilityTemplate}
+           allowSkip={selectedLiabilityTemplate === LiabilityTemplate.Blank}
+           onClose={handleLiabilitySetupSkip}
+           onSuccess={handleLiabilitySetupComplete}
+         />
+       )}
     </div>
   );
 };

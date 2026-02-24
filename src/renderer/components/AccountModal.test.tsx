@@ -37,7 +37,7 @@ describe("AccountModal opening balance", () => {
   it("shows liability label as Balance owed", async () => {
     render(<AccountModal isOpen={true} onClose={vi.fn()} onAccountCreated={vi.fn()} />);
 
-    const subtypeSelect = screen.getByLabelText("Account Subtype");
+    const subtypeSelect = screen.getByLabelText("Account Kind");
     fireEvent.change(subtypeSelect, { target: { value: "liability" } });
 
     expect(await screen.findByText("Balance owed")).toBeTruthy();
