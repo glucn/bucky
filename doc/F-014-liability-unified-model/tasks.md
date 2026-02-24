@@ -101,12 +101,12 @@
   - Acceptance: unified liability flow is primary for new/updated liability setup.
   - Acceptance: no manual data migration is required for current project state.
 
-- [ ] 18. Add deterministic tests and E2E coverage for F-014 flows
+- [x] 18. Add deterministic tests and E2E coverage for F-014 flows
   - Acceptance: unit/service tests cover template validation, conversion gating, due schedules, snapshot rules, and opening-balance integration.
   - Acceptance: renderer tests cover guided creation, skip gating, Advanced conversion/history UX, and read-only balance behavior after transactions.
   - Acceptance: E2E covers create/setup for each template, conversion behavior, backdated version history rendering, and liability balance semantics.
 
-- [ ] 19. Final regression and documentation sync
+- [x] 19. Final regression and documentation sync
   - Acceptance: relevant unit/service/renderer/E2E suites pass for F-014 scope.
   - Acceptance: `requirements.md`, `design.md`, and `tasks.md` remain aligned with implemented behavior.
   - Acceptance: implementation deviations are documented explicitly before completion.
@@ -121,4 +121,4 @@
 
 ## Implementation Deviations
 
-- None identified yet.
+- E2E coverage validates liability setup/conversion/history ordering and balance semantics through deterministic IPC-driven scenarios in `tests/e2e/liability-unified-model.spec.ts`; renderer-level history rendering remains covered in component tests.
