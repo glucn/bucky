@@ -15,12 +15,12 @@
 
 ## Tasks
 
-- [ ] 1. Add liability profile data models and schema migration
+- [x] 1. Add liability profile data models and schema migration
   - Acceptance: Prisma schema adds structured liability profile models for core profile, template/capability data, and unified effective-dated version snapshots.
   - Acceptance: schema supports one profile per liability account, immutable historical versions, and optional non-critical `meta` JSON.
   - Acceptance: migration applies cleanly to test/dev databases.
 
-- [ ] 2. Add shared liability domain types and validation contracts
+- [x] 2. Add shared liability domain types and validation contracts
   - Acceptance: shared enums/types exist for liability templates, repayment methods, payment frequency, and due schedule shape.
   - Acceptance: type contracts are used consistently across service, IPC, preload, and renderer layers.
   - Acceptance: compile-time checks prevent invalid template/field combinations.

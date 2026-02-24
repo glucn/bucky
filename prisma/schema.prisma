@@ -27,6 +27,37 @@ enum AutoCategorizationMatchType {
   keyword
 }
 
+enum LiabilityTemplate {
+  credit_card
+  loan_mortgage
+  personal_debt
+  blank
+}
+
+enum LiabilityMinimumPaymentType {
+  percent
+  amount
+  both
+}
+
+enum LiabilityPaymentFrequency {
+  weekly
+  biweekly
+  monthly
+}
+
+enum LiabilityDueScheduleType {
+  monthly_day
+  weekly_weekday
+  biweekly_weekday_anchor
+}
+
+enum LiabilityRepaymentMethod {
+  fixed_payment
+  fixed_principal
+  manual_fixed_payment
+}
+
 model AccountGroup {
   id           String      @id @default(uuid())
   name         String
@@ -54,6 +85,7 @@ model Account {
   lines     JournalLine[]
   checkpoints Checkpoint[]
   creditCardProperties CreditCardProperties[]
+  liabilityProfile LiabilityProfile?
   investmentProperties InvestmentProperties?
   autoCategorizationRules AutoCategorizationRule[] @relation("AutoCategorizationRuleTarget")
   group     AccountGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
@@ -142,6 +174,97 @@ model CreditCardProperties {
   
   @@index([accountId, effectiveDate])
   @@index([accountId, isActive])
+}
+
+model LiabilityProfile {
+  id               String                  @id @default(uuid())
+  accountId        String                  @unique
+  template         LiabilityTemplate
+  meta             String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  account          Account                 @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  revolvingTerms   LiabilityRevolvingTerms?
+  installmentTerms LiabilityInstallmentTerms?
+  counterparty     LiabilityCounterparty?
+  versions         LiabilityProfileVersion[]
+
+  @@index([template])
+}
+
+model LiabilityRevolvingTerms {
+  id                  String                      @id @default(uuid())
+  profileId           String                      @unique
+  limitOrCeiling      Float?
+  statementClosingDay Int?
+  paymentDueDay       Int?
+  minimumPaymentType  LiabilityMinimumPaymentType?
+  minimumPaymentPercent Float?
+  minimumPaymentAmount  Float?
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+
+  profile             LiabilityProfile            @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model LiabilityInstallmentTerms {
+  id                    String                    @id @default(uuid())
+  profileId             String                    @unique
+  scheduledPaymentAmount Float?
+  paymentFrequency      LiabilityPaymentFrequency?
+  dueScheduleType       LiabilityDueScheduleType?
+  dueDayOfMonth         Int?
+  dueWeekday            Int?
+  anchorDate            String?
+  paymentDueDay         Int?
+  repaymentMethod       LiabilityRepaymentMethod?
+  originalPrincipal     Float?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  profile               LiabilityProfile          @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model LiabilityCounterparty {
+  id               String             @id @default(uuid())
+  profileId        String             @unique
+  counterpartyName String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  profile          LiabilityProfile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model LiabilityProfileVersion {
+  id                     String                      @id @default(uuid())
+  profileId              String
+  effectiveDate          String
+  template               LiabilityTemplate
+  changeNote             String?
+  counterpartyName       String?
+  limitOrCeiling         Float?
+  statementClosingDay    Int?
+  paymentDueDay          Int?
+  minimumPaymentType     LiabilityMinimumPaymentType?
+  minimumPaymentPercent  Float?
+  minimumPaymentAmount   Float?
+  interestRate           Float?
+  scheduledPaymentAmount Float?
+  paymentFrequency       LiabilityPaymentFrequency?
+  dueScheduleType        LiabilityDueScheduleType?
+  dueDayOfMonth          Int?
+  dueWeekday             Int?
+  anchorDate             String?
+  repaymentMethod        LiabilityRepaymentMethod?
+  originalPrincipal      Float?
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+
+  profile                LiabilityProfile            @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, effectiveDate])
+  @@index([profileId, effectiveDate])
 }
 
 model InvestmentProperties {
