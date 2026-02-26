@@ -123,4 +123,83 @@ describe("LiabilityProfileModal", () => {
 
     expect(await screen.findByText(/"counterpartyName": "Chris"/)).toBeTruthy();
   });
+
+  it("hides close and cancel actions when setup is locked", async () => {
+    render(
+      <LiabilityProfileModal
+        accountId="acc-5"
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        initialTemplate={LiabilityTemplate.LoanMortgage}
+        lockUntilSaved={true}
+      />
+    );
+
+    await screen.findByText("Liability Profile - Loan/Mortgage");
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+  });
+
+  it("scrolls to top when save validation fails", async () => {
+    const scrollToMock = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: scrollToMock,
+    });
+
+    render(
+      <LiabilityProfileModal
+        accountId="acc-6"
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        initialTemplate={LiabilityTemplate.LoanMortgage}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Liability Profile" }));
+
+    expect(await screen.findByText("Interest rate is required")).toBeTruthy();
+    expect(scrollToMock).toHaveBeenCalled();
+  });
+
+  it("derives due schedule type from payment frequency", async () => {
+    render(
+      <LiabilityProfileModal
+        accountId="acc-7"
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        initialTemplate={LiabilityTemplate.LoanMortgage}
+      />
+    );
+
+    const paymentFrequencySelect = await screen.findByTestId("loan-payment-frequency-select");
+
+    fireEvent.change(paymentFrequencySelect, { target: { value: "monthly" } });
+    expect(screen.getByDisplayValue("Monthly day")).toBeTruthy();
+
+    fireEvent.change(paymentFrequencySelect, { target: { value: "weekly" } });
+    expect(screen.getByDisplayValue("Weekly weekday")).toBeTruthy();
+    expect(await screen.findByText("Due weekday (0-6)")).toBeTruthy();
+  });
+
+  it("renames scheduled amount label for fixed principal repayment", async () => {
+    render(
+      <LiabilityProfileModal
+        accountId="acc-8"
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        initialTemplate={LiabilityTemplate.LoanMortgage}
+      />
+    );
+
+    fireEvent.change(await screen.findByTestId("loan-repayment-method-select"), {
+      target: { value: "fixed_principal" },
+    });
+
+    expect(screen.getByText("Scheduled principal amount")).toBeTruthy();
+  });
 });

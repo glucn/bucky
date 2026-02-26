@@ -32,6 +32,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const [openingBalanceError, setOpeningBalanceError] = useState<string | null>(null);
   const [showLiabilitySetup, setShowLiabilitySetup] = useState(false);
   const [createdAccountId, setCreatedAccountId] = useState<string | null>(null);
+  const [pendingLiabilityOpeningBalance, setPendingLiabilityOpeningBalance] = useState<number | undefined>(
+    undefined
+  );
+  const [pendingLiabilityAsOfDate, setPendingLiabilityAsOfDate] = useState<string | undefined>(undefined);
   const [selectedLiabilityTemplate, setSelectedLiabilityTemplate] = useState<LiabilityTemplate>(
     LiabilityTemplate.Blank
   );
@@ -109,6 +113,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({
       }
       
       if (newAccount.subtype === AccountSubtype.Liability && result?.account?.id) {
+        setPendingLiabilityOpeningBalance(parsedOpeningBalance === null ? undefined : parsedOpeningBalance);
+        setPendingLiabilityAsOfDate(openingBalanceDate || undefined);
         setCreatedAccountId(result.account.id);
         setShowLiabilitySetup(true);
       } else {
@@ -140,6 +146,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const handleLiabilitySetupComplete = () => {
     setShowLiabilitySetup(false);
     setCreatedAccountId(null);
+    setPendingLiabilityOpeningBalance(undefined);
+    setPendingLiabilityAsOfDate(undefined);
     setNewAccount({ name: "", type: AccountType.User, currency: baseCurrencyAtOpen, subtype: AccountSubtype.Asset });
     setSelectedLiabilityTemplate(LiabilityTemplate.Blank);
     setSelectedGroupId("");
@@ -150,6 +158,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const handleLiabilitySetupSkip = () => {
     setShowLiabilitySetup(false);
     setCreatedAccountId(null);
+    setPendingLiabilityOpeningBalance(undefined);
+    setPendingLiabilityAsOfDate(undefined);
     setNewAccount({ name: "", type: AccountType.User, currency: baseCurrencyAtOpen, subtype: AccountSubtype.Asset });
     setSelectedLiabilityTemplate(LiabilityTemplate.Blank);
     setSelectedGroupId("");
@@ -309,11 +319,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   placeholder="0.00"
                   data-testid="opening-balance-amount-input"
-                  disabled={newAccount.subtype === AccountSubtype.Liability}
                 />
                 {newAccount.subtype === AccountSubtype.Liability && (
                   <p className="mt-1 text-xs text-gray-500">
-                    Set balance owed during liability profile setup.
+                    This pre-fills balance owed in liability profile setup.
                   </p>
                 )}
               </div>
@@ -347,11 +356,14 @@ export const AccountModal: React.FC<AccountModalProps> = ({
          <LiabilityProfileModal
            accountId={createdAccountId}
            isOpen={showLiabilitySetup}
-           initialTemplate={selectedLiabilityTemplate}
-           allowSkip={selectedLiabilityTemplate === LiabilityTemplate.Blank}
-           onClose={handleLiabilitySetupSkip}
-           onSuccess={handleLiabilitySetupComplete}
-         />
+            initialTemplate={selectedLiabilityTemplate}
+            allowSkip={selectedLiabilityTemplate === LiabilityTemplate.Blank}
+            lockUntilSaved={selectedLiabilityTemplate !== LiabilityTemplate.Blank}
+            initialCurrentAmountOwed={pendingLiabilityOpeningBalance}
+            initialAsOfDate={pendingLiabilityAsOfDate}
+            onClose={handleLiabilitySetupSkip}
+            onSuccess={handleLiabilitySetupComplete}
+          />
        )}
     </div>
   );

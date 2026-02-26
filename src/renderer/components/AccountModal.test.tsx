@@ -66,6 +66,15 @@ describe("AccountModal opening balance", () => {
     expect(await screen.findByText("Balance owed")).toBeTruthy();
   });
 
+  it("keeps liability opening balance input editable", () => {
+    render(<AccountModal isOpen={true} onClose={vi.fn()} onAccountCreated={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Account Kind"), { target: { value: "liability" } });
+    const amountInput = screen.getByTestId("opening-balance-amount-input") as HTMLInputElement;
+
+    expect(amountInput.disabled).toBe(false);
+  });
+
   it("has required opening balance date input", () => {
     render(<AccountModal isOpen={true} onClose={vi.fn()} onAccountCreated={vi.fn()} />);
     const dateInput = screen.getByTestId("opening-balance-date-input");
@@ -103,6 +112,23 @@ describe("AccountModal opening balance", () => {
 
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "Skip for now" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    });
+  });
+
+  it("passes opening balance into liability setup form", async () => {
+    render(<AccountModal isOpen={true} onClose={vi.fn()} onAccountCreated={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Account Name"), { target: { value: "Loan Liability" } });
+    fireEvent.change(screen.getByLabelText("Account Kind"), { target: { value: "liability" } });
+    fireEvent.change(screen.getByLabelText("Liability Template"), { target: { value: "loan_mortgage" } });
+    fireEvent.change(screen.getByTestId("opening-balance-amount-input"), { target: { value: "1500" } });
+    fireEvent.change(screen.getByTestId("opening-balance-date-input"), { target: { value: "2026-02-10" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add Account" }));
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("1500")).toBeTruthy();
+      expect(screen.getByDisplayValue("2026-02-10")).toBeTruthy();
     });
   });
 });

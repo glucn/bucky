@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   LiabilityDueScheduleType,
   LiabilityMinimumPaymentType,
@@ -15,6 +15,9 @@ interface LiabilityProfileModalProps {
   onSuccess: () => void;
   initialTemplate?: LiabilityTemplate;
   allowSkip?: boolean;
+  lockUntilSaved?: boolean;
+  initialCurrentAmountOwed?: number;
+  initialAsOfDate?: string;
 }
 
 const templateOptions: { value: LiabilityTemplate; label: string }[] = [
@@ -24,6 +27,40 @@ const templateOptions: { value: LiabilityTemplate; label: string }[] = [
   { value: LiabilityTemplate.Blank, label: "Blank" },
 ];
 
+const dueScheduleTypeOptions: { value: LiabilityDueScheduleType; label: string }[] = [
+  { value: LiabilityDueScheduleType.MonthlyDay, label: "Monthly day" },
+  { value: LiabilityDueScheduleType.WeeklyWeekday, label: "Weekly weekday" },
+  { value: LiabilityDueScheduleType.BiweeklyWeekdayAnchor, label: "Biweekly weekday + anchor" },
+];
+
+const dueScheduleByFrequency: Record<LiabilityPaymentFrequency, LiabilityDueScheduleType> = {
+  [LiabilityPaymentFrequency.Monthly]: LiabilityDueScheduleType.MonthlyDay,
+  [LiabilityPaymentFrequency.Weekly]: LiabilityDueScheduleType.WeeklyWeekday,
+  [LiabilityPaymentFrequency.Biweekly]: LiabilityDueScheduleType.BiweeklyWeekdayAnchor,
+};
+
+function getExpectedDueScheduleType(
+  paymentFrequency?: LiabilityPaymentFrequency
+): LiabilityDueScheduleType | undefined {
+  return paymentFrequency ? dueScheduleByFrequency[paymentFrequency] : undefined;
+}
+
+function normalizeDueScheduleType(
+  paymentFrequency: LiabilityPaymentFrequency | undefined,
+  dueScheduleType: LiabilityDueScheduleType | undefined
+): LiabilityDueScheduleType | undefined {
+  const expected = getExpectedDueScheduleType(paymentFrequency);
+  if (!expected) {
+    return dueScheduleType;
+  }
+  return dueScheduleType === expected ? dueScheduleType : expected;
+}
+
+function getDueScheduleLabel(dueScheduleType?: LiabilityDueScheduleType): string {
+  if (!dueScheduleType) return "";
+  return dueScheduleTypeOptions.find((option) => option.value === dueScheduleType)?.label ?? "";
+}
+
 const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
   accountId,
   isOpen,
@@ -31,7 +68,11 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
   onSuccess,
   initialTemplate,
   allowSkip = false,
+  lockUntilSaved = false,
+  initialCurrentAmountOwed,
+  initialAsOfDate,
 }) => {
+  const modalBodyRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<any[]>([]);
@@ -40,7 +81,8 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
   const [hasPostedTransactions, setHasPostedTransactions] = useState(false);
   const [form, setForm] = useState<LiabilityProfileInput>({
     template: initialTemplate || LiabilityTemplate.Blank,
-    asOfDate: new Date().toISOString().slice(0, 10),
+    currentAmountOwed: initialCurrentAmountOwed,
+    asOfDate: initialAsOfDate || new Date().toISOString().slice(0, 10),
     effectiveDate: new Date().toISOString().slice(0, 10),
   });
 
@@ -53,6 +95,20 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
   const templateLabel = useMemo(() => {
     return templateOptions.find((t) => t.value === form.template)?.label || "Liability";
   }, [form.template]);
+
+  const derivedDueScheduleType = useMemo(
+    () => normalizeDueScheduleType(form.paymentFrequency, form.dueScheduleType),
+    [form.paymentFrequency, form.dueScheduleType]
+  );
+
+  const scrollToTop = () => {
+    if (!modalBodyRef.current) return;
+    if (typeof modalBodyRef.current.scrollTo === "function") {
+      modalBodyRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      modalBodyRef.current.scrollTop = 0;
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -82,7 +138,10 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
             interestRate: p.interestRate !== undefined && p.interestRate !== null ? p.interestRate * 100 : undefined,
             scheduledPaymentAmount: p.scheduledPaymentAmount ?? undefined,
             paymentFrequency: p.paymentFrequency ?? undefined,
-            dueScheduleType: p.dueScheduleType ?? undefined,
+            dueScheduleType: normalizeDueScheduleType(
+              p.paymentFrequency ?? undefined,
+              p.dueScheduleType ?? undefined
+            ),
             dueDayOfMonth: p.dueDayOfMonth ?? undefined,
             dueWeekday: p.dueWeekday ?? undefined,
             anchorDate: p.anchorDate ?? undefined,
@@ -94,6 +153,9 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
           setForm((prev) => ({
             ...prev,
             template: initialTemplate || prev.template,
+            currentAmountOwed:
+              prev.currentAmountOwed !== undefined ? prev.currentAmountOwed : initialCurrentAmountOwed,
+            asOfDate: prev.asOfDate || initialAsOfDate || new Date().toISOString().slice(0, 10),
           }));
         }
 
@@ -102,6 +164,7 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load liability profile");
+        scrollToTop();
       }
     };
     void load();
@@ -131,18 +194,15 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
       if (form.interestRate === undefined) return "Interest rate is required";
       if (form.scheduledPaymentAmount === undefined) return "Scheduled payment amount is required";
       if (!form.paymentFrequency) return "Payment frequency is required";
-      if (!form.dueScheduleType) return "Due schedule is required";
+      if (!derivedDueScheduleType) return "Due schedule is required";
       if (!form.repaymentMethod) return "Repayment method is required";
       if (form.paymentDueDay === undefined) return "Payment due day is required";
-      if (
-        form.dueScheduleType === LiabilityDueScheduleType.MonthlyDay &&
-        form.dueDayOfMonth === undefined
-      ) {
+      if (derivedDueScheduleType === LiabilityDueScheduleType.MonthlyDay && form.dueDayOfMonth === undefined) {
         return "Day of month is required";
       }
       if (
-        (form.dueScheduleType === LiabilityDueScheduleType.WeeklyWeekday ||
-          form.dueScheduleType === LiabilityDueScheduleType.BiweeklyWeekdayAnchor) &&
+        (derivedDueScheduleType === LiabilityDueScheduleType.WeeklyWeekday ||
+          derivedDueScheduleType === LiabilityDueScheduleType.BiweeklyWeekdayAnchor) &&
         (form.dueWeekday === undefined || !form.anchorDate)
       ) {
         return "Weekday and anchor date are required";
@@ -164,6 +224,7 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
     const validationError = validate();
     if (validationError) {
       setError(validationError);
+      scrollToTop();
       return;
     }
 
@@ -172,6 +233,7 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
     try {
       const payload: LiabilityProfileInput = {
         ...form,
+        dueScheduleType: derivedDueScheduleType,
         interestRate:
           form.interestRate !== undefined
             ? Math.round((form.interestRate / 100) * 1000000) / 1000000
@@ -188,6 +250,7 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error");
+      scrollToTop();
     } finally {
       setLoading(false);
     }
@@ -203,6 +266,7 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
         targetTemplate: conversionTemplate,
         profile: {
           ...form,
+          dueScheduleType: derivedDueScheduleType,
           interestRate:
             form.interestRate !== undefined
               ? Math.round((form.interestRate / 100) * 1000000) / 1000000
@@ -220,6 +284,7 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error");
+      scrollToTop();
     } finally {
       setLoading(false);
     }
@@ -229,14 +294,19 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto relative">
-        <button
-          className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-2xl"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          ×
-        </button>
+      <div
+        ref={modalBodyRef}
+        className="bg-white rounded-lg shadow-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto relative"
+      >
+        {!lockUntilSaved && (
+          <button
+            className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-2xl"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        )}
         <h2 className="text-lg font-medium text-gray-900 mb-4">Liability Profile - {templateLabel}</h2>
 
         {error && <div className="mb-4 p-3 bg-red-100 border border-red-300 rounded text-red-700">{error}</div>}
@@ -445,7 +515,72 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">Scheduled payment amount</label>
+                <label className="block text-sm font-medium text-gray-700">Payment frequency</label>
+                <select
+                  data-testid="loan-payment-frequency-select"
+                  className="mt-1 block w-full rounded-md border-gray-300"
+                  value={form.paymentFrequency ?? ""}
+                  onChange={(e) => {
+                    const nextPaymentFrequency =
+                      e.target.value === "" ? undefined : (e.target.value as LiabilityPaymentFrequency);
+                    const nextDueScheduleType = normalizeDueScheduleType(
+                      nextPaymentFrequency,
+                      form.dueScheduleType
+                    );
+                    setForm({
+                      ...form,
+                      paymentFrequency: nextPaymentFrequency,
+                      dueScheduleType: nextDueScheduleType,
+                      dueDayOfMonth:
+                        nextDueScheduleType === LiabilityDueScheduleType.MonthlyDay
+                          ? form.dueDayOfMonth
+                          : undefined,
+                      dueWeekday:
+                        nextDueScheduleType === LiabilityDueScheduleType.WeeklyWeekday ||
+                        nextDueScheduleType === LiabilityDueScheduleType.BiweeklyWeekdayAnchor
+                          ? form.dueWeekday
+                          : undefined,
+                      anchorDate:
+                        nextDueScheduleType === LiabilityDueScheduleType.WeeklyWeekday ||
+                        nextDueScheduleType === LiabilityDueScheduleType.BiweeklyWeekdayAnchor
+                          ? form.anchorDate
+                          : undefined,
+                    });
+                  }}
+                >
+                  <option value="">Select frequency</option>
+                  <option value={LiabilityPaymentFrequency.Monthly}>Monthly</option>
+                  <option value={LiabilityPaymentFrequency.Biweekly}>Biweekly</option>
+                  <option value={LiabilityPaymentFrequency.Weekly}>Weekly</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Repayment method</label>
+                <select
+                  data-testid="loan-repayment-method-select"
+                  className="mt-1 block w-full rounded-md border-gray-300"
+                  value={form.repaymentMethod ?? ""}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      repaymentMethod: e.target.value as LiabilityRepaymentMethod,
+                    })
+                  }
+                >
+                  <option value="">Select method</option>
+                  <option value={LiabilityRepaymentMethod.FixedPayment}>Fixed payment</option>
+                  <option value={LiabilityRepaymentMethod.FixedPrincipal}>Fixed principal</option>
+                  <option value={LiabilityRepaymentMethod.ManualFixedPayment}>Manual fixed payment</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  {form.repaymentMethod === LiabilityRepaymentMethod.FixedPrincipal
+                    ? "Scheduled principal amount"
+                    : "Scheduled payment amount"}
+                </label>
                 <input
                   type="number"
                   step="0.01"
@@ -462,44 +597,17 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">Payment frequency</label>
-                <select
-                  className="mt-1 block w-full rounded-md border-gray-300"
-                  value={form.paymentFrequency ?? ""}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      paymentFrequency: e.target.value as LiabilityPaymentFrequency,
-                    })
-                  }
-                >
-                  <option value="">Select frequency</option>
-                  <option value={LiabilityPaymentFrequency.Monthly}>Monthly</option>
-                  <option value={LiabilityPaymentFrequency.Biweekly}>Biweekly</option>
-                  <option value={LiabilityPaymentFrequency.Weekly}>Weekly</option>
-                </select>
+                <label className="block text-sm font-medium text-gray-700">Due schedule</label>
+                <input
+                  type="text"
+                  className="mt-1 block w-full rounded-md border-gray-300 bg-gray-50"
+                  value={getDueScheduleLabel(derivedDueScheduleType)}
+                  readOnly
+                />
+                <p className="mt-1 text-xs text-gray-500">Automatically derived from payment frequency.</p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Due schedule type</label>
-                <select
-                  className="mt-1 block w-full rounded-md border-gray-300"
-                  value={form.dueScheduleType ?? ""}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      dueScheduleType: e.target.value as LiabilityDueScheduleType,
-                    })
-                  }
-                >
-                  <option value="">Select schedule</option>
-                  <option value={LiabilityDueScheduleType.MonthlyDay}>Monthly day</option>
-                  <option value={LiabilityDueScheduleType.WeeklyWeekday}>Weekly weekday</option>
-                  <option value={LiabilityDueScheduleType.BiweeklyWeekdayAnchor}>Biweekly weekday + anchor</option>
-                </select>
-              </div>
-
-              {form.dueScheduleType === LiabilityDueScheduleType.MonthlyDay && (
+              {derivedDueScheduleType === LiabilityDueScheduleType.MonthlyDay && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Due day of month</label>
                   <input
@@ -518,8 +626,8 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
                 </div>
               )}
 
-              {(form.dueScheduleType === LiabilityDueScheduleType.WeeklyWeekday ||
-                form.dueScheduleType === LiabilityDueScheduleType.BiweeklyWeekdayAnchor) && (
+              {(derivedDueScheduleType === LiabilityDueScheduleType.WeeklyWeekday ||
+                derivedDueScheduleType === LiabilityDueScheduleType.BiweeklyWeekdayAnchor) && (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Due weekday (0-6)</label>
@@ -548,25 +656,6 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
                   </div>
                 </>
               )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Repayment method</label>
-                <select
-                  className="mt-1 block w-full rounded-md border-gray-300"
-                  value={form.repaymentMethod ?? ""}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      repaymentMethod: e.target.value as LiabilityRepaymentMethod,
-                    })
-                  }
-                >
-                  <option value="">Select method</option>
-                  <option value={LiabilityRepaymentMethod.FixedPayment}>Fixed payment</option>
-                  <option value={LiabilityRepaymentMethod.FixedPrincipal}>Fixed principal</option>
-                  <option value={LiabilityRepaymentMethod.ManualFixedPayment}>Manual fixed payment</option>
-                </select>
-              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">Original principal (optional)</label>
@@ -676,13 +765,15 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
               Skip for now
             </button>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700"
-          >
-            Cancel
-          </button>
+          {!lockUntilSaved && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700"
+            >
+              Cancel
+            </button>
+          )}
           <button
             type="button"
             onClick={handleSave}
