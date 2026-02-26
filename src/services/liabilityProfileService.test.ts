@@ -10,6 +10,13 @@ import {
   LiabilityTemplate,
 } from "../shared/liabilityTypes";
 
+function localTodayIsoDate(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
 describe("LiabilityProfileService", () => {
   beforeEach(async () => {
     await databaseService.resetAllData();
@@ -150,6 +157,31 @@ describe("LiabilityProfileService", () => {
     ).rejects.toThrow("dueWeekday and anchorDate are required");
   });
 
+  it("derives loan due schedule from payment frequency", async () => {
+    const account = await createLiabilityAccount("Derived Loan");
+
+    await liabilityProfileService.upsertLiabilityProfile(account.id, {
+      template: LiabilityTemplate.LoanMortgage,
+      currentAmountOwed: 22000,
+      asOfDate: "2026-02-01",
+      interestRate: 0.05,
+      scheduledPaymentAmount: 500,
+      paymentFrequency: LiabilityPaymentFrequency.Monthly,
+      paymentDueDay: 5,
+      dueScheduleType: LiabilityDueScheduleType.WeeklyWeekday,
+      dueDayOfMonth: 10,
+      repaymentMethod: LiabilityRepaymentMethod.FixedPayment,
+      effectiveDate: "2026-02-01",
+    });
+
+    const profile = await liabilityProfileService.getLiabilityProfile(account.id);
+    expect(profile.paymentFrequency).toBe(LiabilityPaymentFrequency.Monthly);
+    expect(profile.dueScheduleType).toBe(LiabilityDueScheduleType.MonthlyDay);
+    expect(profile.dueDayOfMonth).toBe(10);
+    expect(profile.dueWeekday).toBeNull();
+    expect(profile.anchorDate).toBeNull();
+  });
+
   it("uses today when effective date is omitted for version snapshots", async () => {
     const account = await createLiabilityAccount("Auto Date");
 
@@ -168,7 +200,7 @@ describe("LiabilityProfileService", () => {
     });
 
     const history = await liabilityProfileService.getVersionHistory(account.id);
-    expect(history[0].effectiveDate).toBe(new Date().toISOString().slice(0, 10));
+    expect(history[0].effectiveDate).toBe(localTodayIsoDate());
   });
 
   it("preserves hidden terms across template conversion", async () => {

@@ -213,7 +213,6 @@ model LiabilityInstallmentTerms {
   profileId             String                    @unique
   scheduledPaymentAmount Float?
   paymentFrequency      LiabilityPaymentFrequency?
-  dueScheduleType       LiabilityDueScheduleType?
   dueDayOfMonth         Int?
   dueWeekday            Int?
   anchorDate            String?
@@ -252,7 +251,6 @@ model LiabilityProfileVersion {
   interestRate           Float?
   scheduledPaymentAmount Float?
   paymentFrequency       LiabilityPaymentFrequency?
-  dueScheduleType        LiabilityDueScheduleType?
   dueDayOfMonth          Int?
   dueWeekday             Int?
   anchorDate             String?

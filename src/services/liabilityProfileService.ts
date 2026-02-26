@@ -33,6 +33,40 @@ function assertWeekday(value: number | undefined, field: string): void {
   }
 }
 
+function getExpectedDueScheduleType(
+  paymentFrequency: LiabilityPaymentFrequency | undefined
+): LiabilityDueScheduleType | undefined {
+  if (!paymentFrequency) return undefined;
+  if (paymentFrequency === LiabilityPaymentFrequency.Monthly) return LiabilityDueScheduleType.MonthlyDay;
+  if (paymentFrequency === LiabilityPaymentFrequency.Weekly) return LiabilityDueScheduleType.WeeklyWeekday;
+  return LiabilityDueScheduleType.BiweeklyWeekdayAnchor;
+}
+
+function normalizeLoanScheduleInput(input: LiabilityProfileInput): LiabilityProfileInput {
+  if (input.template !== LiabilityTemplate.LoanMortgage) {
+    return input;
+  }
+
+  const expectedDueScheduleType = getExpectedDueScheduleType(input.paymentFrequency);
+  const dueScheduleType = expectedDueScheduleType ?? input.dueScheduleType;
+
+  return {
+    ...input,
+    dueScheduleType,
+    dueDayOfMonth: dueScheduleType === LiabilityDueScheduleType.MonthlyDay ? input.dueDayOfMonth : undefined,
+    dueWeekday:
+      dueScheduleType === LiabilityDueScheduleType.WeeklyWeekday ||
+      dueScheduleType === LiabilityDueScheduleType.BiweeklyWeekdayAnchor
+        ? input.dueWeekday
+        : undefined,
+    anchorDate:
+      dueScheduleType === LiabilityDueScheduleType.WeeklyWeekday ||
+      dueScheduleType === LiabilityDueScheduleType.BiweeklyWeekdayAnchor
+        ? input.anchorDate
+        : undefined,
+  };
+}
+
 class LiabilityProfileService {
   private static instance: LiabilityProfileService;
   private prisma: PrismaClient;
@@ -207,6 +241,10 @@ class LiabilityProfileService {
       currentAmountOwed,
       ...profile.revolvingTerms,
       ...profile.installmentTerms,
+      dueScheduleType:
+        getExpectedDueScheduleType(
+          (profile.installmentTerms?.paymentFrequency as LiabilityPaymentFrequency | undefined) ?? undefined
+        ) ?? null,
       counterpartyName: profile.counterparty?.counterpartyName ?? null,
       hasPostedTransactions,
       source: "liability-profile",
@@ -216,22 +254,23 @@ class LiabilityProfileService {
   public async upsertLiabilityProfile(accountId: string, input: LiabilityProfileInput, tx?: TransactionClient): Promise<any> {
     const prisma = tx || this.prisma;
     await this.ensureLiabilityAccount(accountId, tx);
-    this.validateTemplateFields(input.template, input);
+    const normalizedInput = normalizeLoanScheduleInput(input);
+    this.validateTemplateFields(normalizedInput.template, normalizedInput);
 
     if (!tx) {
-      return this.prisma.$transaction((trx) => this.upsertLiabilityProfile(accountId, input, trx));
+      return this.prisma.$transaction((trx) => this.upsertLiabilityProfile(accountId, normalizedInput, trx));
     }
 
     const profile = await prisma.liabilityProfile.upsert({
       where: { accountId },
       create: {
         accountId,
-        template: input.template,
-        meta: input.meta ? JSON.stringify(input.meta) : null,
+        template: normalizedInput.template,
+        meta: normalizedInput.meta ? JSON.stringify(normalizedInput.meta) : null,
       },
       update: {
-        template: input.template,
-        meta: input.meta ? JSON.stringify(input.meta) : undefined,
+        template: normalizedInput.template,
+        meta: normalizedInput.meta ? JSON.stringify(normalizedInput.meta) : undefined,
       },
     });
 
@@ -239,20 +278,20 @@ class LiabilityProfileService {
       where: { profileId: profile.id },
       create: {
         profileId: profile.id,
-        limitOrCeiling: input.limitOrCeiling,
-        statementClosingDay: input.statementClosingDay,
-        paymentDueDay: input.paymentDueDay,
-        minimumPaymentType: input.minimumPaymentType,
-        minimumPaymentPercent: input.minimumPaymentPercent,
-        minimumPaymentAmount: input.minimumPaymentAmount,
+        limitOrCeiling: normalizedInput.limitOrCeiling,
+        statementClosingDay: normalizedInput.statementClosingDay,
+        paymentDueDay: normalizedInput.paymentDueDay,
+        minimumPaymentType: normalizedInput.minimumPaymentType,
+        minimumPaymentPercent: normalizedInput.minimumPaymentPercent,
+        minimumPaymentAmount: normalizedInput.minimumPaymentAmount,
       },
       update: {
-        limitOrCeiling: input.limitOrCeiling,
-        statementClosingDay: input.statementClosingDay,
-        paymentDueDay: input.paymentDueDay,
-        minimumPaymentType: input.minimumPaymentType,
-        minimumPaymentPercent: input.minimumPaymentPercent,
-        minimumPaymentAmount: input.minimumPaymentAmount,
+        limitOrCeiling: normalizedInput.limitOrCeiling,
+        statementClosingDay: normalizedInput.statementClosingDay,
+        paymentDueDay: normalizedInput.paymentDueDay,
+        minimumPaymentType: normalizedInput.minimumPaymentType,
+        minimumPaymentPercent: normalizedInput.minimumPaymentPercent,
+        minimumPaymentAmount: normalizedInput.minimumPaymentAmount,
       },
     });
 
@@ -260,57 +299,55 @@ class LiabilityProfileService {
       where: { profileId: profile.id },
       create: {
         profileId: profile.id,
-        scheduledPaymentAmount: input.scheduledPaymentAmount,
-        paymentFrequency: input.paymentFrequency,
-        dueScheduleType: input.dueScheduleType,
-        dueDayOfMonth: input.dueDayOfMonth,
-        dueWeekday: input.dueWeekday,
-        anchorDate: input.anchorDate,
-        paymentDueDay: input.paymentDueDay,
-        repaymentMethod: input.repaymentMethod,
-        originalPrincipal: input.originalPrincipal,
+        scheduledPaymentAmount: normalizedInput.scheduledPaymentAmount,
+        paymentFrequency: normalizedInput.paymentFrequency,
+        dueDayOfMonth: normalizedInput.dueDayOfMonth,
+        dueWeekday: normalizedInput.dueWeekday,
+        anchorDate: normalizedInput.anchorDate,
+        paymentDueDay: normalizedInput.paymentDueDay,
+        repaymentMethod: normalizedInput.repaymentMethod,
+        originalPrincipal: normalizedInput.originalPrincipal,
       },
       update: {
-        scheduledPaymentAmount: input.scheduledPaymentAmount,
-        paymentFrequency: input.paymentFrequency,
-        dueScheduleType: input.dueScheduleType,
-        dueDayOfMonth: input.dueDayOfMonth,
-        dueWeekday: input.dueWeekday,
-        anchorDate: input.anchorDate,
-        paymentDueDay: input.paymentDueDay,
-        repaymentMethod: input.repaymentMethod,
-        originalPrincipal: input.originalPrincipal,
+        scheduledPaymentAmount: normalizedInput.scheduledPaymentAmount,
+        paymentFrequency: normalizedInput.paymentFrequency,
+        dueDayOfMonth: normalizedInput.dueDayOfMonth,
+        dueWeekday: normalizedInput.dueWeekday,
+        anchorDate: normalizedInput.anchorDate,
+        paymentDueDay: normalizedInput.paymentDueDay,
+        repaymentMethod: normalizedInput.repaymentMethod,
+        originalPrincipal: normalizedInput.originalPrincipal,
       },
     });
 
-    if (input.counterpartyName?.trim()) {
+    if (normalizedInput.counterpartyName?.trim()) {
       await prisma.liabilityCounterparty.upsert({
         where: { profileId: profile.id },
         create: {
           profileId: profile.id,
-          counterpartyName: input.counterpartyName.trim(),
+          counterpartyName: normalizedInput.counterpartyName.trim(),
         },
         update: {
-          counterpartyName: input.counterpartyName.trim(),
+          counterpartyName: normalizedInput.counterpartyName.trim(),
         },
       });
     }
 
-    if (input.currentAmountOwed !== undefined) {
-      if (!input.asOfDate) {
+    if (normalizedInput.currentAmountOwed !== undefined) {
+      if (!normalizedInput.asOfDate) {
         throw new Error("asOfDate is required when currentAmountOwed is provided");
       }
       await databaseService.setOpeningBalance({
         accountId,
-        displayAmount: input.currentAmountOwed,
-        asOfDate: input.asOfDate,
+        displayAmount: normalizedInput.currentAmountOwed,
+        asOfDate: normalizedInput.asOfDate,
       }, tx);
     }
 
     await this.createVersionSnapshot(accountId, {
-      ...input,
-      template: input.template,
-      effectiveDate: this.parseEffectiveDate(input.effectiveDate),
+      ...normalizedInput,
+      template: normalizedInput.template,
+      effectiveDate: this.parseEffectiveDate(normalizedInput.effectiveDate),
     }, tx);
 
     return this.getLiabilityProfile(accountId, tx);
@@ -319,9 +356,10 @@ class LiabilityProfileService {
   public async createVersionSnapshot(accountId: string, input: LiabilityProfileInput, tx?: TransactionClient): Promise<any> {
     const prisma = tx || this.prisma;
     await this.ensureLiabilityAccount(accountId, tx);
+    const normalizedInput = normalizeLoanScheduleInput(input);
 
     if (!tx) {
-      return this.prisma.$transaction((trx) => this.createVersionSnapshot(accountId, input, trx));
+      return this.prisma.$transaction((trx) => this.createVersionSnapshot(accountId, normalizedInput, trx));
     }
 
     const profile = await prisma.liabilityProfile.findUnique({ where: { accountId } });
@@ -329,7 +367,7 @@ class LiabilityProfileService {
       throw new Error("Liability profile not found");
     }
 
-    const effectiveDate = this.parseEffectiveDate(input.effectiveDate);
+    const effectiveDate = this.parseEffectiveDate(normalizedInput.effectiveDate);
 
     const existing = await prisma.liabilityProfileVersion.findUnique({
       where: {
@@ -347,24 +385,23 @@ class LiabilityProfileService {
       data: {
         profileId: profile.id,
         effectiveDate,
-        template: input.template || profile.template,
-        changeNote: input.changeNote,
-        counterpartyName: input.counterpartyName,
-        limitOrCeiling: input.limitOrCeiling,
-        statementClosingDay: input.statementClosingDay,
-        paymentDueDay: input.paymentDueDay,
-        minimumPaymentType: input.minimumPaymentType,
-        minimumPaymentPercent: input.minimumPaymentPercent,
-        minimumPaymentAmount: input.minimumPaymentAmount,
-        interestRate: input.interestRate,
-        scheduledPaymentAmount: input.scheduledPaymentAmount,
-        paymentFrequency: input.paymentFrequency,
-        dueScheduleType: input.dueScheduleType,
-        dueDayOfMonth: input.dueDayOfMonth,
-        dueWeekday: input.dueWeekday,
-        anchorDate: input.anchorDate,
-        repaymentMethod: input.repaymentMethod,
-        originalPrincipal: input.originalPrincipal,
+        template: normalizedInput.template || profile.template,
+        changeNote: normalizedInput.changeNote,
+        counterpartyName: normalizedInput.counterpartyName,
+        limitOrCeiling: normalizedInput.limitOrCeiling,
+        statementClosingDay: normalizedInput.statementClosingDay,
+        paymentDueDay: normalizedInput.paymentDueDay,
+        minimumPaymentType: normalizedInput.minimumPaymentType,
+        minimumPaymentPercent: normalizedInput.minimumPaymentPercent,
+        minimumPaymentAmount: normalizedInput.minimumPaymentAmount,
+        interestRate: normalizedInput.interestRate,
+        scheduledPaymentAmount: normalizedInput.scheduledPaymentAmount,
+        paymentFrequency: normalizedInput.paymentFrequency,
+        dueDayOfMonth: normalizedInput.dueDayOfMonth,
+        dueWeekday: normalizedInput.dueWeekday,
+        anchorDate: normalizedInput.anchorDate,
+        repaymentMethod: normalizedInput.repaymentMethod,
+        originalPrincipal: normalizedInput.originalPrincipal,
       },
     });
   }
