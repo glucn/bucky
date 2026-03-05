@@ -230,8 +230,10 @@ describe("overviewService", () => {
       throw new Error("Expected default accounts to exist");
     }
 
+    const safeCurrentDay = Math.max(1, new Date().getDate() - 1);
+
     await databaseService.createJournalEntry({
-      date: monthDateOffset(0, 5),
+      date: monthDateOffset(0, safeCurrentDay),
       amount: 1000,
       description: "Salary this month",
       fromAccountId: salary.id,
@@ -239,7 +241,7 @@ describe("overviewService", () => {
     });
 
     await databaseService.createJournalEntry({
-      date: monthDateOffset(0, 6),
+      date: monthDateOffset(0, safeCurrentDay),
       amount: 250,
       description: "Groceries this month",
       fromAccountId: cash.id,
@@ -247,7 +249,7 @@ describe("overviewService", () => {
     });
 
     await databaseService.createJournalEntry({
-      date: monthDateOffset(0, 7),
+      date: monthDateOffset(0, safeCurrentDay),
       amount: 999,
       description: "Internal transfer this month",
       fromAccountId: cash.id,
@@ -255,7 +257,7 @@ describe("overviewService", () => {
     });
 
     await databaseService.createJournalEntry({
-      date: monthDateOffset(1, 8),
+      date: monthDateOffset(1, safeCurrentDay),
       amount: 300,
       description: "Future income",
       fromAccountId: salary.id,
