@@ -84,8 +84,6 @@ class DatabaseService {
       await tx.checkpoint.deleteMany({});
       // Delete all investment properties (must be before accounts due to foreign key)
       await tx.investmentProperties.deleteMany({});
-      // Delete all credit card properties (must be before accounts due to foreign key)
-      await tx.creditCardProperties.deleteMany({});
       // Delete all security price history
       await tx.securityPriceHistory.deleteMany({});
       // Delete F-017 enrichment tables

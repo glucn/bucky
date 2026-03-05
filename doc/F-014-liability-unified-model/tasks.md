@@ -113,10 +113,10 @@
 
 ## Deferred Follow-up Cleanup (manual trigger)
 
-- [ ] A. Remove legacy credit-card setup modal entry path after F-014 stabilization
-- [ ] B. Remove legacy credit-card IPC handlers replaced by unified liability handlers
-- [ ] C. Remove duplicated credit-card service logic superseded by unified liability service
-- [ ] D. Remove `CreditCardProperties` persistence/runtime dependencies once no longer used
+- [x] A. Remove legacy credit-card setup modal entry path after F-014 stabilization
+- [x] B. Remove legacy credit-card IPC handlers replaced by unified liability handlers
+- [x] C. Remove duplicated credit-card service logic superseded by unified liability service
+- [x] D. Remove `CreditCardProperties` persistence/runtime dependencies once no longer used
 - [ ] E. Run explicit pre/post-cleanup regression checklist for liability setup, metrics, and history behavior
 
 ## Implementation Deviations

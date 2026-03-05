@@ -1,6 +1,5 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import { databaseService } from "./database";
-import { creditCardService } from "./creditCardService";
 import { parseToStandardDate } from "../shared/dateUtils";
 import { AccountSubtype } from "../shared/accountTypes";
 import {
@@ -193,6 +192,10 @@ class LiabilityProfileService {
       },
     });
 
+    if (!profile) {
+      return null;
+    }
+
     const rawBalance = await databaseService.getAccountBalance(accountId, tx);
     const currentAmountOwed = Math.max(0, Math.round(-rawBalance * 100) / 100);
     const hasPostedTransactions =
@@ -204,35 +207,6 @@ class LiabilityProfileService {
           },
         },
       })) > 0;
-
-    if (!profile) {
-      const legacy = await creditCardService.getCurrentCreditCardProperties(accountId, tx);
-      if (!legacy) {
-        return null;
-      }
-
-      return {
-        accountId,
-        template: LiabilityTemplate.CreditCard,
-        currentAmountOwed,
-        effectiveDate: legacy.effectiveDate,
-        limitOrCeiling: legacy.creditLimit,
-        statementClosingDay: legacy.statementClosingDay,
-        paymentDueDay: legacy.paymentDueDay,
-        minimumPaymentType:
-          legacy.minimumPaymentPercent !== undefined && legacy.minimumPaymentAmount !== undefined
-            ? LiabilityMinimumPaymentType.Both
-            : legacy.minimumPaymentPercent !== undefined
-              ? LiabilityMinimumPaymentType.Percent
-              : LiabilityMinimumPaymentType.Amount,
-        minimumPaymentPercent: legacy.minimumPaymentPercent ?? null,
-        minimumPaymentAmount: legacy.minimumPaymentAmount ?? null,
-        interestRate: legacy.interestRate,
-        hasPostedTransactions,
-        source: "legacy-credit-card",
-      };
-    }
-
     return {
       id: profile.id,
       accountId,

@@ -39,7 +39,7 @@ Bucky is a personal bookkeeping desktop app built with Electron, React, and Pris
 
 - **Account grouping**: `src/services/database.ts`, `src/main/index.ts`, `src/renderer/components/GroupedAccountsList.tsx`
 - **Category management**: `src/renderer/pages/Categories.tsx`, `src/renderer/components/CategoryModal.tsx`
-- **Credit cards**: `src/services/creditCardService.ts`, `src/renderer/components/CreditCardSetupModal.tsx`
+- **Liabilities (unified)**: `src/services/liabilityProfileService.ts`, `src/renderer/components/LiabilityProfileModal.tsx`
 - **Investments**: `src/services/investmentService.ts`, `src/main/ipcHandlers.investments.ts`, `src/renderer/pages/InvestmentPortfolios.tsx`
 - **Transaction display normalization**: `src/renderer/utils/displayNormalization.ts`
 - **Transaction display order**: `src/services/database.ts` (move up/down), `src/renderer/pages/AccountTransactionsPage.tsx`
