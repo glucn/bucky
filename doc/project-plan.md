@@ -24,7 +24,7 @@
 - [X] F-011 auto-categorization (rule inference with exact-match transparency)
 - [X] F-012 overview-dashboard (net worth, income/expense trend, allocation)
 - [ ] F-013 reporting-basics (overview + breakdowns with presets and date picker)
-- [ ] F-014 liability-unified-model (liability accounts without specialized UX)
+- [X] F-014 liability-unified-model (liability accounts without specialized UX)
 - [ ] F-015 security-gate (app lock + database encryption with hybrid key mgmt)
 - [ ] F-016 investment-allocation-ux (asset-class pie with combined view)
 - [X] F-017 data-enrichment-mvp (on-demand metadata fetch + caching)

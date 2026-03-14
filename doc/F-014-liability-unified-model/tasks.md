@@ -117,8 +117,9 @@
 - [x] B. Remove legacy credit-card IPC handlers replaced by unified liability handlers
 - [x] C. Remove duplicated credit-card service logic superseded by unified liability service
 - [x] D. Remove `CreditCardProperties` persistence/runtime dependencies once no longer used
-- [ ] E. Run explicit pre/post-cleanup regression checklist for liability setup, metrics, and history behavior
+- [x] E. Run explicit pre/post-cleanup regression checklist for liability setup, metrics, and history behavior
 
 ## Implementation Deviations
 
 - E2E coverage validates liability setup/conversion/history ordering and balance semantics through deterministic IPC-driven scenarios in `tests/e2e/liability-unified-model.spec.ts`; renderer-level history rendering remains covered in component tests.
+- Explicit pre/post-cleanup regression evidence captured with matching command set on pre-cleanup baseline `bedb1f5` (parent of cleanup commit `0006b17`) and post-cleanup `fb5d11b`: `npm test -- src/services/liabilityProfileService.test.ts` (10 passed), `npm test -- src/renderer/components/LiabilityProfileModal.test.tsx` (8 passed), `npm test -- src/renderer/components/AccountModal.test.tsx` (7 passed, non-fatal React `act(...)` warnings), and `npx playwright test tests/e2e/liability-unified-model.spec.ts` (1 passed).

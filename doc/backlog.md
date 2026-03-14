@@ -514,3 +514,111 @@ This file tracks deferred product improvements that are intentionally out of cur
   - Which reset mode should be default in developer tools and test helpers?
   - How should partial setup state be represented to avoid ambiguous UX after resets?
   - Should reset modes also define category/group/default-account reseed policy by onboarding state?
+
+## BL-023 - Liability Payment Calculator
+
+- **ID**: BL-023
+- **Title**: Add liability payment calculator using versioned liability snapshots
+- **Status**: planned
+- **Priority**: medium
+- **Related Docs**: `doc/F-014-liability-unified-model/design.md`, `doc/F-014-liability-unified-model/requirements.md`
+- **Context (What / Why)**:
+  - F-014 introduced versioned, effective-dated liability terms but intentionally deferred payment-calculator behavior.
+  - Users can store liability terms today but cannot project payoff timing/cost under configurable payment inputs.
+  - A calculator tied to version snapshots enables forward-looking planning without mutating accounting records.
+- **Proposed UX / Behavior**:
+  - Add calculator inputs and outputs on liability detail/edit surfaces for supported templates.
+  - Compute payoff horizon and payment composition using the selected effective-dated snapshot.
+  - Keep calculator results informational unless user explicitly applies a modeled change as a new version.
+- **Scope Notes**:
+  - Must not create a second balance source of truth; journal/opening-balance semantics remain canonical.
+  - Initial scope can prioritize loan/mortgage + credit-card templates and defer advanced scenarios.
+- **Open Questions**:
+  - Should calculator assumptions be persisted per account or remain ephemeral session state?
+  - Which minimum output set is MVP (payoff date, total interest, payment breakdown)?
+
+## BL-024 - Liability Version History Filtering And Search
+
+- **ID**: BL-024
+- **Title**: Add advanced filtering and search for liability version history
+- **Status**: planned
+- **Priority**: low
+- **Related Docs**: `doc/F-014-liability-unified-model/design.md`, `doc/F-014-liability-unified-model/requirements.md`
+- **Context (What / Why)**:
+  - F-014 ships a read-only advanced history list but intentionally excludes filtering/search.
+  - Accounts with frequent rate/term updates will accumulate long timelines that are hard to inspect quickly.
+  - Focused filtering/search improves auditability and correction workflows.
+- **Proposed UX / Behavior**:
+  - Support filtering by effective date range and changed-field categories.
+  - Support text search across change notes and key field values.
+  - Preserve current expandable old/new detail view for matched rows.
+- **Scope Notes**:
+  - Keep read-only semantics for history rows in this item; editing/revert is tracked separately.
+  - Query behavior must be deterministic and compatible with existing ordering semantics.
+- **Open Questions**:
+  - Should filter/search state persist per account and session?
+  - Should changed-field summaries be indexed explicitly or computed at query time?
+
+## BL-025 - Liability Version Revert And Admin Correction Tooling
+
+- **ID**: BL-025
+- **Title**: Add version revert and admin correction tooling for liability history
+- **Status**: planned
+- **Priority**: medium
+- **Related Docs**: `doc/F-014-liability-unified-model/design.md`, `doc/F-014-liability-unified-model/requirements.md`
+- **Context (What / Why)**:
+  - F-014 history is immutable in MVP and fixes are done by adding another version entry manually.
+  - Operational recovery from mistaken updates is possible but not streamlined or auditable as a first-class flow.
+  - Explicit revert/admin tooling reduces recovery time and improves correction traceability.
+- **Proposed UX / Behavior**:
+  - Provide an explicit revert action that seeds a new effective-dated version from a chosen historical snapshot.
+  - Provide restricted admin correction workflow for high-risk field corrections with reason capture.
+  - Show clear audit trail metadata for revert/correction actions.
+- **Scope Notes**:
+  - Preserve immutable-history principles; actions create new records rather than mutating past entries.
+  - Must include guardrails for effective-date conflicts and template-required-field validation.
+- **Open Questions**:
+  - Which roles/modes can access admin correction tooling?
+  - Should revert default to today or require explicit effective date selection every time?
+
+## BL-026 - Rich Refinance Flows Beyond In-Place Versioning
+
+- **ID**: BL-026
+- **Title**: Add rich refinance and replacement-account flows for liabilities
+- **Status**: planned
+- **Priority**: low
+- **Related Docs**: `doc/F-014-liability-unified-model/design.md`, `doc/F-014-liability-unified-model/requirements.md`
+- **Context (What / Why)**:
+  - F-014 supports in-place refinance via new effective-dated snapshots but defers richer refinance workflows.
+  - Some refinance scenarios require explicit old/new loan lifecycle modeling, not just term replacement.
+  - A richer flow can improve transparency for users managing complex refinance transitions.
+- **Proposed UX / Behavior**:
+  - Support guided refinance flow with explicit previous/new obligation context.
+  - Optionally support replacement-account strategy where migration semantics are clearer than in-place edits.
+  - Provide migration summary before commit (balances, rates, due schedule impacts).
+- **Scope Notes**:
+  - Must preserve accounting correctness and avoid duplicate liability exposure during transition.
+  - Keep baseline in-place versioning available as simpler default path.
+- **Open Questions**:
+  - Should replacement-account refinance be mandatory for certain template transitions?
+  - How should history views link pre-refinance and post-refinance records?
+
+## BL-027 - Legacy Credit-Card Pipeline Full Retirement
+
+- **ID**: BL-027
+- **Title**: Complete and memorialize full retirement of legacy credit-card pipeline
+- **Status**: done
+- **Priority**: low
+- **Related Docs**: `doc/F-014-liability-unified-model/design.md`, `doc/F-014-liability-unified-model/tasks.md`
+- **Context (What / Why)**:
+  - F-014 design listed legacy credit-card pipeline removal as a deferred backlog item.
+  - Follow-up cleanup tasks for removal and regression verification were completed after stabilization.
+  - Backlog should preserve this as completed historical scope for traceability.
+- **Proposed UX / Behavior**:
+  - Unified liability profile flow remains the primary and only supported path for liability setup/edit behavior.
+  - Legacy credit-card setup/service/IPC paths remain removed.
+- **Scope Notes**:
+  - Keep regression evidence and cleanup status in F-014 task docs as source references.
+  - Treat this backlog item as historical completion, not active roadmap scope.
+- **Open Questions**:
+  - Should `design.md` deferred-feature wording be updated to reflect completed retirement?
