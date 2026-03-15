@@ -51,17 +51,17 @@
 
 ### Batch 2: Breakdown Report - Service TDD
 
-- [ ] 2.1 Red: write failing tests for breakdown range and aggregation
+- [x] 2.1 Red: write failing tests for breakdown range and aggregation
   - Acceptance: tests assert presets + custom range support.
   - Acceptance: tests assert separate income/expense tables and amount-desc sort.
   - Acceptance: tests assert totals rows and `netIncome = income - expense`.
-- [ ] 2.2 Green: implement minimal breakdown aggregation logic
+- [x] 2.2 Green: implement minimal breakdown aggregation logic
   - Acceptance: tests from 2.1 pass.
   - Acceptance: implementation handles one-sided periods without unstable output.
-- [ ] 2.3 Red: write failing tests for percentage and unassigned behavior
+- [x] 2.3 Red: write failing tests for percentage and unassigned behavior
   - Acceptance: tests assert `% of income` and `% of expense` calculations.
   - Acceptance: tests assert `Unassigned` row appears when applicable.
-- [ ] 2.4 Green: implement percentage and unassigned behavior
+- [x] 2.4 Green: implement percentage and unassigned behavior
   - Acceptance: tests from 2.3 pass.
 - [ ] 2.5 Refactor: breakdown service cleanup with tests green
   - Acceptance: code is simplified with no contract drift.

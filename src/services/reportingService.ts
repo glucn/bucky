@@ -1,5 +1,8 @@
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import {
+  BreakdownRangePreset,
+  IncomeExpenseBreakdownFilter,
+  IncomeExpenseBreakdownResponse,
   IncomeExpenseTrendFilter,
   IncomeExpenseTrendResponse,
   TrendRangePreset,
@@ -27,6 +30,76 @@ const getRecentMonthKeys = (asOfDate: string, count: number): string[] => {
   }
 
   return result;
+};
+
+const getMonthStartDate = (date: Date): string => {
+  return getLocalDateString(new Date(date.getFullYear(), date.getMonth(), 1));
+};
+
+const getMonthEndDate = (date: Date): string => {
+  return getLocalDateString(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+};
+
+const clampEndDateToToday = (endDate: string, today: string): string => {
+  return endDate > today ? today : endDate;
+};
+
+const getBreakdownRangeByPreset = (
+  preset: BreakdownRangePreset,
+  today: string
+): { startDate: string; endDate: string } => {
+  const base = new Date(`${today}T00:00:00`);
+
+  if (preset === "THIS_MONTH") {
+    return {
+      startDate: getMonthStartDate(base),
+      endDate: today,
+    };
+  }
+
+  if (preset === "LAST_MONTH") {
+    const previousMonth = new Date(base.getFullYear(), base.getMonth() - 1, 1);
+    return {
+      startDate: getMonthStartDate(previousMonth),
+      endDate: getMonthEndDate(previousMonth),
+    };
+  }
+
+  if (preset === "LAST_3_MONTHS" || preset === "LAST_6_MONTHS" || preset === "LAST_12_MONTHS") {
+    const monthWindow =
+      preset === "LAST_3_MONTHS" ? 2 : preset === "LAST_6_MONTHS" ? 5 : 11;
+    const startMonth = new Date(base.getFullYear(), base.getMonth() - monthWindow, 1);
+    return {
+      startDate: getMonthStartDate(startMonth),
+      endDate: today,
+    };
+  }
+
+  if (preset === "YTD") {
+    return {
+      startDate: `${base.getFullYear()}-01-01`,
+      endDate: today,
+    };
+  }
+
+  return {
+    startDate: today,
+    endDate: today,
+  };
+};
+
+const normalizeCategoryKey = (categoryName: string): { categoryId: string | "UNASSIGNED"; categoryName: string } => {
+  if (categoryName === "Uncategorized Income" || categoryName === "Uncategorized Expense") {
+    return {
+      categoryId: "UNASSIGNED",
+      categoryName: "Unassigned",
+    };
+  }
+
+  return {
+    categoryId: categoryName,
+    categoryName,
+  };
 };
 
 const getMonthRangeByPreset = (preset: TrendRangePreset, asOfDate: string): string[] => {
@@ -158,6 +231,134 @@ class ReportingService {
       metadata: {
         includesUnassignedImplicitly: true,
       },
+    };
+  }
+
+  public async getIncomeExpenseBreakdownReport(
+    filter: IncomeExpenseBreakdownFilter,
+    asOfDate?: string
+  ): Promise<IncomeExpenseBreakdownResponse> {
+    const today = asOfDate ?? getLocalDateString(new Date());
+    const reportingCurrency = (await appSettingsService.getBaseCurrency()) ?? "USD";
+
+    const range =
+      filter.preset === "CUSTOM" && filter.customRange
+        ? {
+            startDate: filter.customRange.startDate,
+            endDate: clampEndDateToToday(filter.customRange.endDate, today),
+          }
+        : getBreakdownRangeByPreset(filter.preset, today);
+
+    const entries = await databaseService.prismaClient.journalEntry.findMany({
+      where: {
+        date: {
+          gte: range.startDate,
+          lte: range.endDate,
+        },
+      },
+      include: {
+        lines: {
+          include: {
+            account: true,
+          },
+        },
+      },
+    });
+
+    const conversionRateCache = new Map<string, number | null>();
+
+    const convertToReportingCurrency = async (
+      amount: number,
+      sourceCurrency: string
+    ): Promise<number | null> => {
+      const cacheKey = `${sourceCurrency}->${reportingCurrency}@${range.endDate}`;
+      let rate = conversionRateCache.get(cacheKey);
+
+      if (rate === undefined) {
+        const conversion = await valuationConversionService.convertAmount({
+          amount: 1,
+          sourceCurrency,
+          targetCurrency: reportingCurrency,
+          asOfDate: range.endDate,
+        });
+        rate = conversion.rate;
+        conversionRateCache.set(cacheKey, rate);
+      }
+
+      if (rate === null) {
+        return null;
+      }
+
+      return amount * rate;
+    };
+
+    const incomeMap = new Map<string, { categoryId: string | "UNASSIGNED"; categoryName: string; amount: number }>();
+    const expenseMap = new Map<string, { categoryId: string | "UNASSIGNED"; categoryName: string; amount: number }>();
+
+    for (const entry of entries) {
+      const hasOnlyUserLines = entry.lines.every((line) => line.account.type === AccountType.User);
+      if (hasOnlyUserLines) {
+        continue;
+      }
+
+      for (const line of entry.lines) {
+        if (line.account.type !== AccountType.Category) {
+          continue;
+        }
+
+        const convertedAmount = await convertToReportingCurrency(Math.abs(line.amount), line.currency);
+        if (convertedAmount === null) {
+          continue;
+        }
+
+        const normalizedCategory = normalizeCategoryKey(line.account.name);
+        const targetMap = line.account.subtype === AccountSubtype.Asset ? incomeMap : expenseMap;
+        const bucketKey = `${normalizedCategory.categoryId}`;
+        const existing = targetMap.get(bucketKey);
+
+        if (existing) {
+          existing.amount = round2(existing.amount + convertedAmount);
+          continue;
+        }
+
+        targetMap.set(bucketKey, {
+          categoryId: normalizedCategory.categoryId,
+          categoryName: normalizedCategory.categoryName,
+          amount: round2(convertedAmount),
+        });
+      }
+    }
+
+    const incomeTotal = round2([...incomeMap.values()].reduce((sum, row) => sum + row.amount, 0));
+    const expenseTotal = round2([...expenseMap.values()].reduce((sum, row) => sum + row.amount, 0));
+
+    const incomeRows = [...incomeMap.values()]
+      .sort((a, b) => b.amount - a.amount)
+      .map((row) => ({
+        ...row,
+        ratio: incomeTotal > 0 ? round2(row.amount / incomeTotal) : 0,
+      }));
+
+    const expenseRows = [...expenseMap.values()]
+      .sort((a, b) => b.amount - a.amount)
+      .map((row) => ({
+        ...row,
+        ratio: expenseTotal > 0 ? round2(row.amount / expenseTotal) : 0,
+      }));
+
+    return {
+      range: {
+        preset: filter.preset,
+        startDate: range.startDate,
+        endDate: range.endDate,
+      },
+      kpis: {
+        incomeTotal,
+        expenseTotal,
+        netIncome: round2(incomeTotal - expenseTotal),
+      },
+      incomeRows,
+      expenseRows,
     };
   }
 }
