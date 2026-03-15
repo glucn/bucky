@@ -145,7 +145,8 @@ export const PerformanceReportsPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+  return (
+    <div className="space-y-6" data-testid="performance-reports-page">
       {/* Header */}
       <div className="bg-white shadow rounded-lg p-6">
         <button
