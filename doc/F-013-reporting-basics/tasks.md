@@ -31,18 +31,18 @@
 
 ### Batch 1: Trend Report - Service TDD
 
-- [ ] 1.1 Red: write failing tests for trend month-range semantics
+- [x] 1.1 Red: write failing tests for trend month-range semantics
   - Acceptance: tests assert strict month-based presets only.
   - Acceptance: tests assert deterministic local-calendar month ordering.
   - Acceptance: tests assert future-dated exclusion.
-- [ ] 1.2 Green: implement minimal trend service for month-range tests
+- [x] 1.2 Green: implement minimal trend service for month-range tests
   - Acceptance: tests from 1.1 pass with minimal implementation.
   - Acceptance: no stacked series behavior is introduced.
-- [ ] 1.3 Red: write failing tests for trend inclusion/exclusion policy
+- [x] 1.3 Red: write failing tests for trend inclusion/exclusion policy
   - Acceptance: tests assert internal transfer exclusion.
   - Acceptance: tests assert implicit inclusion of unassigned/placeholder-linked data in totals.
   - Acceptance: tests assert monthly fields needed by tooltip (`income`, `expense`, `netIncome`).
-- [ ] 1.4 Green: implement trend inclusion/exclusion behavior
+- [x] 1.4 Green: implement trend inclusion/exclusion behavior
   - Acceptance: tests from 1.3 pass.
   - Acceptance: no separate unassigned trend series/legend is emitted.
 - [ ] 1.5 Refactor: trend service cleanup with tests green
