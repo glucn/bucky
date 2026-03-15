@@ -85,10 +85,10 @@
 
 ### Batch 4: Renderer - Behavior TDD
 
-- [ ] 4.1 Red: write failing renderer tests for F-013 route/shell
+- [x] 4.1 Red: write failing renderer tests for F-013 route/shell
   - Acceptance: tests assert `/reports` route exists and is separate from `/investments/:portfolioId/reports`.
   - Acceptance: tests assert loading/error/empty states.
-- [ ] 4.2 Green: implement route and reporting shell
+- [x] 4.2 Green: implement route and reporting shell
   - Acceptance: tests from 4.1 pass.
 - [ ] 4.3 Red: write failing renderer tests for per-report filter independence and persistence
   - Acceptance: tests assert Trend and Breakdown filters are independent.
