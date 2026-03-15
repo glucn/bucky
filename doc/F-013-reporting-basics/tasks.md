@@ -69,16 +69,16 @@
 
 ### Batch 3: IPC and Preload - Contract TDD
 
-- [ ] 3.1 Red: write failing IPC tests for Trend and Breakdown channels
+- [x] 3.1 Red: write failing IPC tests for Trend and Breakdown channels
   - Acceptance: tests assert channels exist: `get-income-expense-trend-report`, `get-income-expense-breakdown-report`.
   - Acceptance: tests assert handler delegation and error propagation convention.
-- [ ] 3.2 Green: implement IPC handlers to satisfy 3.1
+- [x] 3.2 Green: implement IPC handlers to satisfy 3.1
   - Acceptance: 3.1 tests pass.
   - Acceptance: existing overview and investment performance channels remain unaffected.
-- [ ] 3.3 Red: write failing preload/renderer-typing tests
+- [x] 3.3 Red: write failing preload/renderer-typing tests
   - Acceptance: tests/type checks fail when preload methods or renderer typings are missing/misaligned.
   - Acceptance: tests enforce request/response type parity.
-- [ ] 3.4 Green: implement preload bridge and renderer typings
+- [x] 3.4 Green: implement preload bridge and renderer typings
   - Acceptance: tests/type checks from 3.3 pass.
 - [ ] 3.5 Refactor: IPC/preload cleanup with tests green
   - Acceptance: remove duplication while preserving behavior and types.

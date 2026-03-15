@@ -1,6 +1,12 @@
 import { AccountGroup, Account, GroupedAccountsView } from '../types';
 import { OverviewDashboardPayload } from '../../shared/overview';
 import { LiabilityProfileInput, LiabilityTemplate } from '../../shared/liabilityTypes';
+import {
+  IncomeExpenseBreakdownFilter,
+  IncomeExpenseBreakdownResponse,
+  IncomeExpenseTrendFilter,
+  IncomeExpenseTrendResponse,
+} from '../../shared/reporting';
 
 interface AutoCategorizationRuleListItem {
   id: string;
@@ -78,6 +84,14 @@ export interface IElectronAPI {
 
   // Overview dashboard operations
   getOverviewDashboard(asOfDate?: string): Promise<OverviewDashboardPayload>;
+  getIncomeExpenseTrendReport(
+    filter: IncomeExpenseTrendFilter,
+    asOfDate?: string
+  ): Promise<IncomeExpenseTrendResponse>;
+  getIncomeExpenseBreakdownReport(
+    filter: IncomeExpenseBreakdownFilter,
+    asOfDate?: string
+  ): Promise<IncomeExpenseBreakdownResponse>;
 
   // Auto-categorization rule operations
   getAutoCategorizationRules(): Promise<AutoCategorizationRuleListItem[]>;

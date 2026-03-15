@@ -18,6 +18,7 @@ import { setupAutoCategorizationIpcHandlers } from "./ipcHandlers.autoCategoriza
 import { setupEnrichmentIpcHandlers } from "./ipcHandlers.enrichment";
 import { setupInvestmentIpcHandlers } from "./ipcHandlers.investments";
 import { setupOverviewIpcHandlers } from "./ipcHandlers.overview";
+import { setupReportingIpcHandlers } from "./ipcHandlers.reporting";
 
 // Add this at the top of the file for type safety with the injected variable
 // eslint-disable-next-line no-var
@@ -1015,6 +1016,7 @@ function setupIpcHandlers() {
   // Setup investment IPC handlers
   setupInvestmentIpcHandlers();
   setupOverviewIpcHandlers();
+  setupReportingIpcHandlers();
   setupAutoCategorizationIpcHandlers();
   setupEnrichmentIpcHandlers();
 

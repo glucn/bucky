@@ -1,4 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
+import {
+  type IncomeExpenseBreakdownFilter,
+  type IncomeExpenseTrendFilter,
+} from "./shared/reporting";
 
 contextBridge.exposeInMainWorld("electron", {
   ipcRenderer: {
@@ -46,6 +50,15 @@ contextBridge.exposeInMainWorld("electron", {
   // Overview dashboard operations
   getOverviewDashboard: (asOfDate?: string) =>
     ipcRenderer.invoke("get-overview-dashboard", asOfDate),
+
+  getIncomeExpenseTrendReport: (
+    filter: IncomeExpenseTrendFilter,
+    asOfDate?: string
+  ) => ipcRenderer.invoke("get-income-expense-trend-report", filter, asOfDate),
+  getIncomeExpenseBreakdownReport: (
+    filter: IncomeExpenseBreakdownFilter,
+    asOfDate?: string
+  ) => ipcRenderer.invoke("get-income-expense-breakdown-report", filter, asOfDate),
 
   // Auto-categorization rule operations
   getAutoCategorizationRules: () =>
