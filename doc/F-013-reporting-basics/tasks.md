@@ -45,7 +45,7 @@
 - [x] 1.4 Green: implement trend inclusion/exclusion behavior
   - Acceptance: tests from 1.3 pass.
   - Acceptance: no separate unassigned trend series/legend is emitted.
-- [ ] 1.5 Refactor: trend service cleanup with tests green
+- [x] 1.5 Refactor: trend service cleanup with tests green
   - Acceptance: trend service code is simplified without changing output contracts.
   - Acceptance: full trend-related service suite remains green.
 
@@ -63,7 +63,7 @@
   - Acceptance: tests assert `Unassigned` row appears when applicable.
 - [x] 2.4 Green: implement percentage and unassigned behavior
   - Acceptance: tests from 2.3 pass.
-- [ ] 2.5 Refactor: breakdown service cleanup with tests green
+- [x] 2.5 Refactor: breakdown service cleanup with tests green
   - Acceptance: code is simplified with no contract drift.
   - Acceptance: all breakdown service tests remain green.
 

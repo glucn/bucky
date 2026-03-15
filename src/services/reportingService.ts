@@ -13,6 +13,12 @@ import { valuationConversionService } from "./valuationConversionService";
 
 const round2 = (value: number): number => Math.round(value * 100) / 100;
 
+type CategoryBucketRow = {
+  categoryId: string | "UNASSIGNED";
+  categoryName: string;
+  amount: number;
+};
+
 const getLocalDateString = (date: Date): string => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -102,6 +108,38 @@ const normalizeCategoryKey = (categoryName: string): { categoryId: string | "UNA
   };
 };
 
+const isInternalTransferEntry = (
+  lines: Array<{ account: { type: string } }>
+): boolean => {
+  return lines.every((line) => line.account.type === "user");
+};
+
+const createCurrencyConverter = (reportingCurrency: string, asOfDate: string) => {
+  const conversionRateCache = new Map<string, number | null>();
+
+  return async (amount: number, sourceCurrency: string): Promise<number | null> => {
+    const cacheKey = `${sourceCurrency}->${reportingCurrency}@${asOfDate}`;
+    let rate = conversionRateCache.get(cacheKey);
+
+    if (rate === undefined) {
+      const conversion = await valuationConversionService.convertAmount({
+        amount: 1,
+        sourceCurrency,
+        targetCurrency: reportingCurrency,
+        asOfDate,
+      });
+      rate = conversion.rate;
+      conversionRateCache.set(cacheKey, rate);
+    }
+
+    if (rate === null) {
+      return null;
+    }
+
+    return amount * rate;
+  };
+};
+
 const getMonthRangeByPreset = (preset: TrendRangePreset, asOfDate: string): string[] => {
   if (preset === "LAST_3_MONTHS") {
     return getRecentMonthKeys(asOfDate, 3);
@@ -132,6 +170,7 @@ class ReportingService {
     const effectiveAsOfDate = asOfDate ?? getLocalDateString(new Date());
     const monthKeys = getMonthRangeByPreset(filter.preset, effectiveAsOfDate);
     const reportingCurrency = (await appSettingsService.getBaseCurrency()) ?? "USD";
+    const convertToReportingCurrency = createCurrencyConverter(reportingCurrency, effectiveAsOfDate);
 
     const trendByMonth = new Map<string, { monthKey: string; income: number; expense: number }>(
       monthKeys.map((monthKey) => [monthKey, { monthKey, income: 0, expense: 0 }])
@@ -154,41 +193,13 @@ class ReportingService {
       },
     });
 
-    const conversionRateCache = new Map<string, number | null>();
-
-    const convertToReportingCurrency = async (
-      amount: number,
-      sourceCurrency: string
-    ): Promise<number | null> => {
-      const cacheKey = `${sourceCurrency}->${reportingCurrency}@${effectiveAsOfDate}`;
-      let rate = conversionRateCache.get(cacheKey);
-
-      if (rate === undefined) {
-        const conversion = await valuationConversionService.convertAmount({
-          amount: 1,
-          sourceCurrency,
-          targetCurrency: reportingCurrency,
-          asOfDate: effectiveAsOfDate,
-        });
-        rate = conversion.rate;
-        conversionRateCache.set(cacheKey, rate);
-      }
-
-      if (rate === null) {
-        return null;
-      }
-
-      return amount * rate;
-    };
-
     for (const entry of trendEntries) {
       const month = trendByMonth.get(entry.date.slice(0, 7));
       if (!month) {
         continue;
       }
 
-      const hasOnlyUserLines = entry.lines.every((line) => line.account.type === AccountType.User);
-      if (hasOnlyUserLines) {
+      if (isInternalTransferEntry(entry.lines)) {
         continue;
       }
 
@@ -248,6 +259,7 @@ class ReportingService {
             endDate: clampEndDateToToday(filter.customRange.endDate, today),
           }
         : getBreakdownRangeByPreset(filter.preset, today);
+    const convertToReportingCurrency = createCurrencyConverter(reportingCurrency, range.endDate);
 
     const entries = await databaseService.prismaClient.journalEntry.findMany({
       where: {
@@ -265,39 +277,11 @@ class ReportingService {
       },
     });
 
-    const conversionRateCache = new Map<string, number | null>();
-
-    const convertToReportingCurrency = async (
-      amount: number,
-      sourceCurrency: string
-    ): Promise<number | null> => {
-      const cacheKey = `${sourceCurrency}->${reportingCurrency}@${range.endDate}`;
-      let rate = conversionRateCache.get(cacheKey);
-
-      if (rate === undefined) {
-        const conversion = await valuationConversionService.convertAmount({
-          amount: 1,
-          sourceCurrency,
-          targetCurrency: reportingCurrency,
-          asOfDate: range.endDate,
-        });
-        rate = conversion.rate;
-        conversionRateCache.set(cacheKey, rate);
-      }
-
-      if (rate === null) {
-        return null;
-      }
-
-      return amount * rate;
-    };
-
-    const incomeMap = new Map<string, { categoryId: string | "UNASSIGNED"; categoryName: string; amount: number }>();
-    const expenseMap = new Map<string, { categoryId: string | "UNASSIGNED"; categoryName: string; amount: number }>();
+    const incomeMap = new Map<string, CategoryBucketRow>();
+    const expenseMap = new Map<string, CategoryBucketRow>();
 
     for (const entry of entries) {
-      const hasOnlyUserLines = entry.lines.every((line) => line.account.type === AccountType.User);
-      if (hasOnlyUserLines) {
+      if (isInternalTransferEntry(entry.lines)) {
         continue;
       }
 
