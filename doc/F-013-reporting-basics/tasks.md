@@ -114,6 +114,16 @@
 
 ### Batch 5: End-to-End TDD and Final Verification
 
+- [x] 5.1 Red: write failing E2E scenarios for F-013 MVP flow
+  - Acceptance: tests cover report switching, per-report filters, persisted restore after restart.
+  - Acceptance: tests cover coexistence (no regression on investment performance reports).
+- [x] 5.2 Green: implement remaining integration details to satisfy E2E
+  - Acceptance: tests from 5.1 pass.
+- [x] 5.3 Refactor and full regression sweep
+  - Acceptance: relevant service, IPC, renderer, and E2E suites pass for F-013 scope.
+  - Acceptance: `requirements.md`, `design.md`, and `tasks.md` remain aligned.
+  - Acceptance: any implementation deviations are documented explicitly.
+
 - [ ] 5.1 Red: write failing E2E scenarios for F-013 MVP flow
   - Acceptance: tests cover report switching, per-report filters, persisted restore after restart.
   - Acceptance: tests cover coexistence (no regression on investment performance reports).
