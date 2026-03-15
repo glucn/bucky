@@ -90,25 +90,25 @@
   - Acceptance: tests assert loading/error/empty states.
 - [x] 4.2 Green: implement route and reporting shell
   - Acceptance: tests from 4.1 pass.
-- [ ] 4.3 Red: write failing renderer tests for per-report filter independence and persistence
+- [x] 4.3 Red: write failing renderer tests for per-report filter independence and persistence
   - Acceptance: tests assert Trend and Breakdown filters are independent.
   - Acceptance: tests assert persisted restore via app settings keys.
   - Acceptance: tests assert invalid persisted values fallback to defaults (`Last 6 months`, `This month`).
-- [ ] 4.4 Green: implement per-report filter state + persistence
+- [x] 4.4 Green: implement per-report filter state + persistence
   - Acceptance: tests from 4.3 pass.
-- [ ] 4.5 Red: write failing renderer tests for Trend UI requirements
+- [x] 4.5 Red: write failing renderer tests for Trend UI requirements
   - Acceptance: tests assert grouped bars (not stacked).
   - Acceptance: tests assert tooltip fields (`Income`, `Expense`, `Net income`).
   - Acceptance: tests assert negative net in tooltip uses red + leading minus sign.
-- [ ] 4.6 Green: implement Trend UI behavior
+- [x] 4.6 Green: implement Trend UI behavior
   - Acceptance: tests from 4.5 pass.
-- [ ] 4.7 Red: write failing renderer tests for Breakdown UI requirements
+- [x] 4.7 Red: write failing renderer tests for Breakdown UI requirements
   - Acceptance: tests assert prominent Net income KPI above tables.
   - Acceptance: tests assert negative KPI uses red + leading minus sign.
   - Acceptance: tests assert separate tables, percentage columns, totals rows, and unassigned row visibility.
-- [ ] 4.8 Green: implement Breakdown UI behavior
+- [x] 4.8 Green: implement Breakdown UI behavior
   - Acceptance: tests from 4.7 pass.
-- [ ] 4.9 Green: add stable `data-testid` hooks required by E2E
+- [x] 4.9 Green: add stable `data-testid` hooks required by E2E
   - Acceptance: hooks cover report switcher, date controls, trend container, tooltip trigger points, KPI card, and both tables.
   - Acceptance: naming follows existing deterministic test-id style.
 
