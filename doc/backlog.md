@@ -622,3 +622,69 @@ This file tracks deferred product improvements that are intentionally out of cur
   - Treat this backlog item as historical completion, not active roadmap scope.
 - **Open Questions**:
   - Should `design.md` deferred-feature wording be updated to reflect completed retirement?
+
+## BL-028 - Sankey Flow Visualization For Income/Expense
+
+- **ID**: BL-028
+- **Title**: Add Sankey diagram for flow-style income/expense visualization
+- **Status**: planned
+- **Priority**: low
+- **Related Docs**: `doc/F-013-reporting-basics/requirements.md`, `doc/F-013-reporting-basics/design.md`, `doc/F-013-reporting-basics/tasks.md`
+- **Context (What / Why)**:
+  - F-013 MVP ships trend and breakdown reporting views, but not flow-style visuals.
+  - Some users reason better with source-to-use flow patterns than with table-first views.
+  - Sankey coverage was explicitly deferred in F-013 and should remain trackable as follow-up scope.
+- **Proposed UX / Behavior**:
+  - Add an optional Sankey view that visualizes income categories flowing into expense groupings and net remainder.
+  - Keep existing trend and breakdown views as default pathways.
+  - Preserve deterministic date/filter semantics so Sankey and table totals reconcile.
+- **Scope Notes**:
+  - Requires clear aggregation rules for category-level links and low-volume bucket handling.
+  - Should avoid introducing a second interpretation path that conflicts with existing report totals.
+- **Open Questions**:
+  - Should Sankey live inside `/reports` as a third view or in a dedicated route?
+  - What minimum interaction set is MVP (hover only vs drill-down)?
+
+## BL-029 - Per-Report Sub-Widget Date Overrides
+
+- **ID**: BL-029
+- **Title**: Add per-report sub-widget date overrides
+- **Status**: planned
+- **Priority**: low
+- **Related Docs**: `doc/F-013-reporting-basics/requirements.md`, `doc/F-013-reporting-basics/design.md`, `doc/F-013-reporting-basics/tasks.md`
+- **Context (What / Why)**:
+  - F-013 MVP intentionally uses one date filter per report mode to keep behavior simple.
+  - Future report compositions may include mixed sub-widgets with different useful time horizons.
+  - Sub-widget overrides were explicitly deferred and need a backlog placeholder for future UX iteration.
+- **Proposed UX / Behavior**:
+  - Allow selected sub-widgets to override the parent report date range with explicit local controls.
+  - Keep parent report filter visible and authoritative unless a widget-level override is enabled.
+  - Surface active override state clearly so users can explain mismatched date windows.
+- **Scope Notes**:
+  - Must preserve persistence behavior and avoid hidden cross-widget filter coupling.
+  - Should include deterministic reset behavior from widget override back to report-level defaults.
+- **Open Questions**:
+  - Should overrides persist independently per widget, or reset each session?
+  - How should exports/snapshots represent mixed date ranges across widgets?
+
+## BL-030 - Dedicated Net Worth And Investment Allocation Report Pages
+
+- **ID**: BL-030
+- **Title**: Add dedicated Net Worth and Investment Allocation report pages
+- **Status**: planned
+- **Priority**: medium
+- **Related Docs**: `doc/F-013-reporting-basics/requirements.md`, `doc/F-013-reporting-basics/design.md`, `doc/F-013-reporting-basics/tasks.md`
+- **Context (What / Why)**:
+  - F-013 MVP focuses on income/expense reporting and leaves broader reporting page expansion for later.
+  - Net worth and allocation are currently represented in overview-oriented surfaces, not dedicated report-first pages.
+  - Dedicated pages were explicitly deferred and should be tracked for roadmap continuity.
+- **Proposed UX / Behavior**:
+  - Add report pages focused on net-worth history and investment allocation analysis.
+  - Reuse existing valuation/FX source-of-truth pathways so numbers align with overview and portfolio views.
+  - Provide report-specific filters and export-ready layouts for planning/review workflows.
+- **Scope Notes**:
+  - Requires alignment with base-currency and FX completeness messaging to avoid conflicting valuation narratives.
+  - Should share common report-shell/navigation patterns established by `/reports` to reduce UX drift.
+- **Open Questions**:
+  - Should these pages be nested under `/reports` tabs or top-level report routes?
+  - What should be the first page split boundary: net worth only, then allocation, or both together?
