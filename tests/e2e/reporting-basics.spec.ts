@@ -1,6 +1,27 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+
+const navigateToApp = async (page: Page, path: string) => {
+  let lastError: unknown;
+  const targetTestId = path.startsWith("/investments/")
+    ? "performance-reports-page"
+    : "reports-page";
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      await page.goto(`http://localhost:3000${path}`, { waitUntil: "domcontentloaded" });
+      await page.getByTestId(targetTestId).waitFor({ state: "visible", timeout: 3000 });
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.waitForTimeout(500);
+    }
+  }
+
+  throw lastError;
+};
 
 const trendPayload = {
+  currency: "USD",
   range: {
     preset: "LAST_6_MONTHS",
     startMonthKey: "2025-10",
@@ -16,10 +37,13 @@ const trendPayload = {
   ],
   metadata: {
     includesUnassignedImplicitly: true,
+    usedEstimatedFxRate: false,
+    missingFxPairs: [],
   },
 };
 
 const breakdownPayload = {
+  currency: "USD",
   range: {
     preset: "THIS_MONTH",
     startDate: "2026-03-01",
@@ -40,6 +64,10 @@ const breakdownPayload = {
     { categoryId: "utilities", categoryName: "Utilities", amount: 500, ratio: 0.14286 },
     { categoryId: "transport", categoryName: "Transport", amount: 500, ratio: 0.14286 },
   ],
+  metadata: {
+    usedEstimatedFxRate: false,
+    missingFxPairs: [],
+  },
 };
 
 test.describe("F-013 Reporting Basics E2E", () => {
@@ -65,7 +93,7 @@ test.describe("F-013 Reporting Basics E2E", () => {
       };
     }, { trend: trendPayload, breakdown: breakdownPayload });
 
-    await page.goto("http://localhost:3000/reports", { waitUntil: "networkidle" });
+    await navigateToApp(page, "/reports");
     await page.getByTestId("reports-page").waitFor({ state: "visible", timeout: 20000 });
 
     // Trend should be active by default
@@ -95,7 +123,7 @@ test.describe("F-013 Reporting Basics E2E", () => {
       };
     }, { trend: trendPayload, breakdown: breakdownPayload });
 
-    await page.goto("http://localhost:3000/reports", { waitUntil: "networkidle" });
+    await navigateToApp(page, "/reports");
     await page.getByTestId("reports-page").waitFor({ state: "visible", timeout: 20000 });
 
     // Default is trend
@@ -183,7 +211,7 @@ test.describe("F-013 Reporting Basics E2E", () => {
       };
     });
 
-    await page.goto("http://localhost:3000/reports", { waitUntil: "networkidle" });
+    await navigateToApp(page, "/reports");
     await page.getByTestId("reports-page").waitFor({ state: "visible", timeout: 20000 });
 
     // Default trend filter is LAST_6_MONTHS
@@ -199,15 +227,22 @@ test.describe("F-013 Reporting Basics E2E", () => {
     // Change breakdown filter to LAST_MONTH
     await page.getByTestId("breakdown-filter-select").selectOption("LAST_MONTH");
 
+    // Custom ranges expose and retain explicit start/end controls.
+    await page.getByTestId("breakdown-filter-select").selectOption("CUSTOM");
+    await page.getByTestId("breakdown-custom-start-date").fill("2026-02-01");
+    await page.getByTestId("breakdown-custom-end-date").fill("2026-02-28");
+    await expect(page.getByTestId("breakdown-custom-start-date")).toHaveValue("2026-02-01");
+    await expect(page.getByTestId("breakdown-custom-end-date")).toHaveValue("2026-02-28");
+
     // Switch back to trend - should still show LAST_3_MONTHS
     await page.getByTestId("report-switch-trend").click();
     const trendSelect = page.getByTestId("trend-filter-select");
     await expect(trendSelect).toHaveValue("LAST_3_MONTHS");
 
-    // Switch back to breakdown - should still show LAST_MONTH
+    // Switch back to breakdown - should still show the custom range.
     await page.getByTestId("report-switch-breakdown").click();
     const breakdownSelect = page.getByTestId("breakdown-filter-select");
-    await expect(breakdownSelect).toHaveValue("LAST_MONTH");
+    await expect(breakdownSelect).toHaveValue("CUSTOM");
   });
 
   test("persists filter selection via app settings", async ({ page }) => {
@@ -255,7 +290,7 @@ test.describe("F-013 Reporting Basics E2E", () => {
       };
     }, settings);
 
-    await page.goto("http://localhost:3000/reports", { waitUntil: "networkidle" });
+    await navigateToApp(page, "/reports");
     await page.getByTestId("reports-page").waitFor({ state: "visible", timeout: 20000 });
 
     // Trend should restore to LAST_12_MONTHS
@@ -288,6 +323,7 @@ test.describe("F-013 Reporting Basics E2E", () => {
         }),
         getAppSetting: async () => null,
         setAppSetting: async () => ({ success: true }),
+        getBaseCurrencyImpactState: async () => ({ baseCurrency: "USD", reconciliation: null }),
         getInvestmentPortfolio: async () => ({
           id: "portfolio-1",
           name: "Test Portfolio",
@@ -304,7 +340,21 @@ test.describe("F-013 Reporting Basics E2E", () => {
             if (channel === "get-accounts-with-balances") return [];
             if (channel === "reset-all-data") return { success: true };
             if (channel === "get-portfolio-performance") {
-              return { success: true, performance: { totalReturn: 5000 } };
+              return {
+                success: true,
+                performance: {
+                  totalReturn: 5000,
+                  totalReturnPercent: 10.5,
+                  realizedGains: 2000,
+                  unrealizedGains: 2500,
+                  dividendIncome: 400,
+                  interestIncome: 100,
+                  fees: 0,
+                  deposits: 0,
+                  withdrawals: 0,
+                  currentValue: 55000,
+                },
+              };
             }
             if (channel === "get-asset-allocation") {
               return { success: true, allocation: [] };
@@ -323,12 +373,12 @@ test.describe("F-013 Reporting Basics E2E", () => {
     });
 
     // Test income/expense reports route
-    await page.goto("http://localhost:3000/reports", { waitUntil: "networkidle" });
+    await navigateToApp(page, "/reports");
     await page.getByTestId("reports-page").waitFor({ state: "visible", timeout: 20000 });
     await expect(page.getByTestId("report-switch-trend")).toBeVisible();
 
     // Test investment performance reports route
-    await page.goto("http://localhost:3000/investments/portfolio-1/reports", { waitUntil: "networkidle" });
+    await navigateToApp(page, "/investments/portfolio-1/reports");
     await page.getByTestId("performance-reports-page").waitFor({ state: "visible", timeout: 20000 });
   });
 
@@ -354,7 +404,7 @@ test.describe("F-013 Reporting Basics E2E", () => {
       };
     }, { trend: trendPayload, breakdown: breakdownPayload });
 
-    await page.goto("http://localhost:3000/reports", { waitUntil: "networkidle" });
+    await navigateToApp(page, "/reports");
     await page.getByTestId("reports-page").waitFor({ state: "visible", timeout: 20000 });
 
     // Verify trend container exists with grouped layout
@@ -389,7 +439,7 @@ test.describe("F-013 Reporting Basics E2E", () => {
       };
     }, { trend: trendPayload, breakdown: breakdownPayload });
 
-    await page.goto("http://localhost:3000/reports", { waitUntil: "networkidle" });
+    await navigateToApp(page, "/reports");
     await page.getByTestId("reports-page").waitFor({ state: "visible", timeout: 20000 });
 
     // Switch to breakdown

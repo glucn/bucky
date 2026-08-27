@@ -63,6 +63,16 @@ describe("Navbar enrichment panel", () => {
     expect(screen.getByTestId("start-enrichment-run").hasAttribute("disabled")).toBe(true);
   });
 
+  it("exposes top-level reporting navigation", () => {
+    render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link", { name: "Reports" }).getAttribute("href")).toBe("/reports");
+  });
+
   it("shows completion toast after continuing run in background", async () => {
     (globalThis.window as any).electron.getEnrichmentPanelState = vi.fn().mockResolvedValue({
       activeRun: {

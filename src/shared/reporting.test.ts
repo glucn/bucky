@@ -46,6 +46,7 @@ describe("reporting shared contracts", () => {
 
   it("validates standard date strings", () => {
     expect(isStandardDateString("2026-03-01")).toBe(true);
+    expect(isStandardDateString("2026-02-29")).toBe(false);
     expect(isStandardDateString("2026-3-1")).toBe(false);
     expect(isStandardDateString("03/01/2026")).toBe(false);
   });
@@ -90,6 +91,13 @@ describe("reporting shared contracts", () => {
     expect(
       normalizeBreakdownFilter({
         preset: "CUSTOM",
+      })
+    ).toEqual(DEFAULT_BREAKDOWN_FILTER);
+
+    expect(
+      normalizeBreakdownFilter({
+        preset: "CUSTOM",
+        customRange: { startDate: "2026-03-01", endDate: "2026-02-01" },
       })
     ).toEqual(DEFAULT_BREAKDOWN_FILTER);
   });

@@ -23,12 +23,12 @@
 - [X] F-010 placeholder-cleanup (inline reassignment with original account name display)
 - [X] F-011 auto-categorization (rule inference with exact-match transparency)
 - [X] F-012 overview-dashboard (net worth, income/expense trend, allocation)
-- [ ] F-013 reporting-basics (overview + breakdowns with presets and date picker)
+- [X] F-013 reporting-basics (overview + breakdowns with presets and date picker)
 - [X] F-014 liability-unified-model (liability accounts without specialized UX)
 - [ ] F-015 security-gate (app lock + database encryption with hybrid key mgmt)
 - [ ] F-016 investment-allocation-ux (asset-class pie with combined view)
 - [X] F-017 data-enrichment-mvp (on-demand metadata fetch + caching)
-- [ ] F-018 placeholder-reporting ("Unassigned" included in reports)
+- [X] F-018 placeholder-reporting ("Unassigned" included in reports)
 
 ## Roadmap
 

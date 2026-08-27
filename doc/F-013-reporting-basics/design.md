@@ -1,5 +1,7 @@
 # Design: Reporting Basics (F-013)
 
+**Status:** Implemented and verified (2026-08-26)
+
 ## Overview
 
 F-013 introduces a focused reporting MVP for income/expense analysis with two report surfaces:
@@ -114,6 +116,7 @@ type GetIncomeExpenseTrendRequest = {
 };
 
 type IncomeExpenseTrendResponse = {
+  currency: string;
   range: {
     preset: TrendRangePreset;
     startMonthKey: string; // YYYY-MM
@@ -127,6 +130,8 @@ type IncomeExpenseTrendResponse = {
   }>;
   metadata: {
     includesUnassignedImplicitly: true;
+    usedEstimatedFxRate: boolean;
+    missingFxPairs: string[];
   };
 };
 
@@ -155,6 +160,7 @@ type BreakdownRow = {
 };
 
 type IncomeExpenseBreakdownResponse = {
+  currency: string;
   range: {
     preset: BreakdownRangePreset;
     startDate: string;
@@ -167,6 +173,10 @@ type IncomeExpenseBreakdownResponse = {
   };
   incomeRows: BreakdownRow[];
   expenseRows: BreakdownRow[];
+  metadata: {
+    usedEstimatedFxRate: boolean;
+    missingFxPairs: string[];
+  };
 };
 ```
 
@@ -177,6 +187,10 @@ type IncomeExpenseBreakdownResponse = {
 - Include uncategorized and placeholder-linked transactions.
 - Ensure visual totals and table totals are internally consistent.
 - Use deterministic ordering for trend buckets and table rows.
+- Convert through `valuationConversionService`, whose canonical source is `FxDailyRate`.
+- Return the selected reporting currency and conversion provenance metadata with both reports.
+- If any required pair is unavailable, retain diagnostic metadata but withhold the report's partial
+  totals in the renderer. If latest-rate fallback is used, render an estimated-rate notice.
 
 ## State and Persistence
 

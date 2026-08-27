@@ -1,5 +1,9 @@
 # Tasks: Reporting Basics (F-013)
 
+**Status:** Complete (2026-08-26). Final integrity work added top-level navigation, custom breakdown
+dates, response-currency rendering, canonical FX completeness metadata, recoverable loading/error/empty
+states, and coverage across shared contracts, services, renderer, and E2E.
+
 ## Status Legend
 
 - [x] Completed

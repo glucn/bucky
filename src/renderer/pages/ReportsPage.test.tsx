@@ -33,15 +33,22 @@ describe("ReportsPage", () => {
     getAppSetting.mockResolvedValue(null);
     setAppSetting.mockResolvedValue({ success: true });
     getIncomeExpenseTrendReport.mockResolvedValue({
+      currency: "USD",
       range: { preset: "LAST_6_MONTHS", startMonthKey: "2025-10", endMonthKey: "2026-03" },
       months: [{ monthKey: "2026-03", income: 100, expense: 20, netIncome: 80 }],
-      metadata: { includesUnassignedImplicitly: true },
+      metadata: {
+        includesUnassignedImplicitly: true,
+        usedEstimatedFxRate: false,
+        missingFxPairs: [],
+      },
     });
     getIncomeExpenseBreakdownReport.mockResolvedValue({
+      currency: "USD",
       range: { preset: "THIS_MONTH", startDate: "2026-03-01", endDate: "2026-03-15" },
       kpis: { incomeTotal: 100, expenseTotal: 20, netIncome: 80 },
       incomeRows: [{ categoryId: "Salary", categoryName: "Salary", amount: 100, ratio: 1 }],
       expenseRows: [{ categoryId: "Rent", categoryName: "Rent", amount: 20, ratio: 1 }],
+      metadata: { usedEstimatedFxRate: false, missingFxPairs: [] },
     });
   });
 
@@ -184,6 +191,53 @@ describe("ReportsPage", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("reports-empty")).toBeTruthy();
+      expect(screen.getByTestId("report-switcher")).toBeTruthy();
+      expect(screen.getByTestId("trend-filter-select")).toBeTruthy();
+    });
+  });
+
+  it("supports a persisted custom breakdown date range", async () => {
+    render(<ReportsPage />);
+
+    await waitFor(() => expect(screen.getByTestId("reports-page")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("report-switch-breakdown"));
+    fireEvent.change(screen.getByTestId("breakdown-filter-select"), {
+      target: { value: "CUSTOM" },
+    });
+
+    const startInput = await screen.findByTestId("breakdown-custom-start-date");
+    const endInput = screen.getByTestId("breakdown-custom-end-date");
+    fireEvent.change(startInput, { target: { value: "2026-02-01" } });
+    fireEvent.change(endInput, { target: { value: "2026-02-28" } });
+
+    await waitFor(() => {
+      expect(setAppSetting).toHaveBeenLastCalledWith(
+        REPORTING_BREAKDOWN_FILTER_SETTING_KEY,
+        {
+          preset: "CUSTOM",
+          customRange: { startDate: "2026-02-01", endDate: "2026-02-28" },
+        }
+      );
+    });
+  });
+
+  it("uses the response currency and withholds incomplete FX totals", async () => {
+    getIncomeExpenseTrendReport.mockResolvedValue({
+      currency: "CAD",
+      range: { preset: "LAST_6_MONTHS", startMonthKey: "2025-10", endMonthKey: "2026-03" },
+      months: [{ monthKey: "2026-03", income: 100, expense: 20, netIncome: 80 }],
+      metadata: {
+        includesUnassignedImplicitly: true,
+        usedEstimatedFxRate: false,
+        missingFxPairs: ["EUR/CAD"],
+      },
+    });
+
+    render(<ReportsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("reports-fx-incomplete").textContent).toContain("EUR/CAD");
+      expect(screen.queryByTestId("reports-trend-container")).toBeNull();
     });
   });
 

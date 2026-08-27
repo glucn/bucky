@@ -1,3 +1,5 @@
+import { parseToStandardDate } from "./dateUtils";
+
 export const TREND_RANGE_PRESETS = [
   "LAST_3_MONTHS",
   "LAST_6_MONTHS",
@@ -34,6 +36,7 @@ export type IncomeExpenseBreakdownFilter = {
 export type IncomeExpenseTrendRequest = IncomeExpenseTrendFilter;
 
 export type IncomeExpenseTrendResponse = {
+  currency: string;
   range: {
     preset: TrendRangePreset;
     startMonthKey: string;
@@ -47,6 +50,8 @@ export type IncomeExpenseTrendResponse = {
   }>;
   metadata: {
     includesUnassignedImplicitly: true;
+    usedEstimatedFxRate: boolean;
+    missingFxPairs: string[];
   };
 };
 
@@ -60,6 +65,7 @@ export type IncomeExpenseBreakdownRow = {
 };
 
 export type IncomeExpenseBreakdownResponse = {
+  currency: string;
   range: {
     preset: BreakdownRangePreset;
     startDate: string;
@@ -72,6 +78,10 @@ export type IncomeExpenseBreakdownResponse = {
   };
   incomeRows: IncomeExpenseBreakdownRow[];
   expenseRows: IncomeExpenseBreakdownRow[];
+  metadata: {
+    usedEstimatedFxRate: boolean;
+    missingFxPairs: string[];
+  };
 };
 
 export const DEFAULT_TREND_FILTER: IncomeExpenseTrendFilter = {
@@ -104,7 +114,11 @@ export const isBreakdownRangePreset = (value: unknown): value is BreakdownRangeP
 };
 
 export const isStandardDateString = (value: unknown): value is string => {
-  return typeof value === "string" && STANDARD_DATE_PATTERN.test(value);
+  return (
+    typeof value === "string" &&
+    STANDARD_DATE_PATTERN.test(value) &&
+    parseToStandardDate(value) === value
+  );
 };
 
 export const normalizeTrendFilter = (input: unknown): IncomeExpenseTrendFilter => {
@@ -136,6 +150,10 @@ export const normalizeBreakdownFilter = (input: unknown): IncomeExpenseBreakdown
   }
 
   if (!isStandardDateString(customRange.startDate) || !isStandardDateString(customRange.endDate)) {
+    return DEFAULT_BREAKDOWN_FILTER;
+  }
+
+  if (customRange.startDate > customRange.endDate) {
     return DEFAULT_BREAKDOWN_FILTER;
   }
 

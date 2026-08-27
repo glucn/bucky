@@ -34,6 +34,11 @@ describe("reportingService breakdown report", () => {
     expect(thisMonth.range.preset).toBe("THIS_MONTH");
     expect(custom.range.startDate).toBe(dateOffset(-10));
     expect(custom.range.endDate).toBe(dateOffset(0));
+    expect(custom.currency).toBe("USD");
+    expect(custom.metadata).toEqual({
+      usedEstimatedFxRate: false,
+      missingFxPairs: [],
+    });
   });
 
   it("builds separate income/expense tables with amount-desc order and net income KPI", async () => {

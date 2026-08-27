@@ -1,5 +1,7 @@
 # Requirements: Reporting Basics (F-013)
 
+**Status:** Complete (2026-08-26)
+
 ## Goal
 
 Deliver a first reporting MVP focused on income/expense analysis with clear period controls and trustworthy totals.
@@ -69,6 +71,9 @@ Deliver a first reporting MVP focused on income/expense analysis with clear peri
   - Exclude internal transfers between user-owned accounts from income/expense totals.
 - Future-dated transactions must be excluded by default for both reports.
 - Currency conversion and display rules must remain consistent with existing dashboard/reporting conventions.
+- Each response must identify its reporting currency and FX completeness. When a required canonical
+  `FxDailyRate` is unavailable, the UI must withhold partial totals, name the missing pairs, and offer
+  an FX-only refresh action. Latest-rate fallback must be disclosed as estimated.
 
 ### FR-6 Empty and Degenerate States
 

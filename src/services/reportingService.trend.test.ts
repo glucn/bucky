@@ -41,6 +41,12 @@ describe("reportingService trend report", () => {
     expect([...monthKeys].sort()).toEqual(monthKeys);
     expect(report6.range.startMonthKey).toBe(report6.months[0].monthKey);
     expect(report6.range.endMonthKey).toBe(report6.months[report6.months.length - 1].monthKey);
+    expect(report6.currency).toBe("USD");
+    expect(report6.metadata).toMatchObject({
+      includesUnassignedImplicitly: true,
+      usedEstimatedFxRate: false,
+      missingFxPairs: [],
+    });
   });
 
   it("excludes transfer and future entries while including unassigned category contributions", async () => {
@@ -169,5 +175,35 @@ describe("reportingService trend report", () => {
 
     expect(payload.months.every((month) => month.income >= 0)).toBe(true);
     expect(payload.months.every((month) => month.expense >= 0)).toBe(true);
+  });
+
+  it("reports missing canonical FX pairs instead of silently presenting complete totals", async () => {
+    const cadIncome = await databaseService.createAccount({
+      name: "CAD Contract Income",
+      type: AccountType.Category,
+      subtype: AccountSubtype.Asset,
+      currency: "CAD",
+    });
+    const cadWallet = await databaseService.createAccount({
+      name: "CAD Contract Wallet",
+      type: AccountType.User,
+      subtype: AccountSubtype.Asset,
+      currency: "CAD",
+    });
+
+    await databaseService.createJournalEntry({
+      date: dateOffset(-1),
+      amount: 100,
+      description: "CAD income without FX",
+      fromAccountId: cadIncome.id,
+      toAccountId: cadWallet.id,
+    });
+
+    const payload = await reportingService.getIncomeExpenseTrendReport({
+      preset: "LAST_3_MONTHS",
+    });
+
+    expect(payload.currency).toBe("USD");
+    expect(payload.metadata.missingFxPairs).toEqual(["CAD/USD"]);
   });
 });

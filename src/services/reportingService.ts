@@ -115,28 +115,55 @@ const isInternalTransferEntry = (
 };
 
 const createCurrencyConverter = (reportingCurrency: string, asOfDate: string) => {
-  const conversionRateCache = new Map<string, number | null>();
+  type CachedConversion = {
+    rate: number | null;
+    source: "same_currency" | "as_of" | "latest_fallback" | "unavailable";
+    pair: string | null;
+  };
 
-  return async (amount: number, sourceCurrency: string): Promise<number | null> => {
-    const cacheKey = `${sourceCurrency}->${reportingCurrency}@${asOfDate}`;
-    let rate = conversionRateCache.get(cacheKey);
+  const conversionRateCache = new Map<string, CachedConversion>();
+  const missingFxPairs = new Set<string>();
+  let usedEstimatedFxRate = false;
 
-    if (rate === undefined) {
-      const conversion = await valuationConversionService.convertAmount({
+  const convert = async (amount: number, sourceCurrency: string): Promise<number | null> => {
+    const cacheKey = `${sourceCurrency}/${reportingCurrency}@${asOfDate}`;
+    let conversion = conversionRateCache.get(cacheKey);
+
+    if (!conversion) {
+      const result = await valuationConversionService.convertAmount({
         amount: 1,
         sourceCurrency,
         targetCurrency: reportingCurrency,
         asOfDate,
       });
-      rate = conversion.rate;
-      conversionRateCache.set(cacheKey, rate);
+      conversion = {
+        rate: result.rate,
+        source: result.source,
+        pair: result.pair,
+      };
+      conversionRateCache.set(cacheKey, conversion);
     }
 
-    if (rate === null) {
+    if (conversion.source === "latest_fallback") {
+      usedEstimatedFxRate = true;
+    }
+
+    if (conversion.rate === null) {
+      if (conversion.pair) {
+        missingFxPairs.add(conversion.pair.replace("->", "/"));
+      }
       return null;
     }
 
-    return amount * rate;
+    return amount * conversion.rate;
+  };
+
+  return {
+    convert,
+    getMetadata: () => ({
+      usedEstimatedFxRate,
+      missingFxPairs: [...missingFxPairs].sort(),
+    }),
   };
 };
 
@@ -170,7 +197,7 @@ class ReportingService {
     const effectiveAsOfDate = asOfDate ?? getLocalDateString(new Date());
     const monthKeys = getMonthRangeByPreset(filter.preset, effectiveAsOfDate);
     const reportingCurrency = (await appSettingsService.getBaseCurrency()) ?? "USD";
-    const convertToReportingCurrency = createCurrencyConverter(reportingCurrency, effectiveAsOfDate);
+    const currencyConverter = createCurrencyConverter(reportingCurrency, effectiveAsOfDate);
 
     const trendByMonth = new Map<string, { monthKey: string; income: number; expense: number }>(
       monthKeys.map((monthKey) => [monthKey, { monthKey, income: 0, expense: 0 }])
@@ -208,7 +235,7 @@ class ReportingService {
           continue;
         }
 
-        const convertedAmount = await convertToReportingCurrency(Math.abs(line.amount), line.currency);
+        const convertedAmount = await currencyConverter.convert(Math.abs(line.amount), line.currency);
         if (convertedAmount === null) {
           continue;
         }
@@ -233,6 +260,7 @@ class ReportingService {
     });
 
     return {
+      currency: reportingCurrency,
       range: {
         preset: filter.preset,
         startMonthKey: monthKeys[0],
@@ -241,6 +269,7 @@ class ReportingService {
       months,
       metadata: {
         includesUnassignedImplicitly: true,
+        ...currencyConverter.getMetadata(),
       },
     };
   }
@@ -259,7 +288,7 @@ class ReportingService {
             endDate: clampEndDateToToday(filter.customRange.endDate, today),
           }
         : getBreakdownRangeByPreset(filter.preset, today);
-    const convertToReportingCurrency = createCurrencyConverter(reportingCurrency, range.endDate);
+    const currencyConverter = createCurrencyConverter(reportingCurrency, range.endDate);
 
     const entries = await databaseService.prismaClient.journalEntry.findMany({
       where: {
@@ -290,7 +319,7 @@ class ReportingService {
           continue;
         }
 
-        const convertedAmount = await convertToReportingCurrency(Math.abs(line.amount), line.currency);
+        const convertedAmount = await currencyConverter.convert(Math.abs(line.amount), line.currency);
         if (convertedAmount === null) {
           continue;
         }
@@ -331,6 +360,7 @@ class ReportingService {
       }));
 
     return {
+      currency: reportingCurrency,
       range: {
         preset: filter.preset,
         startDate: range.startDate,
@@ -343,6 +373,7 @@ class ReportingService {
       },
       incomeRows,
       expenseRows,
+      metadata: currencyConverter.getMetadata(),
     };
   }
 }
