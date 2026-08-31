@@ -688,3 +688,119 @@ This file tracks deferred product improvements that are intentionally out of cur
 - **Open Questions**:
   - Should these pages be nested under `/reports` tabs or top-level report routes?
   - What should be the first page split boundary: net worth only, then allocation, or both together?
+
+## BL-031 - Exact Decimal Quantities And Commodity Precision
+
+- **ID**: BL-031
+- **Title**: Replace binary floating-point accounting with explicit decimal and commodity precision
+- **Status**: planned
+- **Priority**: high
+- **Related Docs**: `doc/text-based-accounting-research.md`, `doc/agent-learnings/source-of-truth-guardrails.md`
+- **Context (What / Why)**:
+  - Core financial fields currently use binary `Float` storage, including journal amounts, checkpoints,
+    investment quantities, prices, and FX rates.
+  - Display rounding does not guarantee exact balancing, reproducible valuation, or safe external export.
+  - Plain-text accounting systems treat units, prices, costs, precision, and balancing tolerances as
+    explicit accounting semantics.
+- **Proposed UX / Behavior**:
+  - Preserve familiar localized amount display while calculations and persisted values use exact decimals.
+  - Define precision rules for money, security units, prices, FX rates, ratios, and calculated values.
+  - Surface a precise validation error when a user-entered value exceeds supported domain precision.
+- **Scope Notes**:
+  - Requires a staged schema/data migration and audit of arithmetic throughout services, IPC contracts,
+    imports, reports, investments, liabilities, and tests.
+  - Do not use a universal two-decimal rule; fractional securities and rates need separate precision.
+  - Define explicit rounding boundaries and modes before implementation.
+- **Open Questions**:
+  - Should storage use Prisma Decimal-compatible values, scaled integers, canonical decimal strings, or a
+    domain-specific combination?
+  - Which precision belongs to each currency/commodity, and which precision is configurable?
+  - How should existing floating-point records be audited and migrated when their intended decimal is
+    ambiguous?
+
+## BL-032 - Whole-Book Integrity Verification
+
+- **ID**: BL-032
+- **Title**: Add comprehensive read-only book verification and actionable diagnostics
+- **Status**: planned
+- **Priority**: high
+- **Related Docs**: `doc/text-based-accounting-research.md`, `doc/agent-learnings/source-of-truth-guardrails.md`
+- **Context (What / Why)**:
+  - Bucky has localized validation in write and reporting paths but no single operation that proves the
+    current book satisfies all critical accounting and valuation invariants.
+  - A verifier would improve user trust, migration safety, support diagnosis, and export confidence.
+  - PTA tools demonstrate the value of applying the same strict checks to handwritten, imported, and
+    generated entries.
+- **Proposed UX / Behavior**:
+  - Add a “Verify books” operation that reports success or a categorized list of record-linked findings.
+  - Check journal balance, account/currency consistency, transfer exchange-rate equivalence, checkpoint
+    assertions, investment lot/position consistency, and required price/FX coverage.
+  - Distinguish hard integrity failures from informational gaps such as unavailable market valuation.
+- **Scope Notes**:
+  - Implement as a pure service first so tests, diagnostics, export, and UI share one verification engine.
+  - Verification must not repair, delete, or adjust records.
+  - Each check must name its canonical source and include an anti-drift test.
+- **Open Questions**:
+  - Which checks block export or backup, and which only produce warnings?
+  - Should verification support an as-of date and scoped account verification?
+  - Where should the user-facing action and historical verification results live?
+
+## BL-033 - Deterministic Portable Ledger Export
+
+- **ID**: BL-033
+- **Title**: Export an hledger-compatible journal and lossless Bucky manifest
+- **Status**: planned
+- **Priority**: high
+- **Related Docs**: `doc/text-based-accounting-research.md`, `doc/F-008-offline-import-foundation/design.md`
+- **Context (What / Why)**:
+  - Users currently lack a durable double-entry representation that can be understood and validated
+    independently of Bucky.
+  - Flat CSV exports cannot faithfully preserve multi-posting transactions, commodities, prices,
+    assertions, provenance, or application-specific entities.
+  - Deterministic open-format export reduces lock-in and provides an independent accounting correctness
+    check.
+- **Proposed UX / Behavior**:
+  - Export a human-readable hledger-compatible journal for representable accounting data.
+  - Bundle a versioned JSON manifest containing stable IDs, provenance, liability/investment metadata,
+    and any information not losslessly representable in journal syntax.
+  - Preview export scope, validation status, sensitive-data warning, and any lossy/unsupported mappings.
+- **Scope Notes**:
+  - SQLite remains canonical; export is a pure snapshot and is not automatically synchronized back.
+  - Use stable ordering and canonical formatting so unchanged books produce byte-identical output.
+  - Include Bucky IDs as metadata/comments and never silently omit a record.
+  - Depend on BL-031 and BL-032 for authoritative precision and pre-export verification.
+- **Open Questions**:
+  - Should the first release export transactions only, or also price/FX and balance assertion directives?
+  - Should the archive be optionally encrypted, and how should that relate to F-015?
+  - Is invoking an installed hledger binary an optional verification step or should compatibility be
+    validated only by Bucky-owned fixtures?
+
+## BL-034 - Transaction Provenance And Immutable Revision History
+
+- **ID**: BL-034
+- **Title**: Preserve transaction origin and immutable before/after revisions
+- **Status**: planned
+- **Priority**: high
+- **Related Docs**: `doc/text-based-accounting-research.md`, `doc/F-008-offline-import-foundation/design.md`, `doc/F-010-placeholder-cleanup/design.md`
+- **Context (What / Why)**:
+  - Journal entries currently retain creation/update timestamps but edits overwrite prior postings and
+    cannot fully explain how a transaction entered or changed within the system.
+  - Import, cleanup, auto-categorization, manual edit, reversal, and reconciliation actions need durable
+    attribution for trustworthy support and correction workflows.
+  - Text journals commonly gain this auditability through version control; a database-backed application
+    should provide it explicitly.
+- **Proposed UX / Behavior**:
+  - Record transaction origin such as manual, import batch, cleanup, learned rule, reconciliation, or
+    system operation.
+  - Store immutable before/after snapshots for posting changes with timestamp, action type, related IDs,
+    and optional change note.
+  - Add a read-only history view that explains changed fields and supports copying the journal-form
+    representation of each revision.
+- **Scope Notes**:
+  - Revision records are append-only; corrections create new revisions rather than rewriting history.
+  - Keep raw imported text/fingerprints and user-visible descriptions distinct.
+  - Reuse the immutable snapshot approach established by liability profile versions where appropriate.
+- **Open Questions**:
+  - Should history record application-local actor/device identity in anticipation of future sync?
+  - Which system-generated metadata changes require revisions versus operational logs?
+  - How should reversals and replacement transactions be linked to the original entry?
