@@ -1,3 +1,4 @@
+import { ipcMain } from "electron";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setupRecoveryIpcHandlers } from "./ipcHandlers.recovery";
 
@@ -18,7 +19,7 @@ describe("Recovery IPC", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.context.mockReturnValue({ userData: "/personal", databaseFile: "/personal/profiles/default/book.sqlite", migrations: "/migrations", activeProfile: "default" });
-    setupRecoveryIpcHandlers(() => owner as any);
+    setupRecoveryIpcHandlers(() => owner as any, ipcMain);
   });
   it("cancels without creating or restoring files", async () => {
     mocks.open.mockResolvedValue({ canceled: true, filePaths: [] });

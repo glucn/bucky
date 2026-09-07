@@ -1,7 +1,7 @@
-import { ipcMain } from "electron";
+import type { IpcRegistrar } from "./ipcSecurity";
 import { investmentService } from "../services/investmentService";
 
-export function setupInvestmentIpcHandlers() {
+export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
   console.log("Registering investment IPC handlers...");
 
   // Remove any existing handlers first

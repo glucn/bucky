@@ -1,3 +1,4 @@
+import { ipcMain } from "electron";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -52,7 +53,7 @@ describe("setupReportingIpcHandlers", () => {
     getIncomeExpenseTrendReport.mockResolvedValue(trendPayload);
     getIncomeExpenseBreakdownReport.mockResolvedValue(breakdownPayload);
 
-    setupReportingIpcHandlers();
+    setupReportingIpcHandlers(ipcMain);
 
     expect(removeHandler).toHaveBeenCalledWith("get-income-expense-trend-report");
     expect(removeHandler).toHaveBeenCalledWith("get-income-expense-breakdown-report");
@@ -81,7 +82,7 @@ describe("setupReportingIpcHandlers", () => {
     getIncomeExpenseTrendReport.mockRejectedValue(trendError);
     getIncomeExpenseBreakdownReport.mockRejectedValue(breakdownError);
 
-    setupReportingIpcHandlers();
+    setupReportingIpcHandlers(ipcMain);
 
     const trendHandler = handle.mock.calls.find(
       ([channel]) => channel === "get-income-expense-trend-report"

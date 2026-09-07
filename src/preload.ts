@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import { isAppIpcChannel } from "./shared/ipcChannels";
 import {
   type IncomeExpenseBreakdownFilter,
   type IncomeExpenseTrendFilter,
@@ -10,11 +11,10 @@ contextBridge.exposeInMainWorld("electron", {
   restorePersonalBackup: () => ipcRenderer.invoke("restore-personal-backup"),
   selectPersonalProfile: (id: string) => ipcRenderer.invoke("select-personal-profile", id),
   ipcRenderer: {
-    invoke: (channel: string, ...args: any[]) =>
-      ipcRenderer.invoke(channel, ...args),
-    on: (channel: string, listener: (...args: any[]) => void) =>
-      ipcRenderer.on(channel, (_event, ...args) => listener(...args)),
-    // Optionally add more methods as needed
+    invoke: async (channel: string, ...args: any[]) => {
+      if (!isAppIpcChannel(channel)) throw new Error("Unsupported IPC channel");
+      return ipcRenderer.invoke(channel, ...args);
+    },
   },
   
   // Account Group operations

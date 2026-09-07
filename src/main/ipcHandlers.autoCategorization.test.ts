@@ -1,3 +1,4 @@
+import { ipcMain } from "electron";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -52,7 +53,7 @@ describe("setupAutoCategorizationIpcHandlers", () => {
     updateRule.mockResolvedValue(updatedRule);
     deleteRule.mockResolvedValue(undefined);
 
-    setupAutoCategorizationIpcHandlers();
+    setupAutoCategorizationIpcHandlers(ipcMain);
 
     expect(removeHandler).toHaveBeenCalledWith("get-auto-categorization-rules");
     expect(removeHandler).toHaveBeenCalledWith("update-auto-categorization-rule");
@@ -98,7 +99,7 @@ describe("setupAutoCategorizationIpcHandlers", () => {
   });
 
   it("propagates server-side validation failures for updates", async () => {
-    setupAutoCategorizationIpcHandlers();
+    setupAutoCategorizationIpcHandlers(ipcMain);
 
     const updateHandler = handle.mock.calls.find(
       ([channel]) => channel === "update-auto-categorization-rule"

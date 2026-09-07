@@ -1,11 +1,11 @@
-import { ipcMain } from "electron";
+import type { IpcRegistrar } from "./ipcSecurity";
 import {
   type IncomeExpenseBreakdownFilter,
   type IncomeExpenseTrendFilter,
 } from "../shared/reporting";
 import { reportingService } from "../services/reportingService";
 
-export function setupReportingIpcHandlers(): void {
+export function setupReportingIpcHandlers(ipcMain: IpcRegistrar): void {
   ipcMain.removeHandler("get-income-expense-trend-report");
   ipcMain.removeHandler("get-income-expense-breakdown-report");
 

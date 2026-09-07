@@ -1,11 +1,11 @@
-import { ipcMain } from "electron";
+import type { IpcRegistrar } from "./ipcSecurity";
 import {
   autoCategorizationService,
   type AutoCategorizationRuleUpdateInput,
 } from "../services/autoCategorizationService";
 import { databaseService } from "../services/database";
 
-export const setupAutoCategorizationIpcHandlers = () => {
+export const setupAutoCategorizationIpcHandlers = (ipcMain: IpcRegistrar) => {
   ipcMain.removeHandler("get-auto-categorization-rules");
   ipcMain.removeHandler("update-auto-categorization-rule");
   ipcMain.removeHandler("delete-auto-categorization-rule");

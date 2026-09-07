@@ -60,12 +60,26 @@ test("packaged app preserves personal data and reopens a verified restored profi
       name: "Packaged persistence check", type: "user", subtype: "asset", currency: "CAD",
     }));
     expect(response.success).toBe(true);
+    const resetFailure = await page.evaluate(async () => {
+      try { await (window as any).electron.ipcRenderer.invoke("reset-all-data"); return null; }
+      catch (error) { return String(error); }
+    });
+    expect(resetFailure).toMatch(/development-only/i);
+    expect(await page.evaluate(() => typeof (window as any).electron.ipcRenderer.on)).toBe("undefined");
+    expect(await page.evaluate(() => window.open("https://example.com") === null)).toBe(true);
+    expect(await page.evaluate(() => {
+      const script = document.createElement("script");
+      script.textContent = "document.body.dataset.unexpectedInline = 'executed'";
+      document.body.appendChild(script);
+      return document.body.dataset.unexpectedInline;
+    })).toBeUndefined();
     await page.evaluate((accountId) => (window as any).electron.setOpeningBalance({
       accountId, displayAmount: 246.80, asOfDate: "2026-09-01",
     }), response.account.id);
     await page.getByRole("link", { name: "Accounts", exact: true }).first().click();
     await expect(page.getByText("Packaged persistence check", { exact: true }).first()).toBeVisible();
     await stop();
+    expect(output).not.toContain("Packaged persistence check");
     const reopened = await launch();
     const accounts = await reopened.evaluate(() => (window as any).electron.ipcRenderer.invoke("get-accounts"));
     expect(accounts.some((account: { name: string }) => account.name === "Packaged persistence check")).toBe(true);
@@ -92,6 +106,7 @@ test("packaged app preserves personal data and reopens a verified restored profi
     const recoveredBalance = await recovered.evaluate((accountId) =>
       (window as any).electron.ipcRenderer.invoke("get-account-balance", accountId), response.account.id);
     expect(recoveredBalance).toEqual({ success: true, balance: 246.8 });
+    expect(output).not.toContain("Packaged persistence check");
     await recovered.getByRole("link", { name: "Accounts", exact: true }).first().click();
     await expect(recovered.getByText("Packaged persistence check", { exact: true }).first()).toBeVisible();
     await selectProfile(directory, "default", migrations);

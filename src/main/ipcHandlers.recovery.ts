@@ -1,11 +1,12 @@
-import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from "electron";
+import { BrowserWindow, dialog, type IpcMainInvokeEvent } from "electron";
+import type { IpcRegistrar } from "./ipcSecurity";
 import path from "path";
 import { randomUUID } from "crypto";
 import { databaseService } from "../services/database";
 import { createBackup, restoreBackup, listProfiles, selectProfile } from "../services/backupRecovery";
 import { readActiveProfile } from "../services/personalProfiles";
 
-export function setupRecoveryIpcHandlers(getWindow: () => BrowserWindow | null) {
+export function setupRecoveryIpcHandlers(getWindow: () => BrowserWindow | null, ipcMain: IpcRegistrar) {
   let busy = false;
   const register = (channel: string, action: (owner: BrowserWindow, value: unknown) => Promise<unknown>) => {
     ipcMain.removeHandler(channel);

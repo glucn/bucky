@@ -97,7 +97,6 @@ interface IElectronAPI {
   selectPersonalProfile(id: string): Promise<RecoveryResponse<{ nextProfile: string }>>;
   ipcRenderer: {
     invoke(channel: string, ...args: any[]): Promise<any>;
-    on(channel: string, listener: (...args: any[]) => void): void;
   };
   
   // Account Group operations

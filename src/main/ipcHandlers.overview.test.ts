@@ -1,3 +1,4 @@
+import { ipcMain } from "electron";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { removeHandler, handle, getOverviewDashboard } = vi.hoisted(() => ({
@@ -46,7 +47,7 @@ describe("setupOverviewIpcHandlers", () => {
 
     getOverviewDashboard.mockResolvedValue(payload);
 
-    setupOverviewIpcHandlers();
+    setupOverviewIpcHandlers(ipcMain);
 
     expect(removeHandler).toHaveBeenCalledWith("get-overview-dashboard");
     expect(handle).toHaveBeenCalledWith("get-overview-dashboard", expect.any(Function));
@@ -65,7 +66,7 @@ describe("setupOverviewIpcHandlers", () => {
     const error = new Error("overview failed");
     getOverviewDashboard.mockRejectedValue(error);
 
-    setupOverviewIpcHandlers();
+    setupOverviewIpcHandlers(ipcMain);
 
     const registeredHandler = handle.mock.calls.find(
       ([channel]) => channel === "get-overview-dashboard"

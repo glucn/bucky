@@ -1,8 +1,10 @@
+import "./privateLogging";
+
 console.log("==========================================");
 console.log("MAIN PROCESS STARTING - VERSION 2");
 console.log("==========================================");
 
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain as electronIpcMain } from "electron";
 import { databaseService } from "../services/database";
 import { liabilityProfileService } from "../services/liabilityProfileService";
 import { resolveImportAccounts } from "../services/importUtils";
@@ -18,6 +20,7 @@ import { setupInvestmentIpcHandlers } from "./ipcHandlers.investments";
 import { setupOverviewIpcHandlers } from "./ipcHandlers.overview";
 import { setupReportingIpcHandlers } from "./ipcHandlers.reporting";
 import { setupRecoveryIpcHandlers } from "./ipcHandlers.recovery";
+import { createSecureIpc, protectWindow, applicationContentSecurityPolicy } from "./ipcSecurity";
 
 // Add this at the top of the file for type safety with the injected variable
 // eslint-disable-next-line no-var
@@ -26,6 +29,9 @@ declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 
 let mainWindow: BrowserWindow | null = null;
+const getAppUrl = () => app.isPackaged ? MAIN_WINDOW_WEBPACK_ENTRY : "http://localhost:3000";
+const ipcMain = createSecureIpc(electronIpcMain, { getWindow: () => mainWindow,
+  getAppUrl, isPackaged: () => app.isPackaged });
 
 // Initialize database and create window
 async function initialize() {
@@ -1014,12 +1020,12 @@ function setupIpcHandlers() {
   );
 
   // Setup investment IPC handlers
-  setupInvestmentIpcHandlers();
-  setupOverviewIpcHandlers();
-  setupReportingIpcHandlers();
-  setupAutoCategorizationIpcHandlers();
-  setupEnrichmentIpcHandlers();
-  setupRecoveryIpcHandlers(() => mainWindow);
+  setupInvestmentIpcHandlers(ipcMain);
+  setupOverviewIpcHandlers(ipcMain);
+  setupReportingIpcHandlers(ipcMain);
+  setupAutoCategorizationIpcHandlers(ipcMain);
+  setupEnrichmentIpcHandlers(ipcMain);
+  setupRecoveryIpcHandlers(() => mainWindow, ipcMain);
 
   console.log("All IPC handlers registered");
   // DEV ONLY: Reset all data to initial state
@@ -1052,6 +1058,9 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+      webviewTag: false,
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
     },
   });
@@ -1062,21 +1071,15 @@ function createWindow() {
       callback({
         responseHeaders: {
           ...details.responseHeaders,
-          "Content-Security-Policy": [
-            "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: ws: wss: http: https:",
-            "connect-src 'self' ws: wss: http: https:",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-            "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data: https:",
-            "font-src 'self' data: https:",
-          ].join("; "),
+          "Content-Security-Policy": applicationContentSecurityPolicy(app.isPackaged),
         },
       });
     }
   );
 
   // Load the index.html of the app
-  const appUrl = app.isPackaged ? MAIN_WINDOW_WEBPACK_ENTRY : "http://localhost:3000";
+  const appUrl = getAppUrl();
+  protectWindow(mainWindow, appUrl, app.isPackaged);
   console.log("Loading app URL:", appUrl);
   mainWindow.loadURL(appUrl);
 

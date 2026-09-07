@@ -9,6 +9,26 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 5 — Security boundary and F-015 acceptance contract (2026-09-07)
+
+- Every runtime IPC handler now uses a shared registrar that verifies the owning window,
+  main frame, and application URL before reaching services. Main/preload channel access is
+  limited to an explicit inventory; unrestricted event subscriptions were removed.
+- Packaged reset and synthetic seeding are denied regardless of inherited test/development
+  flags. The database service also refuses destructive development reset for personal books.
+- Packaged windows deny popups, unrelated navigation, webviews, permissions, and renderer
+  networking. Production CSP blocks evaluated and inline scripts. Existing payload-bearing
+  main-process console methods are disabled before service initialization.
+- Added 20 regression/inventory tests. **575 tests across 78 files** and TypeScript checks
+  passed. Three repeated packaged runs verified reset rejection, restricted preload, popup and
+  inline-script blocking, recovery navigation, restored balances, and original-profile return.
+- Development database-isolation and headered CSV-import scenarios each passed three runs
+  (**6 E2E passes**) through the shared sender guard.
+- Expanded F-015 [requirements](F-015-security-gate/requirements.md) and
+  [design](F-015-security-gate/design.md) into explicit acceptance gates. Launch locking,
+  encrypted live storage, protected backups, independent key recovery, and legacy conversion
+  are **not implemented**. This is boundary hardening, not a completed security gate.
+
 ### Batch 4 — Backup and separate-profile recovery (2026-09-07)
 
 - Added a packaged-app recovery page, native folder/file selection, versioned SQLite snapshots,
@@ -236,6 +256,6 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation batch
-is **F-015 security requirements and guarded destructive operations**, followed by locking,
-encryption/key recovery, and minimal onboarding. The manual recovery drill remains an acceptance
+is **encrypted SQLite/Prisma compatibility validation**, followed by locking, encryption/key
+recovery, and minimal onboarding. The manual recovery drill remains an acceptance
 gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.

@@ -1,3 +1,4 @@
+import { ipcMain } from "electron";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs/promises";
 import os from "os";
@@ -26,7 +27,7 @@ describe("Recovery IPC with real SQLite storage", () => {
       VALUES ('ipc-cash','IPC cash','user','asset','CAD',CURRENT_TIMESTAMP)`); }
     finally { await closeSqlite(db); }
     mocks.context.mockReturnValue({ userData: directory, databaseFile: book, migrations, activeProfile: "default" });
-    setupRecoveryIpcHandlers(() => ({ webContents: { id: 1, mainFrame: frame } }) as any);
+    setupRecoveryIpcHandlers(() => ({ webContents: { id: 1, mainFrame: frame } }) as any, ipcMain);
   });
   afterEach(async () => { await fs.rm(directory, { recursive: true, force: true }); });
 

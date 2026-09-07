@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import type { IpcRegistrar } from "./ipcSecurity";
 import { appSettingsService } from "../services/appSettingsService";
 import { enrichmentRuntimeService } from "../services/enrichmentRuntimeService";
 
@@ -14,7 +14,7 @@ const serializeRun = (run: any) => {
   };
 };
 
-export const setupEnrichmentIpcHandlers = () => {
+export const setupEnrichmentIpcHandlers = (ipcMain: IpcRegistrar) => {
   ipcMain.removeHandler("get-enrichment-panel-state");
   ipcMain.removeHandler("start-enrichment-run");
   ipcMain.removeHandler("cancel-enrichment-run");

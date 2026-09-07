@@ -69,6 +69,7 @@ class DatabaseService {
    * For development/testing use only!
    */
   public async resetAllData(options: { preserveBaseCurrency?: boolean } = {}) {
+    if (this.personalDatabase) throw new Error("Destructive development reset is not allowed for a personal database");
     const prisma = this.prisma;
     await prisma.$transaction(async (tx) => {
       // TODO(BL-022): Replace this boolean with explicit reset modes (e.g. `factoryReset` vs

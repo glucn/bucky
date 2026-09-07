@@ -1,3 +1,4 @@
+import { ipcMain } from "electron";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -91,7 +92,7 @@ describe("setupEnrichmentIpcHandlers", () => {
       changedAt: "2026-02-20T10:00:00.000Z",
     });
 
-    setupEnrichmentIpcHandlers();
+    setupEnrichmentIpcHandlers(ipcMain);
 
     const getPanelStateHandler = handle.mock.calls.find(
       ([channel]) => channel === "get-enrichment-panel-state"
@@ -174,7 +175,7 @@ describe("setupEnrichmentIpcHandlers", () => {
     getBaseCurrency.mockResolvedValue("USD");
     getBaseCurrencyReconciliationState.mockResolvedValue(null);
 
-    setupEnrichmentIpcHandlers();
+    setupEnrichmentIpcHandlers(ipcMain);
 
     const baseCurrencyImpactStateHandler = handle.mock.calls.find(
       ([channel]) => channel === "get-base-currency-impact-state"
