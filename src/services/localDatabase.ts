@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { createHash, randomUUID } from "crypto";
 import sqlite3 from "sqlite3";
+import { profileDatabasePath, readActiveProfile } from "./personalProfiles";
 
 export function resolveDatabaseFile(options: {
   isPackaged: boolean;
@@ -13,7 +14,7 @@ export function resolveDatabaseFile(options: {
     if (!options.userData || !path.isAbsolute(options.userData)) {
       throw new Error("Personal storage requires an absolute application data directory");
     }
-    return path.join(options.userData, "profiles", "default", "book.sqlite");
+    return profileDatabasePath(options.userData, readActiveProfile(options.userData));
   }
   const test = options.env.NODE_ENV === "test" || options.env.VITEST === "true";
   return path.join(options.cwd, "prisma", test ? "test.db" : "dev.db");

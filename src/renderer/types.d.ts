@@ -1,4 +1,5 @@
 import { AccountType } from "../shared/accountTypes";
+import { RecoveryResponse, RecoveryResult, RecoveryState } from "../shared/recovery";
 import { OverviewDashboardPayload } from "../shared/overview";
 import { LiabilityProfileInput, LiabilityTemplate } from "../shared/liabilityTypes";
 import {
@@ -90,6 +91,10 @@ type BaseCurrencyReconciliationState = {
 };
 
 interface IElectronAPI {
+  getRecoveryState(): Promise<RecoveryResponse<RecoveryState>>;
+  createPersonalBackup(): Promise<RecoveryResponse<RecoveryResult>>;
+  restorePersonalBackup(): Promise<RecoveryResponse<RecoveryResult>>;
+  selectPersonalProfile(id: string): Promise<RecoveryResponse<{ nextProfile: string }>>;
   ipcRenderer: {
     invoke(channel: string, ...args: any[]): Promise<any>;
     on(channel: string, listener: (...args: any[]) => void): void;

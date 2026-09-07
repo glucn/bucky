@@ -9,6 +9,28 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 4 — Backup and separate-profile recovery (2026-09-07)
+
+- Added a packaged-app recovery page, native folder/file selection, versioned SQLite snapshots,
+  and restore into a new profile without overwriting the current book.
+- Restores verify SQLite integrity, bundled migration/schema compatibility, Prisma relationships,
+  every table's record digest/count, and posting balances. A regression exposed that SQLite's
+  foreign-key checks alone miss relationships managed by Prisma; these are checked explicitly.
+- Profile selection requires a native confirmation and applies only after quitting/reopening.
+  The original profile remains selectable. Missing selected books and external profile symlinks
+  are refused rather than replaced with an empty book.
+- Added 26 service, IPC, integration, and renderer tests through test-driven implementation.
+  **555 tests across 73 files** and TypeScript checks passed. The rebuilt packaged app passed
+  **three repeated smoke runs** covering recovery navigation, restored balances after restart,
+  and return to the original profile.
+- The integration tests substitute native dialog responses; the packaged tests prepare restored
+  profiles through the real service. Actual macOS picker/confirmation interaction and a
+  representative personal-data recovery drill still require manual acceptance.
+- See [Backup and Recovery](backup-and-recovery.md). Backups remain unencrypted; restore currently
+  requires matching migration history. Cross-version recovery and pre-startup recovery from an
+  unopenable profile are not established by these tests. F-015 and the remaining readiness gates
+  are still open.
+
 ### Batch 3 — Personal storage, migrations, and packaged startup (2026-09-06)
 
 - Packaged apps now use `profiles/default/book.sqlite` beneath Electron's application data
@@ -212,5 +234,8 @@ After this small pilot succeeds, expand toward the project plan's criterion: man
 **three months without returning to the old app**. Retaining recovery copies during that period
 remains necessary.
 
-The immediate recommended implementation task is **transaction correctness hardening**, followed
-by **personal storage and tested recovery**.
+The original recommended first tasks were transaction correctness hardening and personal storage
+with recovery. See the implementation log for delivered portions. The next implementation batch
+is **F-015 security requirements and guarded destructive operations**, followed by locking,
+encryption/key recovery, and minimal onboarding. The manual recovery drill remains an acceptance
+gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.

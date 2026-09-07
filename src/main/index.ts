@@ -17,6 +17,7 @@ import { setupEnrichmentIpcHandlers } from "./ipcHandlers.enrichment";
 import { setupInvestmentIpcHandlers } from "./ipcHandlers.investments";
 import { setupOverviewIpcHandlers } from "./ipcHandlers.overview";
 import { setupReportingIpcHandlers } from "./ipcHandlers.reporting";
+import { setupRecoveryIpcHandlers } from "./ipcHandlers.recovery";
 
 // Add this at the top of the file for type safety with the injected variable
 // eslint-disable-next-line no-var
@@ -1018,6 +1019,7 @@ function setupIpcHandlers() {
   setupReportingIpcHandlers();
   setupAutoCategorizationIpcHandlers();
   setupEnrichmentIpcHandlers();
+  setupRecoveryIpcHandlers(() => mainWindow);
 
   console.log("All IPC handlers registered");
   // DEV ONLY: Reset all data to initial state

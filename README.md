@@ -30,9 +30,9 @@ history/checksums, create a consistent pre-upgrade SQLite snapshot under the pro
 directory, and apply pending migrations atomically. Unknown schemas or migration drift are
 rejected rather than reset. Development data is not automatically copied into the personal profile.
 
-This is not yet the completed security or backup/restore feature. App locking, database encryption,
-user-facing restore, and the remaining [personal-use readiness gates](doc/personal-use-readiness.md)
-are still outstanding.
+The packaged app includes [backup and separate-profile recovery](doc/backup-and-recovery.md).
+App locking, database/backup encryption, and the remaining
+[personal-use readiness gates](doc/personal-use-readiness.md) are still outstanding.
 
 ## Enrichment Provider Configuration (F-017)
 
@@ -280,18 +280,27 @@ npm run test:db:push
 
 ## Database Backup
 
-### Manual Backup
-Copy the development database file:
-```bash
-cp prisma/dev.db prisma/dev.db.backup
-```
+### Personal Book
 
-### Restore from Backup
-```bash
-cp prisma/dev.db.backup prisma/dev.db
-```
+In the packaged app, open **Backup & recovery**. **Create backup** writes a uniquely named,
+consistent SQLite snapshot to a folder you choose, including committed WAL data. Files are
+unencrypted: use private storage and keep another copy away from the device.
 
-**Recommendation**: Set up regular automated backups of `prisma/dev.db` to prevent data loss.
+**Restore backup into new profile** validates a matching-version backup and compares every
+table's records and posting balances before publishing a separate profile. It never overwrites
+the current book. Select the recovered profile, confirm **Use on next launch**, then quit Bucky
+completely and reopen it. The original profile remains selectable.
+
+See [Backup and Recovery](doc/backup-and-recovery.md) for verification, compatibility limits,
+and a manual acceptance check.
+
+### Development Data
+
+The personal recovery UI deliberately does not operate on `prisma/dev.db` or `prisma/test.db`.
+These are development/test files, not the packaged personal book. Do not copy a live SQLite
+database file alone: committed records may still reside in its WAL. Keep any development-data
+recovery separate from the personal profile; never run the development reset commands on a
+personal database.
 
 ## Technical Details
 

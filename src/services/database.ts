@@ -203,6 +203,14 @@ class DatabaseService {
     await this.prisma.$disconnect();
   }
 
+  public getRecoveryContext() {
+    if (!this.personalDatabase) return null;
+    const databaseFile = this.databasePath.slice(5);
+    return { databaseFile, userData: path.dirname(path.dirname(path.dirname(databaseFile))),
+      activeProfile: path.basename(path.dirname(databaseFile)),
+      migrations: path.join(process.resourcesPath, "migrations") };
+  }
+
   private async getConfiguredBaseCurrency(prisma: PrismaClient | TransactionClient): Promise<string | null> {
     const setting = await prisma.appSetting.findUnique({ where: { key: "baseCurrency" } });
     if (!setting) {

@@ -4,10 +4,11 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import net from "net";
+import { createBackup, restoreBackup, selectProfile } from "../../src/services/backupRecovery";
 
 const executable = path.resolve("out/Bucky-darwin-arm64/Bucky.app/Contents/MacOS/Bucky");
 
-test("packaged app initializes and preserves personal data without a dev server or repository cwd", async () => {
+test("packaged app preserves personal data and reopens a verified restored profile without a dev server", async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "bucky-packaged-"));
   let child: ChildProcess | undefined;
   let browser: Browser | undefined;
@@ -59,6 +60,9 @@ test("packaged app initializes and preserves personal data without a dev server 
       name: "Packaged persistence check", type: "user", subtype: "asset", currency: "CAD",
     }));
     expect(response.success).toBe(true);
+    await page.evaluate((accountId) => (window as any).electron.setOpeningBalance({
+      accountId, displayAmount: 246.80, asOfDate: "2026-09-01",
+    }), response.account.id);
     await page.getByRole("link", { name: "Accounts", exact: true }).first().click();
     await expect(page.getByText("Packaged persistence check", { exact: true }).first()).toBeVisible();
     await stop();
@@ -67,6 +71,33 @@ test("packaged app initializes and preserves personal data without a dev server 
     expect(accounts.some((account: { name: string }) => account.name === "Packaged persistence check")).toBe(true);
     expect(await fs.stat(path.join(directory, "profiles/default/book.sqlite"))).toBeTruthy();
     await expect(fs.stat(path.join(directory, "prisma/test.db"))).rejects.toThrow();
+
+    await reopened.getByRole("link", { name: "Backup & recovery", exact: true }).click();
+    await expect(reopened.getByTestId("recovery-page")).toBeVisible();
+    await expect(reopened.getByRole("button", { name: "Create backup", exact: true })).toBeEnabled();
+    const initialState = await reopened.evaluate(() => (window as any).electron.getRecoveryState());
+    expect(initialState.data.activeProfile).toBe("default");
+
+    // Native dialogs are exercised via IPC integration tests with picker responses substituted.
+    // Here real service fixtures exercise packaged startup/Prisma against an actual restored book.
+    const migrations = path.resolve("prisma/migrations");
+    const saved = await createBackup(path.join(directory, "profiles/default/book.sqlite"), path.join(directory, "backup.sqlite"), migrations);
+    const restored = await restoreBackup(saved.path, directory, migrations);
+    expect(restored.summary).toEqual(saved.summary);
+    await selectProfile(directory, restored.profileId, migrations);
+    await stop();
+    const recovered = await launch();
+    const recoveryState = await recovered.evaluate(() => (window as any).electron.getRecoveryState());
+    expect(recoveryState.data.activeProfile).toBe(restored.profileId);
+    const recoveredBalance = await recovered.evaluate((accountId) =>
+      (window as any).electron.ipcRenderer.invoke("get-account-balance", accountId), response.account.id);
+    expect(recoveredBalance).toEqual({ success: true, balance: 246.8 });
+    await recovered.getByRole("link", { name: "Accounts", exact: true }).first().click();
+    await expect(recovered.getByText("Packaged persistence check", { exact: true }).first()).toBeVisible();
+    await selectProfile(directory, "default", migrations);
+    await stop();
+    const original = await launch();
+    expect((await original.evaluate(() => (window as any).electron.getRecoveryState())).data.activeProfile).toBe("default");
     await stop();
   } catch (error) {
     await test.info().attach("packaged-startup.log", { body: output, contentType: "text/plain" });

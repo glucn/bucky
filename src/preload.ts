@@ -5,6 +5,10 @@ import {
 } from "./shared/reporting";
 
 contextBridge.exposeInMainWorld("electron", {
+  getRecoveryState: () => ipcRenderer.invoke("get-recovery-state"),
+  createPersonalBackup: () => ipcRenderer.invoke("create-personal-backup"),
+  restorePersonalBackup: () => ipcRenderer.invoke("restore-personal-backup"),
+  selectPersonalProfile: (id: string) => ipcRenderer.invoke("select-personal-profile", id),
   ipcRenderer: {
     invoke: (channel: string, ...args: any[]) =>
       ipcRenderer.invoke(channel, ...args),

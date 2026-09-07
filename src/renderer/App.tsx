@@ -11,6 +11,7 @@ import { PositionDetailsPage } from "./pages/PositionDetailsPage";
 import { PerformanceReportsPage } from "./pages/PerformanceReportsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { AutoCategorizationRules } from "./pages/AutoCategorizationRules";
+import { Recovery } from "./pages/Recovery";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 
@@ -36,6 +37,7 @@ const App: React.FC = () => {
               <Route path="/investments/:portfolioId/reports" element={<PerformanceReportsPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/settings/auto-categorization" element={<AutoCategorizationRules />} />
+              <Route path="/settings/recovery" element={<Recovery />} />
             </Routes>
           </main>
         </div>
