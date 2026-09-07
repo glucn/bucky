@@ -75,6 +75,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
       : "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   
   // Separate state for amount display to allow empty string
   const [amountDisplay, setAmountDisplay] = useState<string>(
@@ -130,6 +131,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
     }
     
     setIsSubmitting(true);
+    setSaveError(null);
     try {
       // Determine transactionType (needed for both create and update)
       let transactionType: "income" | "expense" | "transfer" = "transfer";
@@ -157,12 +159,13 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
       
       if (isEdit && transaction) {
         // Update transaction
-        await window.electron.ipcRenderer.invoke("update-transaction", {
+        const result = await window.electron.ipcRenderer.invoke("update-transaction", {
           lineId: transaction.id,
           fromAccountId: accountId,
           ...newTransaction,
           transactionType,
         });
+        if (!result?.success) throw new Error(result?.error || "Failed to update transaction");
       } else {
         // Add transaction, handle potential duplicate
         let result = await window.electron.ipcRenderer.invoke("add-transaction", {
@@ -190,6 +193,9 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
             return;
           }
         }
+        if (!result || result.skipped || result.success === false) {
+          throw new Error(result?.error || result?.reason || "Failed to add transaction");
+        }
       }
       setIsSubmitting(false);
       await refreshAccounts();
@@ -197,7 +203,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
       onClose();
     } catch (err) {
       setIsSubmitting(false);
-      alert(isEdit ? "Failed to update transaction" : "Failed to add transaction");
+      setSaveError(err instanceof Error ? err.message : "Failed to save transaction");
     }
   };
 
@@ -215,6 +221,7 @@ export const ManualTransactionModal: React.FC<ManualTransactionModalProps> = ({
           {isEdit ? "Edit Transaction" : "Add Transaction"}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {saveError ? <p role="alert" data-testid="manual-transaction-save-error" className="text-red-600">{saveError}</p> : null}
           <div>
             <label
               htmlFor="toAccountId"

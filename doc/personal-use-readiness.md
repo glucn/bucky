@@ -4,7 +4,24 @@
 
 **Code baseline:** `7351dbb`
 
-**Status:** Assessment and recommended work sequence; implementation remains outstanding.
+**Status:** Implementation in progress. The findings below describe the review baseline;
+the implementation log records subsequent changes and verification.
+
+## Implementation Log
+
+### Batch 1 — Atomic journal mutations and save failures (2026-09-06)
+
+- Added failing regression tests against real SQLite for interrupted posting writes,
+  interrupted backfill adjustments, invalid edits, FX edits, and liability borrowing.
+- Journal creation and edits now include their opening-balance adjustments and cleanup-rule
+  updates in one transaction. Edit inputs are validated before any mutation.
+- FX edits persist distinct source/destination amounts, currencies, and the exchange rate.
+  Borrowing from a liability now credits the liability and debits the destination.
+- Manual and transfer dialogs keep failed saves open, show the returned error, and allow retry.
+- Verification: 12 new service regressions and two renderer regressions failed before the fixes;
+  the full suite subsequently passed **522 tests across 68 files**. TypeScript checks passed.
+- Remaining scope: end-to-end transfer/import/reconciliation coverage and all subsequent
+  storage, recovery, security, valuation, verifier, and personal-pilot gates remain open.
 
 ## Assessment
 

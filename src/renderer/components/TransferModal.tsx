@@ -55,6 +55,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     description: editTransaction?.description || "",
   });
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Multi-currency state
   const [targetAmount, setTargetAmount] = useState<number>(editTransaction?.amountTo || 0);
@@ -113,6 +114,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setSaveError(null);
 
     try {
       // Validate that both accounts are selected and different
@@ -145,7 +147,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
 
       if (editTransaction) {
         // Update existing transfer
-        await window.electron.ipcRenderer.invoke("update-transaction", {
+        const result = await window.electron.ipcRenderer.invoke("update-transaction", {
           lineId: editTransaction.id,
           fromAccountId: transferData.fromAccountId,
           toAccountId: transferData.toAccountId,
@@ -158,6 +160,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
           amountTo: isMultiCurrency ? targetAmount : undefined,
           exchangeRate: isMultiCurrency ? exchangeRate : undefined,
         });
+        if (!result?.success) throw new Error(result?.error || "Failed to update transfer");
       } else {
         // Add new transaction with transfer type
         let result = await window.electron.ipcRenderer.invoke("add-transaction", {
@@ -200,6 +203,9 @@ export const TransferModal: React.FC<TransferModalProps> = ({
             return;
           }
         }
+        if (!result || result.skipped || result.success === false) {
+          throw new Error(result?.error || result?.reason || "Failed to create transfer");
+        }
       }
 
       setIsSubmitting(false);
@@ -208,7 +214,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
       onClose();
     } catch (err) {
       setIsSubmitting(false);
-      alert("Failed to create transfer");
+      setSaveError(err instanceof Error ? err.message : "Failed to save transfer");
       console.error("Transfer error:", err);
     }
   };
@@ -227,6 +233,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
           {editTransaction ? "Edit Transfer" : "Transfer Between Accounts"}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {saveError ? <p role="alert" data-testid="transfer-save-error" className="text-red-600">{saveError}</p> : null}
           <div>
             <label
               htmlFor="fromAccountId"
