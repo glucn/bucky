@@ -69,3 +69,4 @@
 - MVP success criteria: manage finances for 3 months without returning to the old app.
 - Revisit this plan when new features are defined.
 - Future improvements backlog: `doc/backlog.md`.
+- Personal-use readiness findings and recommended next steps: [readiness review](personal-use-readiness.md).
