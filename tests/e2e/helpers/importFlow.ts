@@ -6,7 +6,7 @@ import sqlite3 from "sqlite3";
 import crypto from "crypto";
 
 const appEntry = path.join(__dirname, "..", "..", "..", ".webpack", "main", "index.js");
-const testDbPath = path.join(__dirname, "..", "..", "..", "test.db");
+export const testDbPath = path.join(__dirname, "..", "..", "..", "prisma", "test.db");
 const artifactsDir = path.join(__dirname, "..", "artifacts");
 
 const closeDatabase = (db: sqlite3.Database) =>

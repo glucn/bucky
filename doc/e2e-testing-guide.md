@@ -9,7 +9,8 @@ Bucky uses Playwright for end-to-end testing of the Electron application. E2E te
 - **Config file**: `playwright.config.ts`
 - **Test directory**: `tests/e2e/`
 - **Test files**: `*.spec.ts`
-- **Database**: E2E currently uses root `test.db` (via `schema.e2e.prisma`)
+- **Database**: E2E schema setup, app access, and fixtures all use `prisma/test.db`.
+  Do not run Vitest and Playwright concurrently: they share this disposable test database.
 - **Webpack dev server**: Automatically started on port 3000
 - **Electron prep**: `e2e:electron:prepare` runs before tests to stabilize preload artifacts
 

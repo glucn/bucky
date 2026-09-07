@@ -9,6 +9,15 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 2 — Shared E2E database (2026-09-06)
+
+- Schema setup and all direct SQLite fixtures now use `prisma/test.db`, matching the app.
+- Added an Electron regression that proves an account seeded by the import fixture is readable
+  through the app's IPC. It failed with the original paths and passed after alignment.
+- Verification: the database regression and headered CSV import each passed three consecutive
+  runs (**6 E2E passes**). The broader pilot and remaining E2E scenarios are still outstanding.
+- Vitest and Playwright must run sequentially because they share the disposable test database.
+
 ### Batch 1 — Atomic journal mutations and save failures (2026-09-06)
 
 - Added failing regression tests against real SQLite for interrupted posting writes,
