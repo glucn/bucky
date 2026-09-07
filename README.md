@@ -2,6 +2,38 @@
 
 Personal bookkeeping software built with Electron, React, and Prisma.
 
+## Packaged macOS App (Readiness Work in Progress)
+
+Use Node 22 for packaging (`.nvmrc`). The reviewed Node 26 environment caused Electron Forge to
+exit during archive extraction without producing an app, despite a zero exit status.
+
+With Node 22 active:
+
+```bash
+npm run package -- --arch=arm64 --platform=darwin
+npx playwright test --config playwright.packaged.config.ts
+```
+
+An isolated Node 22 invocation is also supported:
+
+```bash
+npm exec --yes --package=node@22 -- node node_modules/@electron-forge/cli/dist/electron-forge.js package --arch=arm64 --platform=darwin
+```
+
+The current packaged target is Apple Silicon macOS. Its database lives beneath Electron's
+application data directory at `profiles/default/book.sqlite`, independently of the repository,
+working directory, and test environment variables. A `--user-data-dir=/absolute/path` argument
+selects another application data directory; the packaged smoke test uses a disposable directory.
+
+On first launch, bundled migrations create the personal schema. Upgrades verify migration
+history/checksums, create a consistent pre-upgrade SQLite snapshot under the profile's `backups`
+directory, and apply pending migrations atomically. Unknown schemas or migration drift are
+rejected rather than reset. Development data is not automatically copied into the personal profile.
+
+This is not yet the completed security or backup/restore feature. App locking, database encryption,
+user-facing restore, and the remaining [personal-use readiness gates](doc/personal-use-readiness.md)
+are still outstanding.
+
 ## Enrichment Provider Configuration (F-017)
 
 Data enrichment uses environment variables to select the active provider at startup.

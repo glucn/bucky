@@ -3,8 +3,6 @@ console.log("MAIN PROCESS STARTING - VERSION 2");
 console.log("==========================================");
 
 import { app, BrowserWindow, ipcMain } from "electron";
-import * as path from "path";
-import * as isDev from "electron-is-dev";
 import { databaseService } from "../services/database";
 import { liabilityProfileService } from "../services/liabilityProfileService";
 import { resolveImportAccounts } from "../services/importUtils";
@@ -24,6 +22,7 @@ import { setupReportingIpcHandlers } from "./ipcHandlers.reporting";
 // eslint-disable-next-line no-var
 // @ts-ignore
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
+declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -1075,14 +1074,12 @@ function createWindow() {
   );
 
   // Load the index.html of the app
-  const appUrl = isDev
-    ? "http://localhost:3000"
-    : `file://${path.join(__dirname, "../renderer/index.html")}`;
+  const appUrl = app.isPackaged ? MAIN_WINDOW_WEBPACK_ENTRY : "http://localhost:3000";
   console.log("Loading app URL:", appUrl);
   mainWindow.loadURL(appUrl);
 
   // Open DevTools in development
-  if (isDev && process.env.PLAYWRIGHT_TEST !== "1") {
+  if (!app.isPackaged && process.env.PLAYWRIGHT_TEST !== "1") {
     console.log("Opening DevTools...");
     mainWindow.webContents.openDevTools();
   }
@@ -1114,6 +1111,7 @@ app.whenReady().then(() => {
 });
 
 let isQuitting = false;
+process.once("SIGTERM", () => app.quit());
 app.on("before-quit", (event) => {
   if (isQuitting) {
     return;

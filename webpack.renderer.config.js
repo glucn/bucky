@@ -12,19 +12,19 @@ rules.push({
   ],
 });
 
-module.exports = {
-  mode: "development",
+module.exports = (_env, { mode = "development" } = {}) => ({
+  mode,
   entry: "./src/renderer/index.tsx",
   output: {
     filename: "renderer.js",
     path: path.resolve(__dirname, ".webpack/renderer"),
-    publicPath: "http://localhost:3000/",
+    publicPath: mode === "production" ? "auto" : "http://localhost:3000/",
   },
   module: {
     rules,
   },
   plugins: [
-    ...plugins,
+    ...plugins(mode),
     new HtmlWebpackPlugin({
       template: path.resolve(__dirname, "src/renderer/index.html"),
       inject: true,
@@ -51,4 +51,4 @@ module.exports = {
       "Access-Control-Allow-Origin": "*",
     },
   },
-};
+});

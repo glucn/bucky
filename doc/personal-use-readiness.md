@@ -9,6 +9,27 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 3 — Personal storage, migrations, and packaged startup (2026-09-06)
+
+- Packaged apps now use `profiles/default/book.sqlite` beneath Electron's application data
+  directory. Inherited test/development variables cannot redirect that personal database.
+- Added bundled-migration initialization with history/checksum validation, consistent pre-upgrade
+  snapshots, and transaction rollback on failure. Untracked existing schemas are refused.
+- Included external Prisma/SQLite runtime modules and migrations in the package; corrected local
+  renderer/preload resource handling, hash routing, production build mode, and graceful shutdown.
+- Added seven lifecycle tests covering initialization, preservation across upgrade/reopen,
+  rollback, path isolation, and migration drift. The full unit/component suite passed
+  **529 tests across 69 files**; TypeScript checks passed.
+- Added a packaged-app smoke test using an isolated profile and unrelated working directory.
+  It verifies local-file startup, account navigation/creation, clean shutdown, and persistence
+  after relaunch, even with inherited test environment variables. The test passed on Apple Silicon.
+- Packaging was verified using Node 22; the host Node 26 build exited without an artifact during
+  extraction. `.nvmrc` and README record the working toolchain and commands.
+- After the production build changes, the development-mode database-isolation and headered
+  import tests each passed three consecutive runs (**6 E2E passes**).
+- This completes the startup/migration portion of work item 2. User-facing backup/restore,
+  encryption/locking, onboarding, valuation, verification, and the real-data pilot remain open.
+
 ### Batch 2 — Shared E2E database (2026-09-06)
 
 - Schema setup and all direct SQLite fixtures now use `prisma/test.db`, matching the app.

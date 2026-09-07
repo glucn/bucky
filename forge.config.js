@@ -1,9 +1,22 @@
 const { FusesPlugin } = require("@electron-forge/plugin-fuses");
 const { FuseV1Options, FuseVersion } = require("@electron/fuses");
+const path = require("path");
+const fs = require("fs/promises");
 
 module.exports = {
   packagerConfig: {
     asar: true,
+    extraResource: [
+      path.join(__dirname, "prisma/migrations"),
+      path.join(__dirname, "node_modules/.prisma/client/libquery_engine-darwin-arm64.dylib.node"),
+    ],
+    // Webpack packaging omits node_modules. Copy the modules intentionally left
+    // external, their runtime bindings, and the generated Prisma client.
+    afterCopy: [(buildPath, _electronVersion, _platform, _arch, callback) => {
+      Promise.all([".prisma", "@prisma/client", "sqlite3", "bindings", "file-uri-to-path"].map((name) =>
+        fs.cp(path.join(__dirname, "node_modules", name), path.join(buildPath, "node_modules", name), { recursive: true })
+      )).then(() => callback(), callback);
+    }],
   },
   rebuildConfig: {},
   makers: [

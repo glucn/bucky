@@ -8,6 +8,7 @@ import {
 import { parseToStandardDate } from "../shared/dateUtils";
 import { autoCategorizationService } from "./autoCategorizationService";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
+import { initializePersonalDatabase, resolveDatabaseFile } from "./localDatabase";
 
 // Type for transaction client
 type TransactionClient = Prisma.TransactionClient;
@@ -20,12 +21,12 @@ type TransactionClient = Prisma.TransactionClient;
  * 
  * - Test Environment (VITEST=true or NODE_ENV=test): Uses prisma/test.db
  * - Development Environment (NODE_ENV=development): Uses prisma/dev.db
- * - Production/Other: Uses prisma/dev.db
+ * - Packaged Electron: Uses the personal profile beneath app.getPath("userData")
  * 
  * Environment Detection:
  * - Checks VITEST environment variable (set by Vitest test runner)
  * - Checks NODE_ENV environment variable
- * - Defaults to development database if environment is ambiguous
+ * - Packaged state takes precedence over test/development environment variables
  * 
  * Database Isolation:
  * - Test database is automatically reset between test runs
@@ -51,6 +52,7 @@ class DatabaseService {
   private static instance: DatabaseService;
   private prisma: PrismaClient;
   private databasePath: string;
+  private personalDatabase: boolean;
 
   /**
    * Get the Prisma client instance for direct database access.
@@ -118,10 +120,9 @@ class DatabaseService {
    * Private constructor - implements singleton pattern with environment-aware database selection.
    * 
    * Environment Detection Logic:
-   * 1. Check if VITEST=true or NODE_ENV=test -> Use test.db
-   * 2. Check if NODE_ENV=development -> Use dev.db
-   * 3. If NODE_ENV is undefined -> Default to dev.db with warning
-   * 4. Otherwise (production) -> Use dev.db
+   * 1. Packaged Electron -> use personal storage, regardless of inherited environment
+   * 2. Unpackaged VITEST=true or NODE_ENV=test -> use prisma/test.db
+   * 3. Other unpackaged runs -> use prisma/dev.db
    * 
    * The selected database path is logged on initialization for debugging.
    * 
@@ -131,42 +132,28 @@ class DatabaseService {
    *   - Override with DB_VERBOSE=true to enable verbose logging in tests
    */
   private constructor() {
+    // Electron's packaged state is authoritative; inherited NODE_ENV/VITEST values
+    // must never redirect an installed personal app into a disposable test database.
+    const electronApp = process.versions.electron ? require("electron").app : undefined;
+    this.personalDatabase = Boolean(electronApp?.isPackaged);
+    const userDataOverride = electronApp?.commandLine.getSwitchValue("user-data-dir");
+    if (this.personalDatabase && userDataOverride) {
+      if (!path.isAbsolute(userDataOverride)) throw new Error("Application data directory must be absolute");
+      electronApp.setPath("userData", userDataOverride);
+    }
     // Environment detection logic
-    const isTest = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
-    const isDev = process.env.NODE_ENV === "development";
+    const isTest = !this.personalDatabase && (process.env.VITEST === "true" || process.env.NODE_ENV === "test");
     
     // Determine database path based on environment
-    const devDbPath = path.join(process.cwd(), "prisma", "dev.db");
-    const testDbPath = path.join(process.cwd(), "prisma", "test.db");
-
-    if (isTest) {
-      this.databasePath = `file:${testDbPath}`;
-      console.log("[DatabaseService] Environment: TEST");
-    } else if (isDev || process.env.NODE_ENV === undefined) {
-      // Default to development database if environment is ambiguous
-      this.databasePath = `file:${devDbPath}`;
-      if (process.env.NODE_ENV === undefined) {
-        console.warn("[DatabaseService] Unable to detect environment, defaulting to development database");
-      } else {
-        console.log("[DatabaseService] Environment: DEVELOPMENT");
-      }
-    } else {
-      // Production or other environments
-      this.databasePath = `file:${devDbPath}`;
-      console.log("[DatabaseService] Environment: PRODUCTION");
-    }
+    this.databasePath = `file:${resolveDatabaseFile({ isPackaged: this.personalDatabase,
+      userData: electronApp?.getPath("userData"), cwd: process.cwd(), env: process.env })}`;
     
     // Log selected database path for debugging
     console.log(`[DatabaseService] Using database: ${this.databasePath}`);
     
-    // Only set query engine path if not in test mode and __dirname is available
-    if (!isTest && typeof __dirname !== 'undefined') {
-      const queryEnginePath = isDev
-        ? path.join(
-            __dirname,
-            "../../node_modules/@prisma/client/libquery_engine-darwin-arm64.dylib.node"
-          )
-        : path.join(
+    // The packaged native engine is shipped outside ASAR; development uses Prisma's resolver.
+    if (this.personalDatabase) {
+      const queryEnginePath = path.join(
             process.resourcesPath,
             "libquery_engine-darwin-arm64.dylib.node"
           );
@@ -174,7 +161,7 @@ class DatabaseService {
       console.log("Query engine path:", queryEnginePath);
 
       // Set the query engine path as an environment variable
-      process.env.PRISMA_QUERY_ENGINE_BINARY = queryEnginePath;
+      process.env.PRISMA_QUERY_ENGINE_LIBRARY = queryEnginePath;
     }
 
     // Configure Prisma Client with environment-specific datasource URL
@@ -186,11 +173,10 @@ class DatabaseService {
           url: this.databasePath,
         },
       },
-      log: (isTest && !verboseLogging) ? ["error"] : ["query", "info", "warn", "error"],
+      log: this.personalDatabase || (isTest && !verboseLogging) ? ["error"] : ["query", "info", "warn", "error"],
     });
 
-    // Set connection timeout
-    this.prisma.$connect().catch(console.error);
+    // Connect only after startup has initialized/migrated personal storage.
   }
 
   public static getInstance(): DatabaseService {
@@ -202,6 +188,9 @@ class DatabaseService {
 
   public async initialize() {
     try {
+      if (this.personalDatabase) {
+        await initializePersonalDatabase(this.databasePath.slice(5), path.join(process.resourcesPath, "migrations"));
+      }
       await this.prisma.$connect();
       console.log("Database connected successfully");
     } catch (error) {

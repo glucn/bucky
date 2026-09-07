@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Accounts } from "./pages/Accounts";
 import { Dashboard } from "./pages/Dashboard";
 import { AccountTransactionsPage } from "./pages/AccountTransactionsPage";
@@ -15,6 +15,7 @@ import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 
 const App: React.FC = () => {
+  const Router = window.location.protocol === "file:" ? HashRouter : BrowserRouter;
   return (
     <Router>
       <div className="min-h-screen bg-gray-100 flex flex-col">

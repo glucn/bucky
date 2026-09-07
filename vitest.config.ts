@@ -15,6 +15,7 @@ export default defineConfig({
       '**/dist/**',
       '**/.worktrees/**',
       '**/tests/e2e/**',
+      '**/tests/packaged/**',
     ],
     // Run test files sequentially to avoid database conflicts
     // All tests share the same test.db file, so parallel execution causes race conditions

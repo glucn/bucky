@@ -1,12 +1,12 @@
 const path = require("path");
 const CopyPlugin = require("copy-webpack-plugin");
 
-module.exports = {
+module.exports = (_env, { mode = "development" } = {}) => ({
   /**
    * This is the main entry point for your application, it's the first file
    * that runs in the main process.
    */
-  mode: "development",
+  mode,
   entry: "./src/main/index.ts",
   // Put your normal webpack config below here
   module: {
@@ -37,6 +37,7 @@ module.exports = {
   ],
   externals: {
     "@prisma/client": "commonjs @prisma/client",
+    "sqlite3": "commonjs sqlite3",
     "electron": "commonjs electron",
     "fs": "commonjs fs",
     "path": "commonjs path",
@@ -52,4 +53,4 @@ module.exports = {
     filename: "index.js",
   },
   devtool: "source-map",
-};
+});
