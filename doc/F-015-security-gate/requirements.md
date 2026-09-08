@@ -44,7 +44,9 @@ use. Do not invent cryptographic algorithms or silently fall back to plaintext s
   for verification results.
 - SEC-08: existing payload-bearing console methods are disabled in packaged main processes
   before service initialization. A non-sensitive structured diagnostic system is not yet implemented.
-- SEC-01 through SEC-06: **not implemented**. Personal databases and exported backups remain plaintext.
+- SEC-04/SEC-05 have a tested [key-envelope foundation](key-envelopes.md), but are not integrated
+  into app setup, persistence, authentication, or backup files. They remain incomplete.
+- SEC-01 through SEC-06 are **not enabled in the application**. Personal databases and exported backups remain plaintext.
 - The generic compatibility `ipcRenderer.invoke` surface is now restricted to an explicit
   inventory; migrating its remaining call sites to individually typed methods is still desirable.
 - Input-schema coverage, dependency/security-update review, and external review of key/storage

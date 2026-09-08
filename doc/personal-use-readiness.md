@@ -9,6 +9,23 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 7 — Authenticated key wrapping and independent recovery (2026-09-08)
+
+- Added a trusted-process key-envelope library: random per-profile data keys, AES-256-GCM wraps,
+  fixed-cost scrypt passphrase support, independent recovery, passphrase replacement, and binding
+  a recovered key to a new machine's keychain.
+- Strict parsing, authenticated profile/purpose metadata, generic credential-failure errors, and
+  a single-concurrent-KDF limit prevent malformed inputs from changing crypto work parameters
+  or returning partial keys. Requested keychain failure never silently falls back.
+- Added a macOS Electron keychain adapter with unavailable/unsupported-platform guards. Real OS
+  APIs are substituted in unit tests; an Electron Node 18.18.2 check verified the crypto runtime
+  with synthetic passphrase/recovery credentials and tampering.
+- **596 tests across 80 files** and TypeScript checks passed. See the
+  [key-envelope format and limitations](F-015-security-gate/key-envelopes.md).
+- This is security foundation code, not enabled personal encryption. Protected setup/confirmation,
+  atomic key persistence, real OS authentication, encrypted backup files, storage integration,
+  and the lock lifecycle remain open.
+
 ### Batch 6 — Encrypted SQLite/Prisma compatibility proof (2026-09-08)
 
 - Added an isolated, lockfile-pinned libSQL/Prisma probe without changing application dependencies,

@@ -49,10 +49,12 @@ material with macOS Keychain; it is not itself a database encryption layer. The 
 perform an authentication challenge before releasing a key to storage. Treating automatic
 safeStorage decryption as a launch lock would not meet SEC-01.
 
-The specific OS authentication implementation, password KDF parameters, encrypted key-envelope
-format, and recovery UX must be selected and tested before provisioning real keys. Recovery
-credentials must work without the original machine's keychain. Incorrect credentials and
-authentication cancellation must neither initialize an empty book nor overwrite existing keys.
+The [versioned key-envelope foundation](key-envelopes.md) implements authenticated wraps,
+fixed-cost scrypt passphrase derivation, and independent recovery/new-keychain binding. It is
+not yet wired into profile persistence or the lock lifecycle. The OS authentication implementation
+and protected recovery UX still need implementation and testing before provisioning real keys.
+Incorrect credentials and authentication cancellation must neither initialize an empty book nor
+overwrite existing keys.
 
 ## Pending encrypted-storage integration
 
