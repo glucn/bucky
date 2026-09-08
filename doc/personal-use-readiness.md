@@ -9,6 +9,18 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 6 — Encrypted SQLite/Prisma compatibility proof (2026-09-08)
+
+- Added an isolated, lockfile-pinned libSQL/Prisma probe without changing application dependencies,
+  production schema, generated client, or personal storage.
+- Nine checks passed on Node 26.8.1, Node 22.23.2, and Electron's embedded Node 18.18.2: all bundled
+  migrations, Prisma relations/types, native timestamp compatibility, transaction/DDL rollback,
+  live encrypted WAL inspection, wrong-key/plain-SQLite rejection, encrypted snapshots, and reopen.
+- This supplies a tested candidate for the encrypted-storage integration, not an enabled security
+  feature. The explicit adapter dependency override and native AES-256-CBC default require review;
+  authenticated backup/key envelopes, full service/package integration, locking, and recovery
+  remain open. See [probe evidence and commands](F-015-security-gate/encrypted-storage-compatibility.md).
+
 ### Batch 5 — Security boundary and F-015 acceptance contract (2026-09-07)
 
 - Every runtime IPC handler now uses a shared registrar that verifies the owning window,
@@ -256,6 +268,6 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation batch
-is **encrypted SQLite/Prisma compatibility validation**, followed by locking, encryption/key
-recovery, and minimal onboarding. The manual recovery drill remains an acceptance
+is **encrypted-storage service integration and authenticated key/recovery envelopes**, followed by
+locking and minimal onboarding. The manual recovery drill remains an acceptance
 gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.

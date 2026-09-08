@@ -1,0 +1,9 @@
+{
+  "name": "bucky-encrypted-storage-spike",
+  "private": true,
+  "dependencies": {
+    "@prisma/adapter-libsql": "6.11.1",
+    "@libsql/client": "0.18.0"
+  },
+  "overrides": { "@prisma/adapter-libsql": { "@libsql/client": "0.18.0" } }
+}

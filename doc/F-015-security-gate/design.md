@@ -60,10 +60,13 @@ The current Prisma native SQLite engine and `sqlite3` lifecycle/recovery connect
 write plaintext files. Encrypting a file only on quit, or decrypting into a temporary on-disk
 SQLite file at startup, is explicitly not an acceptable implementation of SEC-03.
 
-The next technical validation is an encrypted SQLite driver plus a compatible Prisma adapter
-that retains current transaction semantics. Prove it against the pinned/generated Prisma client
-before choosing a dependency or changing live storage. If compatibility requires a Prisma or
-Electron upgrade, isolate that change and rerun the complete storage and packaged suites.
+The [encrypted-storage compatibility probe](encrypted-storage-compatibility.md) now verifies
+representative transactions, migrations, timestamps, encrypted snapshots, and reopen behavior
+with a libSQL candidate against the pinned/generated Prisma client. It passed under the host,
+packaging-toolchain, and Electron Node runtimes. The dependency override, cipher/backup-envelope
+decision, complete service suite, and packaged integration still require work before changing
+live storage. If compatibility requires a Prisma or Electron upgrade, isolate that change and
+rerun the complete storage and packaged suites.
 
 The integration must cover **all** connections: regular queries, migration initialization,
 integrity checks, pre-upgrade snapshots, user backups, restore verification, and test fixtures.
