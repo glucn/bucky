@@ -1,6 +1,6 @@
 # Design: Security Gate (F-015)
 
-Updated 2026-09-08. See [requirements](requirements.md) for the acceptance contract.
+Updated 2026-09-09. See [requirements](requirements.md) for the acceptance contract.
 Sections below distinguish implemented boundaries from pending storage/authentication work.
 
 ## Implemented process boundary
@@ -51,8 +51,10 @@ safeStorage decryption as a launch lock would not meet SEC-01.
 
 The [versioned key-envelope foundation](key-envelopes.md) implements authenticated wraps,
 fixed-cost scrypt passphrase derivation, and independent recovery/new-keychain binding. It is
-not yet wired into profile persistence or the lock lifecycle. The OS authentication implementation
-and protected recovery UX still need implementation and testing before provisioning real keys.
+now used by the [protected profile provisioning controller](protected-profile-setup.md), which
+requires recovery confirmation and publishes the envelope with a verified encrypted book. The
+setup view, OS authentication implementation, lock lifecycle, and protected recovery UX still
+need implementation and testing before provisioning real keys.
 Incorrect credentials and authentication cancellation must neither initialize an empty book nor
 overwrite existing keys.
 
@@ -84,7 +86,7 @@ that old plaintext material still exists and do not claim cryptographic protecti
 
 ## Remaining implementation sequence
 
-1. Persist the implemented key envelopes atomically and verify recovery material during protected setup.
+1. Connect the recovery-confirmed provisioning controller to a protected setup view.
 2. Implement launch authentication and a main-owned lock lifecycle; delay database access until unlock.
 3. Route backup/restore through authenticated encrypted artifacts; preserve encrypted migration
    behavior and verify crash/failure cases.

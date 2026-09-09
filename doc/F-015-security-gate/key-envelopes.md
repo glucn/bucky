@@ -1,7 +1,9 @@
 # Profile Key Envelopes
 
-Implemented 2026-09-08 as a trusted-process foundation. It is **not yet wired into app setup,
-locking, or database opening**. Existing personal books and backups remain plaintext.
+Implemented 2026-09-08 as a trusted-process foundation. The
+[protected profile provisioning controller](protected-profile-setup.md) now persists and verifies
+new envelopes with encrypted books. It is **not yet wired into the app's setup UI, locking, or
+startup**. Existing personal books and backups remain plaintext.
 
 ## Version 1 format
 
@@ -74,7 +76,7 @@ profile mismatch, parser limits, concurrency limits, and immutable passphrase re
 Keychain tests substitute the OS API; they do not provision or exercise a real macOS keychain item.
 A synthetic passphrase/recovery roundtrip and tamper check also pass on Electron's Node 18.18.2.
 
-Remaining work includes protected setup and recovery-code confirmation, atomic envelope
-persistence, real OS authentication/keychain acceptance, portable authenticated backup files,
-encrypted service/migration integration, lock/relock, and legacy conversion. Do not mark SEC-04
+Remaining work includes the protected setup UI, existing-envelope update persistence,
+real OS authentication/keychain acceptance, portable authenticated backup files,
+lock/relock, and legacy conversion. Do not mark SEC-04
 or SEC-05 complete merely because these library tests pass.

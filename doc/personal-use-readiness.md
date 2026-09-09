@@ -9,6 +9,22 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 9 — Recovery-confirmed protected profile provisioning (2026-09-09)
+
+- Added a main-owned setup controller that requires explicit base currency and successful
+  recovery-code re-entry before writing a book or key envelope. Pending keys expire and are
+  cleared on cancellation/failure; unavailable requested keychain protection does not fall back.
+- Creates and verifies the encrypted book and durable envelope in private staging, then publishes
+  them together. Defaults use the selected currency. Existing/legacy/partial profiles and stale
+  setup artifacts are refused; competing publishers cannot replace the winner. Failures after
+  publication preserve the profile and report the uncertain durability instead of deleting it.
+- Added 17 provisioning/failure tests. **629 tests across 84 files passed in each storage mode**,
+  plus TypeScript checks. A synthetic Electron Node 18.18.2 setup recovered its persisted envelope
+  and reopened the encrypted EUR book. No real OS keychain or personal profile was used.
+- See [protected setup's contract and limits](F-015-security-gate/protected-profile-setup.md).
+  This controller is not yet connected to app startup or a setup view. Authenticated launch,
+  lock/relock, protected backup/restore, legacy conversion, and the remaining BL-022 work are open.
+
 ### Batch 8 — Encrypted service storage and revocable Prisma sessions (2026-09-08)
 
 - Integrated the pinned encrypted libSQL adapter into the actual database service. Native and
@@ -306,6 +322,6 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation batch
-is **protected profile/key persistence and verified recovery setup**, followed by authenticated
-locking, encrypted backup/restore, legacy conversion, and minimal onboarding. The manual recovery drill remains an acceptance
+is **the protected setup view and main-owned authenticated launch/lock lifecycle**, followed by
+encrypted backup/restore, legacy conversion, and the remaining onboarding/reset policy. The manual recovery drill remains an acceptance
 gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.

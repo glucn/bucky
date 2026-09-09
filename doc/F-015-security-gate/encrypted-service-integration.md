@@ -89,7 +89,8 @@ The packaged suite contains two distinct checks:
 
 ## Remaining gates
 
-Implement protected profile/key persistence and verified recovery setup, OS/passphrase
+The [protected provisioning controller](protected-profile-setup.md) now persists new profiles
+only after recovery confirmation. Connect it to a setup view and implement OS/passphrase
 authentication, startup-before-database locking, OS lock/suspend handling, renderer-data clearing,
 and enrichment cancellation. Then integrate authenticated backup/restore and recoverable legacy
 conversion before enabling personal encryption. Crash/disk-full recovery and real OS/user recovery

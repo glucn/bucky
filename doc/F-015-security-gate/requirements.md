@@ -1,6 +1,6 @@
 # Requirements: Security Gate (F-015)
 
-Updated 2026-09-08. This feature remains **incomplete and a personal-use release blocker**.
+Updated 2026-09-09. This feature remains **incomplete and a personal-use release blocker**.
 The parent [design](../design.md#security--privacy) requires a launch lock, database encryption,
 and OS-keychain-first key management with an optional user passphrase. IPC hardening alone
 does not satisfy this feature.
@@ -44,8 +44,9 @@ use. Do not invent cryptographic algorithms or silently fall back to plaintext s
   for verification results.
 - SEC-08: existing payload-bearing console methods are disabled in packaged main processes
   before service initialization. A non-sensitive structured diagnostic system is not yet implemented.
-- SEC-04/SEC-05 have a tested [key-envelope foundation](key-envelopes.md), but are not integrated
-  into app setup, persistence, authentication, or backup files. They remain incomplete.
+- SEC-04/SEC-05 have a tested [key-envelope foundation](key-envelopes.md) and
+  [recovery-confirmed profile provisioning](protected-profile-setup.md), but are not integrated
+  into the app's setup UI, authentication, or backup files. They remain incomplete.
 - SEC-02/SEC-03 have [encrypted service and revocable-session integration](encrypted-service-integration.md),
   including encrypted migrations/snapshots and full-suite coverage. Startup/authentication,
   renderer clearing, OS events, and protected recovery are not wired to it.
