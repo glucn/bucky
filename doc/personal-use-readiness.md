@@ -9,6 +9,27 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 8 — Encrypted service storage and revocable Prisma sessions (2026-09-08)
+
+- Integrated the pinned encrypted libSQL adapter into the actual database service. Native and
+  encrypted storage share migration-history validation, atomic upgrades, rollback, and snapshot
+  reservation. Encrypted pre-upgrade snapshots remain encrypted; plaintext conversion is refused.
+- Services retain a revocable Prisma facade. Closing blocks new work, deferred queries, retained
+  transaction clients, and pending result/error delivery. Failed unlock cannot fall back to a
+  plaintext book, and close-during-unlock cannot publish a new session.
+- The same **612 tests across 83 files passed in each storage mode**, including actual encrypted
+  service postings/reopen, batch rollback, in-flight write rollback, and migration failure cases.
+  TypeScript checks and all nine checks in the original compatibility probe passed.
+- The final Apple Silicon package passed **six repeated checks**: three real startup/recovery
+  runs and three encrypted-runtime checks using shipped ASAR dependencies without checkout
+  fallback. The latter verifies packaged native assets, not an authenticated installed workflow.
+- Development database-isolation and headered CSV-import workflows each passed three repetitions
+  (**six E2E passes**) through the session facade.
+- Added [the storage integration contract and reproducible checks](F-015-security-gate/encrypted-service-integration.md).
+  Personal-app startup and its backup/recovery UI still use plaintext storage. Protected setup,
+  authenticated unlocking/relocking, encrypted portable backups, and legacy conversion remain
+  release blockers; this batch does not enable F-015 or establish sole-record readiness.
+
 ### Batch 7 — Authenticated key wrapping and independent recovery (2026-09-08)
 
 - Added a trusted-process key-envelope library: random per-profile data keys, AES-256-GCM wraps,
@@ -285,6 +306,6 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation batch
-is **encrypted-storage service integration and authenticated key/recovery envelopes**, followed by
-locking and minimal onboarding. The manual recovery drill remains an acceptance
+is **protected profile/key persistence and verified recovery setup**, followed by authenticated
+locking, encrypted backup/restore, legacy conversion, and minimal onboarding. The manual recovery drill remains an acceptance
 gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.

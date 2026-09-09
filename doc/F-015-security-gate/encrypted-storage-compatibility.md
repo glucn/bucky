@@ -75,14 +75,17 @@ value is absent from every possible artifact merely because one sentinel is abse
 
 ## Next implementation work
 
-- Integrate the candidate into the complete service suite and packaged build. Keep unencrypted
-  development/test storage isolated; do not convert existing personal data automatically.
+Update 2026-09-08: [service integration](encrypted-service-integration.md) now covers the complete
+service suite, shared encrypted migrations/snapshots, revocable sessions, and packaged dependencies.
+The probe above remains independently reproducible. The remaining activation work is listed below.
+
+- Keep unencrypted development/test storage isolated; do not convert existing personal data automatically.
 - Implement reviewed key wrapping, independent recovery credentials, authenticated portable
   backup envelopes, and tamper/failure tests.
 - Add main-owned authentication/locking and delay every personal database connection until unlock.
-- Move initialization, migration-history validation, all backup/restore checks, and pre-upgrade
-  snapshots onto the encrypted connection path. The raw `sqlite3` recovery path cannot read
-  these encrypted files.
+- Move all backup/restore checks onto the encrypted connection path. Initialization, migration
+  history, and pre-upgrade snapshots now support encrypted storage; the raw `sqlite3` recovery
+  path still cannot read these encrypted files and is denied in encrypted service mode.
 - Verify crash recovery, concurrent mutations, cross-version upgrades, encrypted migration
   rollback, legacy conversion, and the full installed-app workflow. The current probe covers
   representative operations, not those complete acceptance scenarios.

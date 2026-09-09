@@ -9,6 +9,8 @@ import { parseToStandardDate } from "../shared/dateUtils";
 import { autoCategorizationService } from "./autoCategorizationService";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
 import { initializePersonalDatabase, resolveDatabaseFile } from "./localDatabase";
+import { createEncryptedPrisma, initializeEncryptedDatabase } from "./encryptedDatabase";
+import { PrismaSession } from "./prismaSession";
 
 // Type for transaction client
 type TransactionClient = Prisma.TransactionClient;
@@ -50,7 +52,12 @@ type TransactionClient = Prisma.TransactionClient;
  */
 class DatabaseService {
   private static instance: DatabaseService;
-  private prisma: PrismaClient;
+  private readonly session = new PrismaSession();
+  private prisma: PrismaClient = this.session.client;
+  private nativeClient: PrismaClient | undefined;
+  private encrypted = false;
+  private opening = false;
+  private lifecycleEpoch = 0;
   private databasePath: string;
   private personalDatabase: boolean;
 
@@ -168,7 +175,7 @@ class DatabaseService {
     // Configure Prisma Client with environment-specific datasource URL
     // Enable verbose logging with DB_VERBOSE=true (useful for debugging tests)
     const verboseLogging = process.env.DB_VERBOSE === "true";
-    this.prisma = new PrismaClient({
+    this.nativeClient = new PrismaClient({
       datasources: {
         db: {
           url: this.databasePath,
@@ -188,11 +195,16 @@ class DatabaseService {
   }
 
   public async initialize() {
+    if (this.encrypted) throw new Error("Encrypted storage requires an explicit authenticated unlock");
     try {
       if (this.personalDatabase) {
         await initializePersonalDatabase(this.databasePath.slice(5), path.join(process.resourcesPath, "migrations"));
       }
-      await this.prisma.$connect();
+      if (this.nativeClient) {
+        await this.nativeClient.$connect();
+        this.session.activate(this.nativeClient);
+        this.nativeClient = undefined;
+      }
       console.log("Database connected successfully");
     } catch (error) {
       console.error("Failed to connect to database:", error);
@@ -201,10 +213,50 @@ class DatabaseService {
   }
 
   public async disconnect() {
-    await this.prisma.$disconnect();
+    this.lifecycleEpoch++;
+    await this.closeConnections();
+  }
+
+  private async closeConnections() {
+    await this.session.close();
+    await this.nativeClient?.$disconnect();
+    this.nativeClient = undefined;
+    if (!this.encrypted) this.nativeClient = new PrismaClient({
+      datasources: { db: { url: this.databasePath } }, log: [],
+    });
+  }
+
+  /** Trusted main-process lifecycle only; never expose keys or this method over renderer IPC.
+   * Selecting encrypted storage is irreversible for this service instance: initialize() cannot
+   * silently reopen the plaintext development/personal book after a failed or closed unlock.
+   */
+  public async openEncryptedDatabase(filename: string, migrations: string, dataKey: Buffer) {
+    if (this.opening) throw new Error("Database unlock is already in progress");
+    if (!Buffer.isBuffer(dataKey) || dataKey.length !== 32) throw new Error("Encrypted storage requires a 32-byte data key");
+    this.opening = true;
+    this.encrypted = true;
+    const epoch = ++this.lifecycleEpoch;
+    const ownedKey = Buffer.from(dataKey);
+    let candidate: PrismaClient | undefined;
+    try {
+      await this.closeConnections();
+      if (epoch !== this.lifecycleEpoch) throw new Error("Database unlock was cancelled by closing the session");
+      await initializeEncryptedDatabase(filename, migrations, ownedKey);
+      candidate = createEncryptedPrisma(filename, ownedKey);
+      await candidate.$connect();
+      if (epoch !== this.lifecycleEpoch) throw new Error("Database unlock was cancelled by closing the session");
+      this.session.activate(candidate);
+      candidate = undefined;
+      this.databasePath = `file:${filename}`;
+    } finally {
+      ownedKey.fill(0);
+      await candidate?.$disconnect();
+      this.opening = false;
+    }
   }
 
   public getRecoveryContext() {
+    if (this.encrypted) throw new Error("Encrypted storage requires the protected recovery workflow");
     if (!this.personalDatabase) return null;
     const databaseFile = this.databasePath.slice(5);
     return { databaseFile, userData: path.dirname(path.dirname(path.dirname(databaseFile))),

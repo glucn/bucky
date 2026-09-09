@@ -15,6 +15,7 @@
     "build": "tsc && electron-forge make",
     "watch": "tsc -w",
     "test": "vitest --run",
+    "test:encrypted": "vitest --run --config vitest.encrypted.config.ts",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:db:reset": "rm -f prisma/test.db prisma/test.db-journal && npm run test:db:push",
@@ -79,7 +80,7 @@
     "jsdom": "^28.0.0",
     "postcss": "^8.5.5",
     "postcss-loader": "^8.1.0",
-    "prisma": "^6.11.1",
+    "prisma": "6.11.1",
     "style-loader": "^3.3.4",
     "tailwindcss": "^3.4.1",
     "ts-loader": "^9.5.1",
@@ -91,7 +92,9 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
-    "@prisma/client": "^6.11.1",
+    "@libsql/client": "0.18.0",
+    "@prisma/adapter-libsql": "6.11.1",
+    "@prisma/client": "6.11.1",
     "electron-squirrel-startup": "^1.0.0",
     "electron-store": "^8.1.0",
     "express": "^5.1.0",
@@ -100,5 +103,10 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.1",
     "sqlite3": "^5.1.7"
+  },
+  "overrides": {
+    "@prisma/adapter-libsql": {
+      "@libsql/client": "0.18.0"
+    }
   }
 }

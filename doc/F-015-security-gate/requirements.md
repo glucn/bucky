@@ -1,6 +1,6 @@
 # Requirements: Security Gate (F-015)
 
-Updated 2026-09-07. This feature remains **incomplete and a personal-use release blocker**.
+Updated 2026-09-08. This feature remains **incomplete and a personal-use release blocker**.
 The parent [design](../design.md#security--privacy) requires a launch lock, database encryption,
 and OS-keychain-first key management with an optional user passphrase. IPC hardening alone
 does not satisfy this feature.
@@ -46,6 +46,9 @@ use. Do not invent cryptographic algorithms or silently fall back to plaintext s
   before service initialization. A non-sensitive structured diagnostic system is not yet implemented.
 - SEC-04/SEC-05 have a tested [key-envelope foundation](key-envelopes.md), but are not integrated
   into app setup, persistence, authentication, or backup files. They remain incomplete.
+- SEC-02/SEC-03 have [encrypted service and revocable-session integration](encrypted-service-integration.md),
+  including encrypted migrations/snapshots and full-suite coverage. Startup/authentication,
+  renderer clearing, OS events, and protected recovery are not wired to it.
 - SEC-01 through SEC-06 are **not enabled in the application**. Personal databases and exported backups remain plaintext.
 - The generic compatibility `ipcRenderer.invoke` surface is now restricted to an explicit
   inventory; migrating its remaining call sites to individually typed methods is still desirable.

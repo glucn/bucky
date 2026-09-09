@@ -13,7 +13,13 @@ module.exports = {
     // Webpack packaging omits node_modules. Copy the modules intentionally left
     // external, their runtime bindings, and the generated Prisma client.
     afterCopy: [(buildPath, _electronVersion, _platform, _arch, callback) => {
-      Promise.all([".prisma", "@prisma/client", "sqlite3", "bindings", "file-uri-to-path"].map((name) =>
+      Promise.all([
+        ".prisma", "@prisma/client", "sqlite3", "bindings", "file-uri-to-path",
+        "@prisma/adapter-libsql", "@prisma/driver-adapter-utils", "@prisma/debug",
+        "@libsql/client", "@libsql/core", "@libsql/hrana-client", "@libsql/isomorphic-ws",
+        "@libsql/darwin-arm64", "libsql", "@neon-rs/load", "detect-libc",
+        "js-base64", "ws", "promise-limit", "async-mutex", "tslib",
+      ].map((name) =>
         fs.cp(path.join(__dirname, "node_modules", name), path.join(buildPath, "node_modules", name), { recursive: true })
       )).then(() => callback(), callback);
     }],

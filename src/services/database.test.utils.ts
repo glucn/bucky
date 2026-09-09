@@ -127,11 +127,11 @@ export async function initializeTestDatabase(): Promise<void> {
  * What it does:
  * 1. Deletes all journal lines, entries, checkpoints, and accounts
  * 2. Recreates default accounts (Opening Balance, Retained Earnings)
- * 3. If reset fails, attempts to recreate the database file
+ * 3. If reset fails, preserves the fixture and reports the original failure
  * 
  * Performance: Typically completes in < 100ms
  * 
- * @throws Error if reset fails and database cannot be recreated
+ * @throws Error if reset fails
  * 
  * @example
  * ```typescript
@@ -158,38 +158,9 @@ export async function resetTestDatabase(): Promise<void> {
     await databaseService.resetAllData();
     console.log('[Test Utils] Test database reset successfully');
   } catch (error) {
-    console.error('[Test Utils] Failed to reset test database:', error);
-    
-    // If reset fails, try to recreate the database file
-    console.warn('[Test Utils] Reset failed, attempting to recreate database file');
-    
-    try {
-      // Disconnect first
-      await databaseService.disconnect();
-      
-      // Delete the database file
-      const testDbPath = getTestDatabasePath();
-      if (fs.existsSync(testDbPath)) {
-        fs.unlinkSync(testDbPath);
-      }
-      
-      // Delete the journal file if it exists
-      const journalPath = `${testDbPath}-journal`;
-      if (fs.existsSync(journalPath)) {
-        fs.unlinkSync(journalPath);
-      }
-      
-      // Reinitialize
-      await initializeTestDatabase();
-      
-      console.log('[Test Utils] Database file recreated successfully');
-    } catch (recreateError) {
-      console.error('[Test Utils] Failed to recreate database file:', recreateError);
-      throw new Error(
-        'Failed to reset test database. ' +
-        'Try manually deleting the test database file and running tests again.'
-      );
-    }
+    // Preserve the original failure and fixture for diagnosis. Never delete a different
+    // database or switch backends to make a failed encrypted-suite reset appear to pass.
+    throw new Error('Failed to reset test database', { cause: error });
   }
 }
 

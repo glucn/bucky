@@ -37,6 +37,8 @@ module.exports = (_env, { mode = "development" } = {}) => ({
   ],
   externals: {
     "@prisma/client": "commonjs @prisma/client",
+    "@prisma/adapter-libsql": "commonjs @prisma/adapter-libsql",
+    "@libsql/client": "commonjs @libsql/client",
     "sqlite3": "commonjs sqlite3",
     "electron": "commonjs electron",
     "fs": "commonjs fs",

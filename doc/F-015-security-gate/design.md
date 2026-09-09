@@ -1,6 +1,6 @@
 # Design: Security Gate (F-015)
 
-Updated 2026-09-07. See [requirements](requirements.md) for the acceptance contract.
+Updated 2026-09-08. See [requirements](requirements.md) for the acceptance contract.
 Sections below distinguish implemented boundaries from pending storage/authentication work.
 
 ## Implemented process boundary
@@ -56,7 +56,7 @@ and protected recovery UX still need implementation and testing before provision
 Incorrect credentials and authentication cancellation must neither initialize an empty book nor
 overwrite existing keys.
 
-## Pending encrypted-storage integration
+## Encrypted-storage integration and remaining activation work
 
 The current Prisma native SQLite engine and `sqlite3` lifecycle/recovery connections read and
 write plaintext files. Encrypting a file only on quit, or decrypting into a temporary on-disk
@@ -65,10 +65,13 @@ SQLite file at startup, is explicitly not an acceptable implementation of SEC-03
 The [encrypted-storage compatibility probe](encrypted-storage-compatibility.md) now verifies
 representative transactions, migrations, timestamps, encrypted snapshots, and reopen behavior
 with a libSQL candidate against the pinned/generated Prisma client. It passed under the host,
-packaging-toolchain, and Electron Node runtimes. The dependency override, cipher/backup-envelope
-decision, complete service suite, and packaged integration still require work before changing
-live storage. If compatibility requires a Prisma or Electron upgrade, isolate that change and
-rerun the complete storage and packaged suites.
+packaging-toolchain, and Electron Node runtimes. The candidate is now integrated into
+[the service layer, migration runner, and packaged dependencies](encrypted-service-integration.md).
+The complete suite runs with either native or encrypted storage. A revocable session prevents
+deferred work from reopening closed storage, but authentication and the app lock controller are
+not yet implemented. The dependency override and CBC/backup-envelope distinction still require
+review before changing live storage. Isolate any Prisma or Electron upgrade and rerun both
+complete storage suites and the packaged checks.
 
 The integration must cover **all** connections: regular queries, migration initialization,
 integrity checks, pre-upgrade snapshots, user backups, restore verification, and test fixtures.
@@ -81,11 +84,11 @@ that old plaintext material still exists and do not claim cryptographic protecti
 
 ## Remaining implementation sequence
 
-1. Prove native encrypted SQLite/Prisma transaction and migration compatibility in isolated tests.
-2. Implement versioned key wrapping and independent recovery, with failure tests first.
-3. Implement launch authentication and a main-owned lock lifecycle; delay database access until unlock.
-4. Route migration/backup/restore through encrypted storage and verify crash/failure behavior.
-5. Exercise the installed app with real OS authentication/keychain, portable recovery, and legacy conversion.
+1. Persist the implemented key envelopes atomically and verify recovery material during protected setup.
+2. Implement launch authentication and a main-owned lock lifecycle; delay database access until unlock.
+3. Route backup/restore through authenticated encrypted artifacts; preserve encrypted migration
+   behavior and verify crash/failure cases.
+4. Exercise the installed app with real OS authentication/keychain, portable recovery, and legacy conversion.
 
 Keep the full security gate open until these steps satisfy SEC-01 through SEC-08. Continue tracking
 minimal onboarding, valuation correctness, the ledger verifier, and the representative pilot in
