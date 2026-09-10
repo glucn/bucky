@@ -30,7 +30,7 @@ export const createTwelveDataEnrichmentProvider = (
   }
 
   const requestJson = async (url: string): Promise<any> => {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     const payload = await response.json().catch(async () => ({ raw: await response.text() }));
 
     if (!response.ok || payload?.status === "error") {

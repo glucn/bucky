@@ -88,6 +88,14 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
   };
 
   const shouldCancel = () => Boolean(input.cancellation?.isCanceled());
+  const requireActive = <T>(operation: () => Promise<T>) => {
+    if (shouldCancel()) throw new Error("Enrichment canceled");
+    return operation();
+  };
+  const canceledResult = () => {
+    input.coordinator.finishRun(input.runId, "canceled");
+    return { status: "canceled" as const, failedItems };
+  };
 
   if (input.scope.securityMetadata) {
     let processed = 0;
@@ -108,13 +116,14 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
 
       try {
         const metadata = await withTransientRetry(
-          () =>
+          () => requireActive(() =>
             input.provider.fetchSecurityMetadata({
               symbol: security.ticker,
               market: security.market,
-            }),
+            })),
           retryOptions
         );
+        if (shouldCancel()) return canceledResult();
         if (metadata) {
           await input.repository.upsertSecurityMetadataFillMissing({
             ticker: security.ticker,
@@ -161,15 +170,16 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
 
       try {
         const points = await withTransientRetry(
-          () =>
+          () => requireActive(() =>
             input.provider.fetchSecurityDailyPrices({
               symbol: security.ticker,
               market: security.market,
               startDate: security.startDate,
               endDate: security.endDate,
-            }),
+            })),
           retryOptions
         );
+        if (shouldCancel()) return canceledResult();
         await input.repository.insertMissingSecurityDailyPrices(
           {
             ticker: security.ticker,
@@ -214,15 +224,16 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
 
       try {
         const points = await withTransientRetry(
-          () =>
+          () => requireActive(() =>
             input.provider.fetchFxDailyRates({
               sourceCurrency: pair.sourceCurrency,
               targetCurrency: pair.targetCurrency,
               startDate: pair.startDate,
               endDate: pair.endDate,
-            }),
+            })),
           retryOptions
         );
+        if (shouldCancel()) return canceledResult();
         await input.repository.insertMissingFxDailyRates(
           {
             sourceCurrency: pair.sourceCurrency,
@@ -248,6 +259,7 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
     }
   }
 
+  if (shouldCancel()) return canceledResult();
   const status = failedItems.length > 0 ? "completed_with_issues" : "completed";
   input.coordinator.finishRun(input.runId, status);
 

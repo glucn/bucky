@@ -42,6 +42,7 @@ export const createEnrichmentRunCoordinator = () => {
   const completedRuns = new Map<string, EnrichmentRunState>();
 
   return {
+    clear(): void { activeRun = null; completedRuns.clear(); },
     startOrGetExistingRun(scope: EnrichmentRunScope): {
       createdNewRun: boolean;
       run: EnrichmentRunState;

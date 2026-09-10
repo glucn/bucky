@@ -73,18 +73,26 @@ export class EnrichmentRuntimeService {
   private latestSummary: any | null = null;
 
   private canceledRunIds = new Set<string>();
+  private suspended = false;
+  private tasks = new Map<string, Promise<void>>();
 
   constructor(private readonly deps: RuntimeDependencies) {}
 
   startRun(scope: EnrichmentRunScope) {
+    if (this.suspended) throw new Error("Enrichment is locked");
     const result = this.deps.coordinator.startOrGetExistingRun(scope);
     if (result.createdNewRun) {
-      void this.executeRun(result.run.id, scope);
+      const id = result.run.id;
+      const task = this.executeRun(id, scope).catch(() => {
+        this.deps.coordinator.finishRun(id, this.suspended || this.canceledRunIds.has(id) ? "canceled" : "completed_with_issues");
+      }).finally(() => { this.tasks.delete(id); this.canceledRunIds.delete(id); });
+      this.tasks.set(id, task);
     }
     return result;
   }
 
   private async executeRun(runId: string, scope: EnrichmentRunScope): Promise<void> {
+    const canceled = () => this.suspended || this.canceledRunIds.has(runId);
     const providerResolution = this.deps.resolveProvider();
 
     if (!providerResolution.ok) {
@@ -99,6 +107,7 @@ export class EnrichmentRuntimeService {
     }
 
     const baseCurrency = await this.deps.getBaseCurrency();
+    if (canceled()) return;
     if (!baseCurrency) {
       this.deps.coordinator.addFailedItem(runId, {
         category: "fxRates",
@@ -120,6 +129,7 @@ export class EnrichmentRuntimeService {
       }),
       this.deps.prismaClient.journalEntry.aggregate({ _min: { date: true } }),
     ]);
+    if (canceled()) return;
 
     const today = toIsoDate(new Date());
     const earliestRelevantTransactionDate = txBounds._min.date || today;
@@ -151,6 +161,7 @@ export class EnrichmentRuntimeService {
 
     const securities = await Promise.all(
       baseSecurities.map(async (security) => {
+        if (canceled()) return security;
         if (security.market !== "UNKNOWN") {
           return security;
         }
@@ -179,6 +190,7 @@ export class EnrichmentRuntimeService {
       })
     );
 
+    if (canceled()) return;
     const securityRanges = await Promise.all(
       securities.map(async (security) => ({
         ticker: security.ticker,
@@ -194,6 +206,7 @@ export class EnrichmentRuntimeService {
       }))
     );
 
+    if (canceled()) return;
     const sourceCurrencies = new Set<string>(accounts.map((account) => account.currency));
     for (const security of securities) {
       if (security.quoteCurrency) {
@@ -221,6 +234,7 @@ export class EnrichmentRuntimeService {
       }))
     );
 
+    if (canceled()) return;
     let pipelineResult:
       | {
           status: string;
@@ -242,7 +256,7 @@ export class EnrichmentRuntimeService {
         securities: securityRanges,
         fxPairs: fxRanges,
         cancellation: {
-          isCanceled: () => this.canceledRunIds.has(runId),
+          isCanceled: canceled,
         },
       });
     } finally {
@@ -250,7 +264,7 @@ export class EnrichmentRuntimeService {
       this.latestSummary = this.deps.coordinator.getRunSummary(runId);
     }
 
-    if (!scope.fxRates || !pipelineResult || pipelineResult.status === "canceled") {
+    if (canceled() || !scope.fxRates || !pipelineResult || pipelineResult.status === "canceled") {
       return;
     }
 
@@ -260,6 +274,7 @@ export class EnrichmentRuntimeService {
     }
 
     const reconciliation = await this.deps.getBaseCurrencyReconciliationState();
+    if (canceled()) return;
     if (
       !reconciliation ||
       reconciliation.status !== "pending" ||
@@ -283,6 +298,20 @@ export class EnrichmentRuntimeService {
       latestSummary: this.latestSummary,
       freshness,
     };
+  }
+
+  async suspendForLock(): Promise<void> {
+    this.suspended = true;
+    for (const id of this.tasks.keys()) this.canceledRunIds.add(id);
+    await Promise.allSettled(this.tasks.values());
+    this.latestSummary = null;
+    this.canceledRunIds.clear();
+    this.deps.coordinator.clear();
+  }
+
+  resumeAfterUnlock(): void {
+    if (this.tasks.size) throw new Error("Enrichment is still locking");
+    this.suspended = false;
   }
 
   cancelRun(runId: string) {
