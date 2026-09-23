@@ -193,6 +193,11 @@ export function portableKeyEnvelope(envelope: ProfileKeyEnvelope): ProfileKeyEnv
   return record;
 }
 
+/** Trusted-process check before writing artifacts that must remain independently recoverable. */
+export function verifyProfileKey(envelope: ProfileKeyEnvelope, dataKey: Buffer, expectedProfileId: string): void {
+  try { verifyKey(forProfile(envelope, expectedProfileId), dataKey); } catch { throw unlockFailed(); }
+}
+
 export async function bindKeychain(envelope: ProfileKeyEnvelope, dataKey: Buffer, keychain: KeychainProtector, expectedProfileId: string): Promise<ProfileKeyEnvelope> {
   const record = forProfile(envelope, expectedProfileId);
   try { verifyKey(record, dataKey); } catch { throw unlockFailed(); }

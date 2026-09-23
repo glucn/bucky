@@ -10,6 +10,10 @@ blocker. Do not treat manual copies or the setup recovery code as a completed re
 The instructions below document the previous plaintext implementation and its retained service
 tests, not a supported recovery path for the current encrypted build.
 
+The new [protected artifact service](F-015-security-gate/protected-backup-artifacts.md) implements
+authenticated encrypted export and verified staging, but is not yet exposed by the app. It does
+not yet publish/select a recovered profile or replace the manual acceptance drill below.
+
 ## Create a backup
 
 1. Finish saving any edits. Open **Backup & recovery** in the navigation bar.

@@ -51,6 +51,9 @@ use. Do not invent cryptographic algorithms or silently fall back to plaintext s
 - SEC-04/SEC-05 have a tested [key-envelope foundation](key-envelopes.md) and
   [recovery-confirmed setup](protected-profile-setup.md), now connected to the application.
   Durable credential replacement and portable authenticated backup/recovery remain incomplete.
+  The [protected artifact service](protected-backup-artifacts.md) now exports authenticated
+  files and verifies encrypted restore staging independently of the original keychain; UI,
+  credential rebinding, profile publication/activation, and installed recovery are still pending.
 - SEC-06 conversion is not implemented. Existing plaintext books remain untouched and are
   refused at launch. New profiles are encrypted; old plaintext backup files remain plaintext.
   The old raw-SQLite export/restore UI is unavailable for encrypted profiles.

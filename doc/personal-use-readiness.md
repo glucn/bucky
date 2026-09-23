@@ -9,6 +9,27 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 11 — Authenticated portable backup files and verified staging (2026-09-23)
+
+- Added a trusted-process export service that snapshots encrypted live storage, validates the
+  book, wraps the snapshot and record manifest in authenticated encryption, verifies the saved
+  artifact, and publishes without overwriting existing files. Machine-bound keychain metadata
+  is excluded; no plaintext financial working database or manifest is written to disk.
+- Added independent recovery by saved recovery code or configured passphrase. The callback gets
+  an encrypted stage only after authentication, schema/history/reference checks, and matching
+  record counts/digests and balances. Cleanup clears the temporary key and stage; no profile is
+  published or selected. Legacy and protected recovery now share their validation rules.
+- Added 23 tests covering WAL data, both credentials, tampering and format limits, incorrect
+  authenticated manifests, invalid books, overwrite/symlink refusal, cancellation, write failure,
+  and uncertain durability after publication. **671 tests across 90 files passed in each storage
+  mode**, plus TypeScript checking. A synthetic Electron Node 18.18.2 check passed export,
+  recovery with both credentials, and tamper rejection.
+- See the [artifact format and integration contract](F-015-security-gate/protected-backup-artifacts.md).
+  This is not yet an app-level backup/restore flow: main-owned credential rebinding, recovery
+  confirmation, separate-profile publication/selection, native dialogs, lock-aware cancellation,
+  and installed recovery tests are next. Real cross-device recovery, legacy conversion, and all
+  other readiness gates remain open. The encrypted-profile backup controls remain disabled.
+
 ### Batch 10 — Authenticated setup, launch, and relock (2026-09-23)
 
 - Connected the protected setup view to main-owned authentication. New packaged books require
@@ -354,7 +375,8 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation batch
-is **authenticated encrypted backup/restore**, followed by verified legacy conversion,
+is **main-owned restore publication and UI integration for the protected backup service**,
+followed by verified legacy conversion,
 interrupted-profile recovery, and the remaining onboarding/reset policy. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance
 gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.
