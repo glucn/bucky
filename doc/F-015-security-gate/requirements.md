@@ -1,6 +1,6 @@
 # Requirements: Security Gate (F-015)
 
-Updated 2026-09-09. This feature remains **incomplete and a personal-use release blocker**.
+Updated 2026-09-23. This feature remains **incomplete and a personal-use release blocker**.
 The parent [design](../design.md#security--privacy) requires a launch lock, database encryption,
 and OS-keychain-first key management with an optional user passphrase. IPC hardening alone
 does not satisfy this feature.
@@ -44,13 +44,16 @@ use. Do not invent cryptographic algorithms or silently fall back to plaintext s
   for verification results.
 - SEC-08: existing payload-bearing console methods are disabled in packaged main processes
   before service initialization. A non-sensitive structured diagnostic system is not yet implemented.
+- SEC-01/SEC-02/SEC-03 now have [authenticated packaged launch](authenticated-launch.md),
+  explicit relocking, renderer replacement, enrichment cancellation, encrypted live storage,
+  and encrypted migrations/snapshots. The actual passphrase workflow is covered in packaged
+  tests; real OS authentication/keychain and OS-session events still need manual acceptance.
 - SEC-04/SEC-05 have a tested [key-envelope foundation](key-envelopes.md) and
-  [recovery-confirmed profile provisioning](protected-profile-setup.md), but are not integrated
-  into the app's setup UI, authentication, or backup files. They remain incomplete.
-- SEC-02/SEC-03 have [encrypted service and revocable-session integration](encrypted-service-integration.md),
-  including encrypted migrations/snapshots and full-suite coverage. Startup/authentication,
-  renderer clearing, OS events, and protected recovery are not wired to it.
-- SEC-01 through SEC-06 are **not enabled in the application**. Personal databases and exported backups remain plaintext.
+  [recovery-confirmed setup](protected-profile-setup.md), now connected to the application.
+  Durable credential replacement and portable authenticated backup/recovery remain incomplete.
+- SEC-06 conversion is not implemented. Existing plaintext books remain untouched and are
+  refused at launch. New profiles are encrypted; old plaintext backup files remain plaintext.
+  The old raw-SQLite export/restore UI is unavailable for encrypted profiles.
 - The generic compatibility `ipcRenderer.invoke` surface is now restricted to an explicit
   inventory; migrating its remaining call sites to individually typed methods is still desirable.
 - Input-schema coverage, dependency/security-update review, and external review of key/storage

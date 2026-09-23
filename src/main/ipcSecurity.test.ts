@@ -8,11 +8,25 @@ function fixture(packaged = true) {
   const owner = { webContents: { id: 7, mainFrame: frame } };
   const transport = { handle: (channel: string, handler: any) => handlers.set(channel, handler), removeHandler: vi.fn() };
   const secure = createSecureIpc(transport as any, { getWindow: () => owner as any,
-    isPackaged: () => packaged, getAppUrl: () => packaged ? packagedUrl : "http://localhost:3000" });
+    isPackaged: () => packaged, getAppUrl: () => packaged ? packagedUrl : "http://localhost:3000",
+    runData: (action) => action() });
   return { secure, handlers, frame, event: { sender: { id: 7 }, senderFrame: frame } };
 }
 
 describe("Main-process IPC security", () => {
+  it("requires the personal lock gate even for an authorized application frame", async () => {
+    const handlers = new Map<string, any>();
+    const frame = { url: packagedUrl };
+    const event = { sender: { id: 1 }, senderFrame: frame };
+    const action = vi.fn();
+    const secure = createSecureIpc({ handle: (c: string, fn: any) => handlers.set(c, fn), removeHandler: vi.fn() } as any,
+      { getWindow: () => ({ webContents: { id: 1, mainFrame: frame } }) as any, getAppUrl: () => packagedUrl, isPackaged: () => true });
+    secure.handle("get-accounts", action);
+    await expect(handlers.get("get-accounts")(event)).rejects.toThrow(/locked/i);
+    expect(action).not.toHaveBeenCalled();
+    secure.handle("get-security-state", () => ({ status: "locked" }));
+    expect(await handlers.get("get-security-state")(event)).toEqual({ status: "locked" });
+  });
   it("delegates authorized requests, including packaged hash routes", async () => {
     const { secure, handlers, frame, event } = fixture();
     const action = vi.fn().mockResolvedValue(["records"]);

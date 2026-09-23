@@ -9,6 +9,38 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 10 — Authenticated setup, launch, and relock (2026-09-23)
+
+- Connected the protected setup view to main-owned authentication. New packaged books require
+  explicit base currency, repeated credentials, and recovery-code re-entry before creation.
+  They stay locked until a separate successful passphrase or OS-authentication challenge.
+- All financial IPC requires an unlocked session; startup does not open or seed the personal
+  database. Explicit lock, window close, and OS lock/suspend/session-deactivation events revoke
+  access. Lock destroys the renderer and its memory-only storage partition and drains pending
+  work before allowing another unlock. Enrichment cancellation/late-result suppression was
+  committed separately in `6a786da`.
+- Existing plaintext or incomplete profiles fail closed and are preserved. The earlier raw-SQLite
+  backup/restore UI is disabled for encrypted profiles; no plaintext fallback is offered.
+- The packaged test exposed a timezone bug after moving east of UTC: calendar-date validation
+  compared local midnight with a UTC date. Four timezone regressions failed before the fix;
+  calendar inputs now validate independently of local timezone and reject invalid-day rollover.
+- **648 tests across 89 files passed in each storage mode**, plus TypeScript checking and an
+  Apple Silicon package build. Three repetitions of all packaged cases passed (**nine checks**),
+  including real passphrase setup, wrong credentials, persistence/relock/restart, plaintext
+  preservation, and shipped encrypted-runtime assets. Setup and locked screens were inspected.
+- Ten additional packaged setup/unlock/relock repetitions passed. An earlier isolated assertion
+  failure between recovery confirmation and the unlock view did not recur in these thirteen
+  successful workflow runs; its cause is not established. The harness now retains renderer
+  lifecycle/state diagnostics on failure rather than assuming it is a product or timing bug.
+  Development database-isolation and headered-import tests each passed three repetitions
+  (**six E2E passes**).
+- Real Touch ID/keychain and OS-session events require manual acceptance; automated OS tests
+  substitute those APIs. No real personal profile was used. See
+  [authenticated launch and remaining limits](F-015-security-gate/authenticated-launch.md).
+- F-015 remains open. Next: authenticated encrypted backup/restore, verified legacy conversion,
+  interrupted-profile recovery, durable credential changes, and the remaining onboarding/reset
+  policy. Valuation, the verifier, precision work, and the representative personal pilot remain.
+
 ### Batch 9 — Recovery-confirmed protected profile provisioning (2026-09-09)
 
 - Added a main-owned setup controller that requires explicit base currency and successful
@@ -322,6 +354,7 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation batch
-is **the protected setup view and main-owned authenticated launch/lock lifecycle**, followed by
-encrypted backup/restore, legacy conversion, and the remaining onboarding/reset policy. The manual recovery drill remains an acceptance
+is **authenticated encrypted backup/restore**, followed by verified legacy conversion,
+interrupted-profile recovery, and the remaining onboarding/reset policy. Real OS-authentication
+acceptance and the manual recovery drill remain acceptance
 gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.

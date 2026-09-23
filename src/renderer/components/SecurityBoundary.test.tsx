@@ -1,0 +1,65 @@
+// @vitest-environment jsdom
+import React from "react";
+import { afterEach, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { SecurityBoundary } from "./SecurityBoundary";
+import type { SecurityState } from "../../shared/security";
+
+const locked: SecurityState = { status: "locked", personal: true, revision: 1, osAuthenticationAvailable: false,
+  methods: { keychain: false, passphrase: true } };
+afterEach(cleanup);
+function fixture(state = locked) {
+  let listener: (state: SecurityState) => void = () => {};
+  const dispose = vi.fn();
+  const api = { getState: vi.fn().mockResolvedValue(state), unlock: vi.fn(), lock: vi.fn(),
+    beginSetup: vi.fn(), confirmSetup: vi.fn(), onStateChanged: vi.fn((fn) => { listener = fn; return dispose; }) };
+  Object.defineProperty(window, "electron", { configurable: true, value: { security: api } });
+  return { api, emit: (next: SecurityState) => listener(next), dispose };
+}
+it("does not mount financial views until unlock, ignores stale state, and unmounts on relock", async () => {
+  const f = fixture();
+  const mounted = vi.fn();
+  function FinancialView() { React.useEffect(mounted, []); return <p>Private financial view</p>; }
+  render(<SecurityBoundary><FinancialView /></SecurityBoundary>);
+  await screen.findByRole("heading", { name: "Unlock Bucky" });
+  expect(mounted).not.toHaveBeenCalled();
+  f.emit({ ...locked, status: "unlocked", revision: 2 });
+  await screen.findByText("Private financial view");
+  f.emit(locked);
+  expect(screen.queryByText("Private financial view")).not.toBeNull();
+  f.emit({ ...locked, revision: 3 });
+  await waitFor(() => expect(screen.queryByText("Private financial view")).toBeNull());
+  cleanup(); expect(f.dispose).toHaveBeenCalled();
+});
+
+it("requires explicit currency and recovery re-entry and clears credentials after setup", async () => {
+  const f = fixture({ ...locked, status: "setup-required", methods: { keychain: false, passphrase: false } });
+  f.api.beginSetup.mockImplementation(async () => {
+    f.emit({ ...locked, status: "confirm-recovery", revision: 2 });
+    return { setupId: "one-time", recoverySecret: "bucky-recovery-v1-private-test" };
+  });
+  f.api.confirmSetup.mockImplementation(async () => { f.emit({ ...locked, revision: 3 }); });
+  render(<SecurityBoundary><p>Financial view</p></SecurityBoundary>);
+  await screen.findByRole("heading", { name: "Protect your new book" });
+  const currency = screen.getByLabelText("Base currency") as HTMLSelectElement;
+  expect(currency.value).toBe("");
+  fireEvent.change(currency, { target: { value: "CAD" } });
+  fireEvent.change(screen.getByLabelText("Passphrase"), { target: { value: "a synthetic passphrase" } });
+  fireEvent.change(screen.getByLabelText("Repeat passphrase"), { target: { value: "a synthetic passphrase" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create recovery code" }));
+  await screen.findByTestId("recovery-code");
+  expect(f.api.confirmSetup).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("Re-enter saved recovery code"), { target: { value: "bucky-recovery-v1-private-test" } });
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and create encrypted book" }));
+  await screen.findByRole("heading", { name: "Unlock Bucky" });
+  expect(f.api.confirmSetup).toHaveBeenCalledWith({ setupId: "one-time", recoverySecret: "bucky-recovery-v1-private-test" });
+  expect(screen.queryByTestId("recovery-code")).toBeNull();
+  expect((screen.getByLabelText("Passphrase") as HTMLInputElement).value).toBe("");
+});
+
+it("stays closed when the security state cannot be obtained", async () => {
+  const f = fixture(); f.api.getState.mockRejectedValue(new Error("IPC unavailable"));
+  render(<SecurityBoundary><p>Must not mount</p></SecurityBoundary>);
+  await screen.findByRole("alert");
+  expect(screen.queryByText("Must not mount")).toBeNull();
+});

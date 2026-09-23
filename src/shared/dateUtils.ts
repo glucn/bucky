@@ -9,7 +9,6 @@
  * - YYYYMMDD (20251026)
  * - MM/DD/YYYY (10/26/2025)
  * - M/D/YYYY (1/5/2025)
- * - DD/MM/YYYY (26/10/2025)
  * - YYYY/MM/DD (2025/10/26)
  * - ISO 8601 date strings
  * 
@@ -31,11 +30,7 @@ export function parseToStandardDate(dateStr: string | Date): string | null {
 
   // Already in YYYY-MM-DD format
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    const date = new Date(trimmed + 'T00:00:00');
-    if (isNaN(date.getTime())) return null;
-    // Verify the date didn't roll over (e.g., Feb 30 -> Mar 2)
-    if (date.toISOString().slice(0, 10) !== trimmed) return null;
-    return trimmed;
+    return isValidStandardDate(trimmed) ? trimmed : null;
   }
 
   // YYYYMMDD format (20251026)
@@ -44,11 +39,7 @@ export function parseToStandardDate(dateStr: string | Date): string | null {
     const month = trimmed.slice(4, 6);
     const day = trimmed.slice(6, 8);
     const formatted = `${year}-${month}-${day}`;
-    const date = new Date(formatted + 'T00:00:00');
-    if (isNaN(date.getTime())) return null;
-    // Verify the date didn't roll over
-    if (date.toISOString().slice(0, 10) !== formatted) return null;
-    return formatted;
+    return isValidStandardDate(formatted) ? formatted : null;
   }
 
   // MM/DD/YYYY or M/D/YYYY format
@@ -58,11 +49,7 @@ export function parseToStandardDate(dateStr: string | Date): string | null {
     const day = slashMatch[2].padStart(2, '0');
     const year = slashMatch[3];
     const formatted = `${year}-${month}-${day}`;
-    const date = new Date(formatted + 'T00:00:00');
-    if (isNaN(date.getTime())) return null;
-    // Verify the date didn't roll over
-    if (date.toISOString().slice(0, 10) !== formatted) return null;
-    return formatted;
+    return isValidStandardDate(formatted) ? formatted : null;
   }
 
   // YYYY/MM/DD format
@@ -72,11 +59,7 @@ export function parseToStandardDate(dateStr: string | Date): string | null {
     const month = yearFirstSlash[2].padStart(2, '0');
     const day = yearFirstSlash[3].padStart(2, '0');
     const formatted = `${year}-${month}-${day}`;
-    const date = new Date(formatted + 'T00:00:00');
-    if (isNaN(date.getTime())) return null;
-    // Verify the date didn't roll over
-    if (date.toISOString().slice(0, 10) !== formatted) return null;
-    return formatted;
+    return isValidStandardDate(formatted) ? formatted : null;
   }
 
   // Try parsing as ISO 8601 or other standard formats
@@ -97,8 +80,10 @@ export function parseToStandardDate(dateStr: string | Date): string | null {
  */
 export function isValidStandardDate(dateStr: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
-  const date = new Date(dateStr + 'T00:00:00');
-  return !isNaN(date.getTime());
+  // Calendar dates have no time zone. Validate and compare in UTC so a local
+  // midnight east of UTC cannot turn a valid date into the previous day.
+  const date = new Date(dateStr + 'T00:00:00Z');
+  return !isNaN(date.getTime()) && date.toISOString().slice(0, 10) === dateStr;
 }
 
 /**

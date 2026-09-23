@@ -8,7 +8,7 @@ import {
 import { parseToStandardDate } from "../shared/dateUtils";
 import { autoCategorizationService } from "./autoCategorizationService";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
-import { initializePersonalDatabase, resolveDatabaseFile } from "./localDatabase";
+import { resolveDatabaseFile } from "./localDatabase";
 import { createEncryptedPrisma, initializeEncryptedDatabase } from "./encryptedDatabase";
 import { PrismaSession } from "./prismaSession";
 
@@ -153,8 +153,11 @@ class DatabaseService {
     const isTest = !this.personalDatabase && (process.env.VITEST === "true" || process.env.NODE_ENV === "test");
     
     // Determine database path based on environment
-    this.databasePath = `file:${resolveDatabaseFile({ isPackaged: this.personalDatabase,
-      userData: electronApp?.getPath("userData"), cwd: process.cwd(), env: process.env })}`;
+    // Do not read profile selection or financial files during module import. The personal
+    // lock controller validates metadata and supplies the selected encrypted path on unlock.
+    this.databasePath = `file:${this.personalDatabase
+      ? path.join(electronApp.getPath("userData"), "profiles", "default", "book.sqlite")
+      : resolveDatabaseFile({ isPackaged: false, cwd: process.cwd(), env: process.env })}`;
     
     // Log selected database path for debugging
     console.log(`[DatabaseService] Using database: ${this.databasePath}`);
@@ -195,11 +198,9 @@ class DatabaseService {
   }
 
   public async initialize() {
+    if (this.personalDatabase) throw new Error("Personal storage requires an authenticated unlock");
     if (this.encrypted) throw new Error("Encrypted storage requires an explicit authenticated unlock");
     try {
-      if (this.personalDatabase) {
-        await initializePersonalDatabase(this.databasePath.slice(5), path.join(process.resourcesPath, "migrations"));
-      }
       if (this.nativeClient) {
         await this.nativeClient.$connect();
         this.session.activate(this.nativeClient);

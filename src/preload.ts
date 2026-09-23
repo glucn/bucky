@@ -1,11 +1,24 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { isAppIpcChannel } from "./shared/ipcChannels";
+import type { SecurityApi } from "./shared/security";
 import {
   type IncomeExpenseBreakdownFilter,
   type IncomeExpenseTrendFilter,
 } from "./shared/reporting";
 
 contextBridge.exposeInMainWorld("electron", {
+  security: {
+    getState: () => ipcRenderer.invoke("get-security-state"),
+    beginSetup: (input) => ipcRenderer.invoke("begin-protected-setup", input),
+    confirmSetup: (input) => ipcRenderer.invoke("confirm-protected-setup", input),
+    unlock: (input) => ipcRenderer.invoke("unlock-personal-profile", input),
+    lock: () => ipcRenderer.invoke("lock-personal-profile"),
+    onStateChanged: (listener) => {
+      const receive = (_event: unknown, state: any) => listener(state);
+      ipcRenderer.on("security-state-changed", receive);
+      return () => { ipcRenderer.removeListener("security-state-changed", receive); };
+    },
+  } satisfies SecurityApi,
   getRecoveryState: () => ipcRenderer.invoke("get-recovery-state"),
   createPersonalBackup: () => ipcRenderer.invoke("create-personal-backup"),
   restorePersonalBackup: () => ipcRenderer.invoke("restore-personal-backup"),

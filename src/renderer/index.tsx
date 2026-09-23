@@ -3,13 +3,16 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { AccountsProvider } from "./context/AccountsContext";
+import { SecurityBoundary } from "./components/SecurityBoundary";
 
 const container = document.getElementById("root");
 const root = createRoot(container!);
 root.render(
   <React.StrictMode>
-    <AccountsProvider>
-      <App />
-    </AccountsProvider>
+    <SecurityBoundary>
+      <AccountsProvider>
+        <App />
+      </AccountsProvider>
+    </SecurityBoundary>
   </React.StrictMode>
 );

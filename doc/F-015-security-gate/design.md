@@ -1,7 +1,7 @@
 # Design: Security Gate (F-015)
 
-Updated 2026-09-09. See [requirements](requirements.md) for the acceptance contract.
-Sections below distinguish implemented boundaries from pending storage/authentication work.
+Updated 2026-09-23. See [requirements](requirements.md) for the acceptance contract.
+Sections below distinguish implemented boundaries from pending recovery/acceptance work.
 
 ## Implemented process boundary
 
@@ -34,34 +34,40 @@ imports because existing calls include account names, transaction payloads, and 
 This trades detailed console diagnostics for privacy until a reviewed event-code logger exists.
 It does not promise to suppress native Electron diagnostics or all possible third-party output.
 
-## Pending authentication and key architecture
+## Implemented authentication and key architecture
 
-The intended lifecycle is `setup required -> locked -> unlocking -> unlocked -> locking -> locked`.
-Error, denied authentication, and unsupported security capabilities must return to a closed state.
+The lifecycle is `setup required -> locked -> unlocking -> unlocked -> locking -> locked`,
+with separate pending setup/recovery-confirmation and recovery-required states.
+Error, denied authentication, and unsupported security capabilities return to a closed state.
 The main process owns this state. Renderer views only request operations and render the result.
-Every data handler will additionally require the unlocked state; the current sender guard alone
-does not provide an app lock.
+Every non-security handler additionally requires the unlocked state. The main-owned controller
+revokes in-flight results, disconnects storage, quiesces enrichment, and destroys the renderer
+on lock. The replacement renderer uses a new memory-only session partition. See
+[authenticated launch](authenticated-launch.md) for the implementation and manual-acceptance limits.
 
 Create one random data-encryption key per profile. Persist only wrapped forms of that key, with
 versioned metadata and separate OS-keychain, optional passphrase, and recovery mechanisms.
 Electron's [safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage) can protect key
-material with macOS Keychain; it is not itself a database encryption layer. The design also must
-perform an authentication challenge before releasing a key to storage. Treating automatic
+material with macOS Keychain; it is not itself a database encryption layer. The controller
+performs a Touch ID challenge before keychain decryption, or verifies an explicitly configured
+passphrase before releasing a key to storage. Treating automatic
 safeStorage decryption as a launch lock would not meet SEC-01.
 
 The [versioned key-envelope foundation](key-envelopes.md) implements authenticated wraps,
 fixed-cost scrypt passphrase derivation, and independent recovery/new-keychain binding. It is
 now used by the [protected profile provisioning controller](protected-profile-setup.md), which
 requires recovery confirmation and publishes the envelope with a verified encrypted book. The
-setup view, OS authentication implementation, lock lifecycle, and protected recovery UX still
-need implementation and testing before provisioning real keys.
+setup view, OS authentication adapter, and lock lifecycle are now connected to the packaged app.
+Real OS/keychain acceptance and protected recovery UX remain open.
 Incorrect credentials and authentication cancellation must neither initialize an empty book nor
 overwrite existing keys.
 
-## Encrypted-storage integration and remaining activation work
+## Encrypted-storage integration and remaining recovery work
 
-The current Prisma native SQLite engine and `sqlite3` lifecycle/recovery connections read and
-write plaintext files. Encrypting a file only on quit, or decrypting into a temporary on-disk
+Development storage and legacy `sqlite3` lifecycle/recovery helpers read and write plaintext
+files. Packaged startup does not open those paths: new profiles require authenticated encrypted
+storage, and existing plaintext profiles are refused without modification.
+Encrypting a file only on quit, or decrypting into a temporary on-disk
 SQLite file at startup, is explicitly not an acceptable implementation of SEC-03.
 
 The [encrypted-storage compatibility probe](encrypted-storage-compatibility.md) now verifies
@@ -70,9 +76,9 @@ with a libSQL candidate against the pinned/generated Prisma client. It passed un
 packaging-toolchain, and Electron Node runtimes. The candidate is now integrated into
 [the service layer, migration runner, and packaged dependencies](encrypted-service-integration.md).
 The complete suite runs with either native or encrypted storage. A revocable session prevents
-deferred work from reopening closed storage, but authentication and the app lock controller are
-not yet implemented. The dependency override and CBC/backup-envelope distinction still require
-review before changing live storage. Isolate any Prisma or Electron upgrade and rerun both
+deferred work from reopening closed storage; the app lock controller now owns opening and
+closing that session. The dependency override and CBC/backup-envelope distinction still require
+security review. Isolate any Prisma or Electron upgrade and rerun both
 complete storage suites and the packaged checks.
 
 The integration must cover **all** connections: regular queries, migration initialization,
@@ -86,11 +92,11 @@ that old plaintext material still exists and do not claim cryptographic protecti
 
 ## Remaining implementation sequence
 
-1. Connect the recovery-confirmed provisioning controller to a protected setup view.
-2. Implement launch authentication and a main-owned lock lifecycle; delay database access until unlock.
-3. Route backup/restore through authenticated encrypted artifacts; preserve encrypted migration
+1. Route backup/restore through authenticated encrypted artifacts; preserve encrypted migration
    behavior and verify crash/failure cases.
-4. Exercise the installed app with real OS authentication/keychain, portable recovery, and legacy conversion.
+2. Implement recoverable legacy conversion and interrupted-profile recovery.
+3. Exercise the installed app with real OS authentication/keychain, OS-session events, portable
+   recovery, and legacy conversion; add durable credential changes and reviewed diagnostics.
 
 Keep the full security gate open until these steps satisfy SEC-01 through SEC-08. Continue tracking
 minimal onboarding, valuation correctness, the ledger verifier, and the representative pilot in

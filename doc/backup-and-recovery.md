@@ -1,7 +1,14 @@
 # Backup and Recovery
 
-Implemented 2026-09-07 for the packaged Apple Silicon macOS app. This is part of
-[personal-use readiness](personal-use-readiness.md), not completion of the security gate.
+Legacy workflow implemented 2026-09-07 for the packaged Apple Silicon macOS app.
+**Status as of 2026-09-23: the workflow below is unavailable for newly encrypted profiles.**
+The current app rejects its raw-SQLite recovery context and disables these controls. Existing
+plaintext profiles are preserved but refused at launch pending verified conversion.
+Authenticated portable backup/restore is the next [personal-use readiness](personal-use-readiness.md)
+blocker. Do not treat manual copies or the setup recovery code as a completed recovery drill.
+
+The instructions below document the previous plaintext implementation and its retained service
+tests, not a supported recovery path for the current encrypted build.
 
 ## Create a backup
 
@@ -21,10 +28,10 @@ Backups contain all database tables, including account names, transactions, sett
 and stored investment data. They do not include external statements, environment variables,
 provider credentials supplied through the environment, or operating-system settings.
 
-**Backups and personal databases are not encrypted.** Newly created backup/database files use
+**These legacy backups and databases are not encrypted.** Their created files use
 owner-only permissions on macOS; that does not provide encryption or protect copies made by
-other software. Use storage appropriate for financial records. App locking, key recovery, and
-encrypted storage remain F-015 work.
+other software. Use storage appropriate for financial records. New protected profiles now use
+encrypted storage and authenticated launch, but existing plaintext copies are not transformed.
 
 ## Restore without replacing the current book
 
@@ -71,11 +78,13 @@ Restore currently accepts only the same bundled migration history and schema. It
 untracked development databases, corrupt files, incompatible histories, and broken references.
 It does not repair damaged books or migrate the selected source file.
 
-For an older backup, restore using the matching older app build into a separate profile first,
+The legacy recovery proposal was to restore an older backup with the matching older app build
+into a separate profile first,
 then upgrade that recovered profile with the newer app. Normal startup migrations create a
 pre-upgrade snapshot beneath the profile's `backups` folder and apply upgrades atomically.
-This older-build recovery procedure still needs a cross-version manual acceptance check;
-do not treat the current same-version test as proof of that whole workflow.
+This older-build recovery procedure still needs a cross-version manual acceptance check and
+verified plaintext-to-encrypted conversion before the current app will open that profile.
+Do not treat the historical same-version test as proof of that whole workflow.
 
 If startup reports a missing selected profile, preserve `active-profile.json`, the profile
 directories, and backups for diagnosis. Do not reset data or substitute an empty file. Recovery
@@ -92,11 +101,12 @@ protection, corrupt/incompatible backups, interrupted publication, profile switc
 failure/cancellation UI behavior. An integration test runs the real recovery handlers and
 SQLite services, substituting native dialog responses and an isolated storage context.
 
-The packaged smoke test navigates to recovery and proves that a service-restored profile opens
-in the real app with the expected balance, then returns to the original profile. It does not
-automate interaction with the macOS file picker or confirmation dialog.
+The historical packaged smoke test proved that a service-restored plaintext profile opened with
+the expected balance and could return to the original profile. Current packaged tests instead
+verify authenticated encrypted startup and refusal of legacy profiles; they do not establish
+encrypted restore. Native picker and confirmation-dialog acceptance remains outstanding.
 
-Before relying on this workflow with personal data:
+After implementing protected backup/restore, adapt and complete this manual acceptance drill:
 
 - [ ] Create a synthetic account and transaction in a disposable packaged profile.
 - [ ] Use the actual native dialogs to export a backup; cancel once and verify no changes.

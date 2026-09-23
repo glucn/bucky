@@ -46,8 +46,9 @@ export const Recovery: React.FC = () => {
   return (
     <section className="max-w-4xl space-y-5" data-testid="recovery-page" aria-busy={busy}>
       <h1 className="text-2xl font-semibold">Backup and recovery</h1>
-      <p>Backups contain your complete book and are <strong>not encrypted</strong>. Choose a private folder,
-        preferably on another device or protected drive. Keep multiple dated copies.</p>
+      <p>This screen currently supports legacy backups, which are <strong>not encrypted</strong>.
+        It is disabled for encrypted profiles until protected backup and recovery is implemented.
+        Keep another authoritative bookkeeping record in the meantime.</p>
       <p>Restore creates a new profile and compares every table’s records and posting balances with the backup.
         Your current book is not overwritten. Backups must match this app’s database version.</p>
       {state && !state.available ? <p>Personal backup and recovery are available in the packaged app. Development and test databases are not personal profiles.</p> : null}

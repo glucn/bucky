@@ -1,129 +1,126 @@
-import { test, expect, chromium, type Browser } from "@playwright/test";
-import { spawn, type ChildProcess } from "child_process";
+import { test, expect, type Page } from "@playwright/test";
 import fs from "fs/promises";
-import os from "os";
 import path from "path";
-import net from "net";
-import { createBackup, restoreBackup, selectProfile } from "../../src/services/backupRecovery";
+import { personalAppHarness } from "./launchPersonalApp";
+import { initializePersonalDatabase, openSqlite, querySql, closeSqlite } from "../../src/services/localDatabase";
 
-const executable = path.resolve("out/Bucky-darwin-arm64/Bucky.app/Contents/MacOS/Bucky");
+const passphrase = "Synthetic packaged unlock passphrase 81c";
+const sentinel = "Private packaged account 2d054f";
+async function denied(page: Page, channel = "get-accounts") {
+  return page.evaluate(async (name) => {
+    try { await (window as any).electron.ipcRenderer.invoke(name); return "unexpected success"; }
+    catch (error) { return String(error); }
+  }, channel);
+}
+async function unlock(page: Page) {
+  await page.getByLabel("Authentication method").selectOption("passphrase");
+  await page.getByLabel("Passphrase", { exact: true }).fill(passphrase);
+  await page.getByRole("button", { name: "Unlock", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Accounts", exact: true }).first()).toBeVisible();
+}
+async function filesUnder(directory: string): Promise<string[]> {
+  const result: string[] = [];
+  for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+    const filename = path.join(directory, entry.name);
+    if (entry.isDirectory()) result.push(...await filesUnder(filename));
+    else if (entry.isFile()) result.push(filename);
+  }
+  return result;
+}
 
-test("packaged app preserves personal data and reopens a verified restored profile without a dev server", async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "bucky-packaged-"));
-  let child: ChildProcess | undefined;
-  let browser: Browser | undefined;
-  let output = "";
-  const isRunning = () => child && child.exitCode === null && child.signalCode === null;
-  const launch = async () => {
-    const server = net.createServer();
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    const port = (server.address() as net.AddressInfo).port;
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    output = "";
-    child = spawn(executable, [`--user-data-dir=${directory}`, `--remote-debugging-port=${port}`], {
-      cwd: directory,
-      // Installed-app mode must win over development variables inherited from a shell.
-      env: { ...process.env, NODE_ENV: "test", VITEST: "true", ELECTRON_IS_DEV: "1" },
-    });
-    child.stdout?.on("data", (chunk) => { output += chunk; });
-    child.stderr?.on("data", (chunk) => { output += chunk; });
-    let launchError: Error | undefined;
-    child.on("error", (error) => { launchError = error; });
-    await expect.poll(async () => {
-      if (launchError) throw launchError;
-      if (!isRunning()) throw new Error(`Packaged app exited: ${output}`);
-      try { return (await fetch(`http://127.0.0.1:${port}/json/version`)).ok; }
-      catch { return false; }
-    }, { timeout: 30_000 }).toBe(true);
-    browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
-    const context = browser.contexts()[0];
-    await expect.poll(() => context.pages().length).toBeGreaterThan(0);
-    const page = context.pages()[0];
-    await page.getByText("Bucky", { exact: true }).waitFor({ timeout: 10_000 });
-    expect(page.url()).toMatch(/^file:/);
-    await expect(page.getByRole("link", { name: "Accounts", exact: true }).first()).toBeVisible();
-    return page;
-  };
-  const stop = async () => {
-    if (!isRunning()) return;
-    const exited = new Promise<void>((resolve) => child!.once("exit", () => resolve()));
-    // The application handles SIGTERM through app.quit(), including DB disconnect.
-    child!.kill("SIGTERM");
-    await Promise.race([exited, new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Packaged app did not quit")), 5000))]);
-    await browser?.close().catch(() => {});
-    browser = undefined;
-  };
+test("packaged setup, encrypted persistence, restart locking, and renderer revocation", async () => {
+  const app = await personalAppHarness();
   try {
-    const page = await launch();
-    const response = await page.evaluate(() => (window as any).electron.ipcRenderer.invoke("add-account", {
-      name: "Packaged persistence check", type: "user", subtype: "asset", currency: "CAD",
-    }));
+    const page = await app.launch();
+    expect(page.url()).toMatch(/^file:/);
+    await expect(page.getByRole("heading", { name: "Protect your new book" })).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath("protected-setup.png") });
+    expect(await denied(page)).toMatch(/locked/i);
+    expect(await denied(page, "reset-all-data")).toMatch(/development-only/i);
+    const book = path.join(app.directory, "profiles/default/book.sqlite");
+    await expect(fs.stat(book)).rejects.toThrow();
+    await page.getByLabel("Base currency").selectOption("CAD");
+    await page.getByLabel("Authentication method").selectOption("passphrase");
+    await page.getByLabel("Passphrase", { exact: true }).fill(passphrase);
+    await page.getByLabel("Repeat passphrase").fill(passphrase);
+    await page.getByRole("button", { name: "Create recovery code" }).click();
+    const recovery = await page.getByTestId("recovery-code").innerText();
+    await expect(fs.stat(book)).rejects.toThrow();
+    await page.getByLabel("Re-enter saved recovery code").fill("wrong code");
+    await page.getByRole("button", { name: "Confirm and create encrypted book" }).click();
+    await expect(page.getByRole("alert")).toContainText("Unable to confirm recovery");
+    await expect(fs.stat(book)).rejects.toThrow();
+    await page.getByLabel("Re-enter saved recovery code").fill(recovery);
+    await page.getByRole("button", { name: "Confirm and create encrypted book" }).click();
+    await expect(page.getByRole("heading", { name: "Unlock Bucky" })).toBeVisible();
+    expect(await denied(page)).toMatch(/locked/i);
+    await unlock(page);
+    const response = await page.evaluate((name) => (window as any).electron.ipcRenderer.invoke("add-account", {
+      name, type: "user", subtype: "asset", currency: "CAD",
+    }), sentinel);
     expect(response.success).toBe(true);
-    const resetFailure = await page.evaluate(async () => {
-      try { await (window as any).electron.ipcRenderer.invoke("reset-all-data"); return null; }
-      catch (error) { return String(error); }
-    });
-    expect(resetFailure).toMatch(/development-only/i);
-    expect(await page.evaluate(() => typeof (window as any).electron.ipcRenderer.on)).toBe("undefined");
+    await page.evaluate((accountId) => (window as any).electron.setOpeningBalance({ accountId, displayAmount: 246.8, asOfDate: "2026-09-01" }), response.account.id);
     expect(await page.evaluate(() => window.open("https://example.com") === null)).toBe(true);
     expect(await page.evaluate(() => {
-      const script = document.createElement("script");
-      script.textContent = "document.body.dataset.unexpectedInline = 'executed'";
-      document.body.appendChild(script);
-      return document.body.dataset.unexpectedInline;
+      const script = document.createElement("script"); script.textContent = "document.body.dataset.unexpectedInline = 'executed'";
+      document.body.appendChild(script); return document.body.dataset.unexpectedInline;
     })).toBeUndefined();
-    await page.evaluate((accountId) => (window as any).electron.setOpeningBalance({
-      accountId, displayAmount: 246.80, asOfDate: "2026-09-01",
-    }), response.account.id);
-    await page.getByRole("link", { name: "Accounts", exact: true }).first().click();
-    await expect(page.getByText("Packaged persistence check", { exact: true }).first()).toBeVisible();
-    await stop();
-    expect(output).not.toContain("Packaged persistence check");
-    const reopened = await launch();
-    const accounts = await reopened.evaluate(() => (window as any).electron.ipcRenderer.invoke("get-accounts"));
-    expect(accounts.some((account: { name: string }) => account.name === "Packaged persistence check")).toBe(true);
-    expect(await fs.stat(path.join(directory, "profiles/default/book.sqlite"))).toBeTruthy();
-    await expect(fs.stat(path.join(directory, "prisma/test.db"))).rejects.toThrow();
-
-    await reopened.getByRole("link", { name: "Backup & recovery", exact: true }).click();
-    await expect(reopened.getByTestId("recovery-page")).toBeVisible();
-    await expect(reopened.getByRole("button", { name: "Create backup", exact: true })).toBeEnabled();
-    const initialState = await reopened.evaluate(() => (window as any).electron.getRecoveryState());
-    expect(initialState.data.activeProfile).toBe("default");
-
-    // Native dialogs are exercised via IPC integration tests with picker responses substituted.
-    // Here real service fixtures exercise packaged startup/Prisma against an actual restored book.
-    const migrations = path.resolve("prisma/migrations");
-    const saved = await createBackup(path.join(directory, "profiles/default/book.sqlite"), path.join(directory, "backup.sqlite"), migrations);
-    const restored = await restoreBackup(saved.path, directory, migrations);
-    expect(restored.summary).toEqual(saved.summary);
-    await selectProfile(directory, restored.profileId, migrations);
-    await stop();
-    const recovered = await launch();
-    const recoveryState = await recovered.evaluate(() => (window as any).electron.getRecoveryState());
-    expect(recoveryState.data.activeProfile).toBe(restored.profileId);
-    const recoveredBalance = await recovered.evaluate((accountId) =>
-      (window as any).electron.ipcRenderer.invoke("get-account-balance", accountId), response.account.id);
-    expect(recoveredBalance).toEqual({ success: true, balance: 246.8 });
-    expect(output).not.toContain("Packaged persistence check");
-    await recovered.getByRole("link", { name: "Accounts", exact: true }).first().click();
-    await expect(recovered.getByText("Packaged persistence check", { exact: true }).first()).toBeVisible();
-    await selectProfile(directory, "default", migrations);
-    await stop();
-    const original = await launch();
-    expect((await original.evaluate(() => (window as any).electron.getRecoveryState())).data.activeProfile).toBe("default");
-    await stop();
-  } catch (error) {
-    await test.info().attach("packaged-startup.log", { body: output, contentType: "text/plain" });
-    throw error;
-  } finally {
-    if (isRunning()) {
-      const exited = new Promise<void>((resolve) => child!.once("exit", () => resolve()));
-      child!.kill("SIGKILL");
-      await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 5000))]);
+    expect(await page.evaluate(() => typeof (window as any).electron.ipcRenderer.on)).toBe("undefined");
+    await page.evaluate(() => localStorage.setItem("private-session-marker", "must disappear"));
+    await page.getByRole("button", { name: "Lock Bucky" }).click().catch(() => {});
+    const locked = await app.pageAfter(page);
+    expect(await denied(locked)).toMatch(/locked/i);
+    expect(await locked.evaluate(() => localStorage.getItem("private-session-marker"))).toBeNull();
+    expect(await locked.locator("body").innerText()).not.toContain(sentinel);
+    await unlock(locked);
+    expect(await locked.evaluate((id) => (window as any).electron.ipcRenderer.invoke("get-account-balance", id), response.account.id))
+      .toEqual({ success: true, balance: 246.8 });
+    await app.stop();
+    const reopened = await app.launch();
+    await expect(reopened.getByRole("heading", { name: "Unlock Bucky" })).toBeVisible();
+    expect(await denied(reopened)).toMatch(/locked/i);
+    await reopened.screenshot({ path: test.info().outputPath("locked-profile.png") });
+    await reopened.getByLabel("Authentication method").selectOption("passphrase");
+    await reopened.getByLabel("Passphrase", { exact: true }).fill("Incorrect synthetic passphrase");
+    await reopened.getByRole("button", { name: "Unlock", exact: true }).click();
+    await expect(reopened.getByRole("alert")).toContainText("Unable to unlock");
+    expect(await denied(reopened)).toMatch(/locked/i);
+    // Exercise the real retry delay, without disabling authentication for the fixture.
+    await expect.poll(() => reopened.evaluate(async (secret) => {
+      try { await (window as any).electron.security.unlock({ mode: "passphrase", passphrase: secret }); return true; }
+      catch { return false; }
+    }, passphrase), { intervals: [1200], timeout: 10_000 }).toBe(true);
+    expect(await reopened.evaluate((id) => (window as any).electron.ipcRenderer.invoke("get-account-balance", id), response.account.id))
+      .toEqual({ success: true, balance: 246.8 });
+    const ordinary = await openSqlite(book);
+    try { await expect(querySql(ordinary, "SELECT name FROM Account")).rejects.toThrow(); } finally { await closeSqlite(ordinary); }
+    for (const filename of await filesUnder(app.directory)) {
+      const bytes = await fs.readFile(filename);
+      for (const privateValue of [sentinel, passphrase, recovery]) expect(bytes.includes(Buffer.from(privateValue)), filename).toBe(false);
     }
-    await browser?.close().catch(() => {});
-    await fs.rm(directory, { recursive: true, force: true });
-  }
+    expect(app.output()).not.toContain(sentinel);
+    expect(app.output()).not.toContain(passphrase);
+    expect(app.output()).not.toContain(recovery);
+    await app.stop();
+  } catch (error) {
+    await test.info().attach("packaged-startup.log", { body: app.output(), contentType: "text/plain" });
+    await test.info().attach("packaged-state.json", { body: JSON.stringify(await app.diagnostics(), null, 2), contentType: "application/json" });
+    throw error;
+  } finally { await app.dispose(); }
+});
+
+test("packaged startup preserves a legacy plaintext book and requires explicit recovery", async () => {
+  const app = await personalAppHarness();
+  try {
+    const book = path.join(app.directory, "profiles/default/book.sqlite");
+    await initializePersonalDatabase(book, path.resolve("prisma/migrations"));
+    const before = await fs.readFile(book);
+    const page = await app.launch();
+    await expect(page.getByRole("heading", { name: "Recovery required" })).toBeVisible();
+    await expect(page.getByRole("alert")).toContainText("plaintext");
+    expect(await denied(page)).toMatch(/locked/i);
+    expect(await fs.readFile(book)).toEqual(before);
+    await app.stop();
+    expect(await fs.readFile(book)).toEqual(before);
+  } finally { await app.dispose(); }
 });

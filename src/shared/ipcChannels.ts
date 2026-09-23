@@ -1,5 +1,10 @@
 // Explicit IPC inventory. Review both preload exposure and main-process authorization when adding channels.
 export const APP_IPC_CHANNELS = [
+  "get-security-state",
+  "begin-protected-setup",
+  "confirm-protected-setup",
+  "unlock-personal-profile",
+  "lock-personal-profile",
   "add-account",
   "add-account-to-group",
   "add-trade-cash-account",
@@ -100,3 +105,5 @@ export const APP_IPC_CHANNELS = [
 const allowed = new Set<string>(APP_IPC_CHANNELS);
 export const isAppIpcChannel = (channel: unknown): channel is string => typeof channel === "string" && allowed.has(channel);
 export const DEVELOPMENT_ONLY_CHANNELS = new Set(["reset-all-data", "seed-enrichment-run-summary"]);
+export const SECURITY_IPC_CHANNELS = new Set(["get-security-state", "begin-protected-setup", "confirm-protected-setup",
+  "unlock-personal-profile", "lock-personal-profile"]);

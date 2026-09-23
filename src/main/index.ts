@@ -4,7 +4,9 @@ console.log("==========================================");
 console.log("MAIN PROCESS STARTING - VERSION 2");
 console.log("==========================================");
 
-import { app, BrowserWindow, ipcMain as electronIpcMain } from "electron";
+import { app, BrowserWindow, powerMonitor, ipcMain as electronIpcMain, type Session } from "electron";
+import path from "path";
+import { randomUUID } from "crypto";
 import { databaseService } from "../services/database";
 import { liabilityProfileService } from "../services/liabilityProfileService";
 import { resolveImportAccounts } from "../services/importUtils";
@@ -21,6 +23,12 @@ import { setupOverviewIpcHandlers } from "./ipcHandlers.overview";
 import { setupReportingIpcHandlers } from "./ipcHandlers.reporting";
 import { setupRecoveryIpcHandlers } from "./ipcHandlers.recovery";
 import { createSecureIpc, protectWindow, applicationContentSecurityPolicy } from "./ipcSecurity";
+import { setupSecurityIpcHandlers } from "./ipcHandlers.security";
+import { PersonalSecurity } from "./personalSecurity";
+import { createOsKeychain } from "./osKeychain";
+import { osAuthentication } from "./osAuthentication";
+import { enrichmentRuntimeService } from "../services/enrichmentRuntimeService";
+import { installPersonalLockEvents } from "./personalLockEvents";
 
 // Add this at the top of the file for type safety with the injected variable
 // eslint-disable-next-line no-var
@@ -29,15 +37,39 @@ declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 
 let mainWindow: BrowserWindow | null = null;
+let personalSecurity: PersonalSecurity | undefined;
+let personalSession: Session | undefined;
+const singleInstance = !app.isPackaged || app.requestSingleInstanceLock();
+if (!singleInstance) app.quit();
 const getAppUrl = () => app.isPackaged ? MAIN_WINDOW_WEBPACK_ENTRY : "http://localhost:3000";
 const ipcMain = createSecureIpc(electronIpcMain, { getWindow: () => mainWindow,
-  getAppUrl, isPackaged: () => app.isPackaged });
+  getAppUrl, isPackaged: () => app.isPackaged,
+  runData: (action) => personalSecurity ? personalSecurity.runData(action) : Promise.reject(new Error("Application is locked")) });
 
 // Initialize database and create window
 async function initialize() {
   console.log("Starting initialization...");
   try {
-    // Initialize database
+    if (app.isPackaged) {
+      personalSecurity = new PersonalSecurity(app.getPath("userData"), path.join(process.resourcesPath, "migrations"), {
+        keychain: createOsKeychain(), osAuthenticationAvailable: osAuthentication.available,
+        authenticateOS: osAuthentication.authenticate, database: databaseService, enrichment: enrichmentRuntimeService,
+        now: Date.now,
+        onStateChanged: (state) => mainWindow?.webContents.send("security-state-changed", state),
+        onRevoked: () => {
+          const previous = mainWindow;
+          const session = personalSession;
+          const reopen = Boolean(previous && !previous.isDestroyed() && !isQuitting);
+          mainWindow = null; personalSession = undefined;
+          previous?.destroy();
+          if (reopen) createWindow();
+          return session?.clearStorageData();
+        },
+      });
+      await personalSecurity.initialize();
+      installPersonalLockEvents(powerMonitor, () => personalSecurity!.lock());
+    } else {
+    // Development/test storage remains independent of personal authentication.
     console.log("Initializing database...");
     await databaseService.initialize();
     console.log("Database initialized successfully");
@@ -50,6 +82,7 @@ async function initialize() {
       console.log("Default accounts ensured");
     } else {
       console.log("Accounts already exist. Skipping default account creation.");
+    }
     }
 
     // Set up IPC handlers
@@ -70,6 +103,7 @@ async function initialize() {
 // Set up IPC handlers
 function setupIpcHandlers() {
   console.log("Registering IPC handlers...");
+  setupSecurityIpcHandlers(ipcMain, () => personalSecurity);
 
   // Remove any existing handlers first
   ipcMain.removeHandler("get-accounts");
@@ -1062,8 +1096,13 @@ function createWindow() {
       webSecurity: true,
       webviewTag: false,
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
+      // No financial UI metadata (including existing localStorage preferences) is persisted
+      // in the personal renderer. Locking destroys this renderer and uses a new partition.
+      ...(app.isPackaged ? { partition: `bucky-private-${randomUUID()}` } : {}),
     },
   });
+  const createdWindow = mainWindow;
+  if (app.isPackaged) personalSession = mainWindow.webContents.session;
 
   // Set CSP headers
   mainWindow.webContents.session.webRequest.onHeadersReceived(
@@ -1090,13 +1129,16 @@ function createWindow() {
   }
 
   mainWindow.on("closed", () => {
-    mainWindow = null;
+    if (mainWindow === createdWindow) {
+      mainWindow = null;
+      if (!isQuitting) void personalSecurity?.lock();
+    }
   });
 }
 
 // This method will be called when Electron has finished initialization
 app.whenReady().then(() => {
-  if (process.env.PLAYWRIGHT_PREPARE_ONLY === "1") {
+  if (!singleInstance || (!app.isPackaged && process.env.PLAYWRIGHT_PREPARE_ONLY === "1")) {
     app.quit();
     return;
   }
@@ -1125,8 +1167,7 @@ app.on("before-quit", (event) => {
   isQuitting = true;
   event.preventDefault();
 
-  void databaseService
-    .disconnect()
+  void (personalSecurity ? personalSecurity.lock() : databaseService.disconnect())
     .catch((error) => {
       console.error("Error disconnecting database during quit:", error);
     })

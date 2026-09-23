@@ -1,8 +1,8 @@
 # Protected profile setup
 
-Implemented 2026-09-09 as a trusted-process provisioning controller. It is not yet connected to
-the renderer, IPC, launch authentication, or personal startup. Do not run it manually against a
-real application profile: the current startup path still expects plaintext storage.
+Implemented 2026-09-09 as a trusted-process provisioning controller; connected to
+[authenticated personal startup and the protected setup view](authenticated-launch.md) as of
+2026-09-23. Do not invoke this internal controller manually against an existing profile.
 
 ## Setup contract
 
@@ -12,7 +12,7 @@ real application profile: the current startup path still expects plaintext stora
    and an explicitly selected ordinary credential mode. It refuses existing, incomplete, or
    interrupted profiles. It returns a setup ID and one-time recovery code to the trusted caller;
    no book, envelope, directory, or selection marker is written yet.
-2. The future protected setup view presents that code and asks the user to save it separately.
+2. The protected setup view presents that code and asks the user to save it separately.
    `confirm(setupId, reenteredRecoveryCode)` must recover the exact pending data key before any
    filesystem provisioning. A checkbox alone is insufficient. Wrong input leaves setup pending
    and creates nothing. A confirmed setup ID is consumed even if provisioning later fails.
@@ -32,8 +32,8 @@ another device or durable medium; it verifies that the re-entered code actually 
 
 `cancel()` invalidates pending work and waits for an active operation to settle. Cancellation
 before publication removes that operation's staged files. Publication is the commit point;
-cancellation arriving after publication never deletes the newly created profile. The future
-main lock controller must inspect state after cancellation rather than assume nothing was created.
+cancellation arriving after publication never deletes the newly created profile. The main lock
+controller inspects state after cancellation rather than assuming nothing was created.
 
 ## Filesystem and failure behavior
 
@@ -73,9 +73,10 @@ including wrong-code refusal, persisted-envelope recovery, and reopening the enc
 That smoke check loads project declarations with `TS_NODE_FILES=true`; loading only transitively
 imported declarations omits Electron's `Process.resourcesPath` augmentation.
 
-Still required: a protected setup UI, a real OS/passphrase authentication boundary, fail-closed
-startup, lock/relock and OS-event handling, encrypted portable backups, interrupted-setup recovery
-UX, legacy conversion, and real keychain/user recovery drills. Existing credential-envelope
+The setup UI, main-owned OS/passphrase boundary, fail-closed startup, lock/relock, and OS-event
+wiring are now implemented; see the authenticated-launch note for newer verification evidence.
+Still required: encrypted portable backups, interrupted-setup recovery UX, legacy conversion,
+and real keychain/user recovery drills. Existing credential-envelope
 replacement and passphrase-change persistence are not provided by this initial-creation controller.
 BL-022's reset modes and onboarding-state policy also remain open; this controller establishes
 explicit base-currency-before-seeding only for newly provisioned encrypted profiles.

@@ -25,13 +25,17 @@ application data directory at `profiles/default/book.sqlite`, independently of t
 working directory, and test environment variables. A `--user-data-dir=/absolute/path` argument
 selects another application data directory; the packaged smoke test uses a disposable directory.
 
-On first launch, bundled migrations create the personal schema. Upgrades verify migration
-history/checksums, create a consistent pre-upgrade SQLite snapshot under the profile's `backups`
-directory, and apply pending migrations atomically. Unknown schemas or migration drift are
-rejected rather than reset. Development data is not automatically copied into the personal profile.
+First launch requires explicit currency selection, authentication setup, and recovery-code
+confirmation before creating an encrypted book. Every launch then requires authentication
+before accessing financial records. See [protected launch](doc/F-015-security-gate/authenticated-launch.md).
+Authenticated upgrades verify migration history/checksums, create encrypted pre-upgrade snapshots
+under the profile's `backups` directory, and apply pending migrations atomically. Unknown schemas
+or migration drift are rejected rather than reset. Development data is not automatically copied.
 
-The packaged app includes [backup and separate-profile recovery](doc/backup-and-recovery.md).
-App locking, database/backup encryption, and the remaining
+**Do not rely on this build as your sole bookkeeping record.** Portable encrypted backup/restore
+and verified legacy conversion are not implemented. Existing plaintext profiles are preserved
+but refused at launch, and the earlier raw-SQLite recovery UI is disabled for encrypted profiles.
+Real OS authentication/keychain acceptance and the remaining
 [personal-use readiness gates](doc/personal-use-readiness.md) are still outstanding.
 
 ## Enrichment Provider Configuration (F-017)
@@ -282,17 +286,14 @@ npm run test:db:push
 
 ### Personal Book
 
-In the packaged app, open **Backup & recovery**. **Create backup** writes a uniquely named,
-consistent SQLite snapshot to a folder you choose, including committed WAL data. Files are
-unencrypted: use private storage and keep another copy away from the device.
+Protected backup/restore is still under development. The **Backup & recovery** controls are
+disabled for encrypted profiles rather than exporting plaintext or claiming a verified recovery
+path. The setup recovery code must be saved separately, but the code alone is not a backup.
+Keep another authoritative bookkeeping record until encrypted backup and restore are delivered
+and tested with your workflow.
 
-**Restore backup into new profile** validates a matching-version backup and compares every
-table's records and posting balances before publishing a separate profile. It never overwrites
-the current book. Select the recovered profile, confirm **Use on next launch**, then quit Bucky
-completely and reopen it. The original profile remains selectable.
-
-See [Backup and Recovery](doc/backup-and-recovery.md) for verification, compatibility limits,
-and a manual acceptance check.
+See [Backup and Recovery](doc/backup-and-recovery.md) for the historical plaintext implementation,
+its limitations, and the manual acceptance drill to complete after protected recovery is ready.
 
 ### Development Data
 

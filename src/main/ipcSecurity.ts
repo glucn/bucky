@@ -1,5 +1,5 @@
 import type { BrowserWindow, IpcMain } from "electron";
-import { DEVELOPMENT_ONLY_CHANNELS, isAppIpcChannel } from "../shared/ipcChannels";
+import { DEVELOPMENT_ONLY_CHANNELS, isAppIpcChannel, SECURITY_IPC_CHANNELS } from "../shared/ipcChannels";
 
 export type IpcRegistrar = Pick<IpcMain, "handle" | "removeHandler">;
 
@@ -29,6 +29,7 @@ export function createSecureIpc(transport: IpcRegistrar, context: {
   getWindow: () => BrowserWindow | null;
   getAppUrl: () => string;
   isPackaged: () => boolean;
+  runData?: (action: () => Promise<any>) => Promise<any>;
 }): IpcRegistrar {
   return {
     removeHandler: (channel) => transport.removeHandler(channel),
@@ -44,6 +45,10 @@ export function createSecureIpc(transport: IpcRegistrar, context: {
         // Installed-app state is authoritative even when NODE_ENV/VITEST are inherited.
         if (context.isPackaged() && DEVELOPMENT_ONLY_CHANNELS.has(channel)) {
           throw new Error("This operation is development-only");
+        }
+        if (context.isPackaged() && !SECURITY_IPC_CHANNELS.has(channel)) {
+          if (!context.runData) throw new Error("Application is locked");
+          return context.runData(async () => handler(event, ...args));
         }
         return handler(event, ...args);
       });

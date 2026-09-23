@@ -1,8 +1,9 @@
 # Encrypted storage service integration
 
-Implemented 2026-09-08. This is a main-process storage capability, **not enabled personal-app
-encryption or a completed F-015 gate**. Startup and the recovery UI still use plaintext storage
-until authenticated setup, locking, protected backups, and legacy conversion are integrated.
+Implemented 2026-09-08 and connected to [authenticated personal launch](authenticated-launch.md)
+as of 2026-09-23. New packaged profiles use encrypted storage; **F-015 remains incomplete**.
+Existing plaintext books are refused, and the raw-SQLite recovery UI is disabled for encrypted
+profiles until authenticated portable backup/restore is implemented.
 
 ## Connection contract
 
@@ -10,7 +11,7 @@ until authenticated setup, locking, protected backups, and legacy conversion are
 a 32-byte key from a trusted main-process caller. It closes the previous connection, applies
 bundled migrations through encrypted storage, and publishes the Prisma connection only after
 successful connection. It has no renderer IPC entry point and does not authenticate the caller.
-The future lock controller must authenticate before calling it.
+The main-owned lock controller authenticates before calling it.
 If close races with initialization, it cancels publication; the controller must also await the
 in-progress open request before declaring migration/key teardown finished. A migration already
 underway may finish its atomic transaction before that request settles.
@@ -77,22 +78,23 @@ npm exec --yes --package=node@22 -- node node_modules/@electron-forge/cli/dist/e
 ```
 
 Check port 3000 before Playwright; never terminate an occupying process without approval.
-The packaged suite contains two distinct checks:
+The packaged suite contains three distinct checks:
 
-- Launch the installed app with isolated personal data, verify persistence/security boundaries,
-  and reopen a verified restored profile. This still exercises the plaintext application workflow.
+- Launch the packaged app with isolated personal data, complete recovery-confirmed setup,
+  unlock with a passphrase, verify encrypted persistence and security boundaries, explicitly
+  relock, and restart locked. Wrong credentials leave data IPC unavailable.
+- Refuse a legacy plaintext profile and preserve its bytes without opening it for financial use.
 - Load **shipped ASAR dependencies** with development Electron's embedded Node, apply shipped
   migrations to a synthetic encrypted book, write/reopen with shipped Prisma, reject wrong-key
   reads, and assert that no dependency fell back to the checkout's `node_modules`. This checks
-  packaged assets/native ABI, not the future authenticated application workflow. It does not
+  packaged assets/native ABI, independently of the authenticated application workflow. It does not
   modify or bypass the installed application's security fuses.
 
 ## Remaining gates
 
-The [protected provisioning controller](protected-profile-setup.md) now persists new profiles
-only after recovery confirmation. Connect it to a setup view and implement OS/passphrase
-authentication, startup-before-database locking, OS lock/suspend handling, renderer-data clearing,
-and enrichment cancellation. Then integrate authenticated backup/restore and recoverable legacy
-conversion before enabling personal encryption. Crash/disk-full recovery and real OS/user recovery
+The [protected provisioning controller](protected-profile-setup.md), setup view, authentication,
+lock lifecycle, renderer-data clearing, and enrichment cancellation are now integrated.
+Authenticated backup/restore and recoverable legacy conversion remain open.
+Crash/disk-full recovery and real OS/user recovery
 drills remain acceptance work. Full-suite success is compatibility evidence, not a cryptographic
 audit or permission to use the application as the sole financial record.

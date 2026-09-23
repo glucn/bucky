@@ -1,7 +1,25 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { parseToStandardDate, isValidStandardDate } from './dateUtils';
 
 describe('dateUtils', () => {
+  it.each(['Europe/Tallinn', 'Pacific/Kiritimati', 'America/Vancouver', 'UTC'])(
+    'preserves calendar dates and rejects rollover in %s', (zone) => {
+      vi.stubEnv('TZ', zone);
+      try {
+        for (const input of ['2026-09-01', '20260901', '9/1/2026', '2026/9/1']) {
+          expect(parseToStandardDate(input)).toBe('2026-09-01');
+        }
+        expect(parseToStandardDate('2024-02-29')).toBe('2024-02-29');
+        for (const input of ['2025-02-29', '20250229', '2/29/2025', '2025/2/29']) {
+          expect(parseToStandardDate(input)).toBeNull();
+        }
+        expect(isValidStandardDate('2025-02-29')).toBe(false);
+        expect(isValidStandardDate('2024-02-29')).toBe(true);
+        // Instant inputs retain their existing UTC-normalization semantics.
+        expect(parseToStandardDate('2026-09-01T00:00:00+03:00')).toBe('2026-08-31');
+      } finally { vi.unstubAllEnvs(); }
+    },
+  );
   describe('parseToStandardDate', () => {
     it('should handle YYYY-MM-DD format', () => {
       expect(parseToStandardDate('2025-10-26')).toBe('2025-10-26');

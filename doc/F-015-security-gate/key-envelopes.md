@@ -2,8 +2,9 @@
 
 Implemented 2026-09-08 as a trusted-process foundation. The
 [protected profile provisioning controller](protected-profile-setup.md) now persists and verifies
-new envelopes with encrypted books. It is **not yet wired into the app's setup UI, locking, or
-startup**. Existing personal books and backups remain plaintext.
+new envelopes with encrypted books. As of 2026-09-23 it is connected to the
+[protected setup UI and authenticated launch](authenticated-launch.md). Existing plaintext
+books are refused without modification; protected portable backups are not yet implemented.
 
 ## Version 1 format
 
@@ -34,7 +35,7 @@ The implementation is application key-envelope code, not a new cipher or a crypt
   supply different work/memory parameters.
 - **Independent recovery:** a generated random 32-byte secret, encoded as
   `bucky-recovery-v1-<base64url>`, wraps the same data key independently of the keychain. It is
-  generated for every new envelope. It must be presented and confirmed during future setup,
+  generated for every new envelope. It is presented and confirmed during protected setup,
   not silently discarded or stored beside the envelope.
 
 Ordinary setup requires a keychain or explicitly selected passphrase mode. If a requested
@@ -45,10 +46,10 @@ Passphrases require at least 12 Unicode code points and at most 1024 UTF-8 bytes
 Unicode are not silently normalized. The UI must communicate these semantics. Length validation
 does not establish that a human-chosen passphrase has adequate entropy.
 
-Keychain retrieval is not authentication. Before calling `unlockWithKeychain`, the future
-main-owned lock must complete an OS authentication challenge. No key-returning function may
-be exposed directly through preload. The one-time recovery code needs a deliberate protected
-presentation/confirmation flow; it must not become general renderer-readable state.
+Keychain retrieval is not authentication. Before calling `unlockWithKeychain`, the main-owned
+lock completes an OS authentication challenge. No data-key-returning function is exposed through
+preload. The one-time recovery code is presented only in the dedicated setup/confirmation flow;
+it is not part of general security state or financial views.
 
 ## Recovery and credential changes
 
@@ -76,7 +77,7 @@ profile mismatch, parser limits, concurrency limits, and immutable passphrase re
 Keychain tests substitute the OS API; they do not provision or exercise a real macOS keychain item.
 A synthetic passphrase/recovery roundtrip and tamper check also pass on Electron's Node 18.18.2.
 
-Remaining work includes the protected setup UI, existing-envelope update persistence,
+Remaining work includes existing-envelope update persistence,
 real OS authentication/keychain acceptance, portable authenticated backup files,
-lock/relock, and legacy conversion. Do not mark SEC-04
+and legacy conversion. Do not mark SEC-04
 or SEC-05 complete merely because these library tests pass.
