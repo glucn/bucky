@@ -9,6 +9,30 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 12 — Recovery-confirmed separate-profile publication (2026-09-28)
+
+- Added a trusted-process restore controller that verifies an authenticated backup, binds its
+  recovered data key to a distinct profile identity and explicitly chosen replacement credentials,
+  and requires re-entry of a fresh recovery code before publication. The source backup and
+  existing book are preserved; the restored records and posting balances are rechecked against
+  the authenticated preview before publishing.
+- Added verified, explicit next-launch selection, including return to the original profile.
+  No running connection is switched. Pending recovery expires, cancellation drains active work,
+  and cleanup failures retain ownership and block new restores until cleanup can be retried.
+  Late cancellation after publication and failed final sync preserve the published profile.
+- Added 18 tests. Three additional cancellation/cleanup regressions failed before their fixes.
+  Reverified on 2026-11-03: **689 tests across 91 files passed in each storage mode**;
+  TypeScript checking passed.
+  The representative service fixture restores the backup's postings while preserving later
+  balance edits in the original book. A synthetic Electron Node 18.18.2 check passed independent
+  restore into another application-data directory, fresh recovery confirmation, replacement
+  passphrase unlock, explicit selection, and encrypted Prisma reopen.
+- See [the restore contract and limits](F-015-security-gate/protected-profile-restore.md).
+  Rebinding does not rotate the database key or revoke old copies. Application IPC/UI integration,
+  main-owned OS authentication and lock cancellation, native confirmation, and installed/manual
+  recovery drills remain next. The app's encrypted-profile recovery controls are still disabled;
+  SEC-05 and the wider readiness goal are not complete.
+
 ### Batch 11 — Authenticated portable backup files and verified staging (2026-09-23)
 
 - Added a trusted-process export service that snapshots encrypted live storage, validates the
@@ -375,7 +399,7 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation batch
-is **main-owned restore publication and UI integration for the protected backup service**,
+is **main-security lifecycle and UI integration for protected backup/restore**,
 followed by verified legacy conversion,
 interrupted-profile recovery, and the remaining onboarding/reset policy. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance

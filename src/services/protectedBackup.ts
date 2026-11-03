@@ -73,7 +73,8 @@ async function encryptedFile(filename: string) {
 }
 const connect = (filename: string, dataKey: Buffer) => createClient({ url: pathToFileURL(filename).href,
   encryptionKey: dataKey.toString("hex"), concurrency: 1, timeout: 5000 });
-async function summarize(filename: string, dataKey: Buffer, migrations: string, signal?: AbortSignal) {
+/** Trusted caller supplies an authenticated key; this never migrates or rewrites a book. */
+export async function validateEncryptedRecoveryDatabase(filename: string, dataKey: Buffer, migrations: string, signal?: AbortSignal) {
   await encryptedFile(filename);
   const client = connect(filename, dataKey);
   try {
@@ -106,7 +107,7 @@ export async function createProtectedBackup(options: { source: string; destinati
     try { await snapshotDatabase(snapshot, (sql, args) => db.execute({ sql, args })); }
     finally { db.close(); }
     signal?.throwIfAborted();
-    const summary = await summarize(snapshot, dataKey, migrations, signal);
+    const summary = await validateEncryptedRecoveryDatabase(snapshot, dataKey, migrations, signal);
     const manifest = Buffer.from(JSON.stringify({ summary }));
     const header: Header = { format: "bucky-protected-backup", version: 1,
       salt: randomBytes(32).toString("base64url"), nonce: randomBytes(12).toString("base64url"), envelope,
@@ -201,7 +202,7 @@ async function verifyArtifact<T>(options: Omit<VerifyOptions, "credential">,
       await output.sync();
     } finally { await output.close(); }
     signal?.throwIfAborted();
-    const summary = await summarize(databaseFile, dataKey, migrations, signal);
+    const summary = await validateEncryptedRecoveryDatabase(databaseFile, dataKey, migrations, signal);
     if (JSON.stringify(JSON.parse(manifest.toString("utf8"))) !== JSON.stringify({ summary })) throw invalid();
     signal?.throwIfAborted();
     return await action({ databaseFile, dataKey, envelope: header.envelope, summary });

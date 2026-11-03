@@ -19,10 +19,10 @@ receive the encrypted staging path, ephemeral data-key buffer, portable envelope
 summary. The callback must finish all use before returning. Staging is removed and the mutable
 key buffer is cleared afterward, including on failure. No active-profile marker is changed.
 
-The original profile ID remains cryptographically bound to the envelope. A future restore
-controller must explicitly bind credentials to a new profile identity and confirm recovery
-material before publishing that profile; it must not relabel this envelope or simply place it
-under a different profile ID.
+The original profile ID remains cryptographically bound to the envelope. The
+[restore controller](protected-profile-restore.md) now explicitly binds credentials to a new
+profile identity and confirms fresh recovery material before publishing that profile. It does
+not relabel this envelope or simply place it under a different profile ID.
 
 ## Version 1 file layout
 
@@ -91,7 +91,7 @@ An isolated synthetic check also passed under Electron's embedded Node 18.18.2: 
 encrypted book, export, recover with each credential, and reject a modified tag. This loads
 the service from the checkout; it is not an installed UI recovery test.
 
-Next: the main-owned restore controller, credential rebinding and recovery confirmation,
-separate-profile publication/selection, native export/import dialogs, lock-aware cancellation,
-and actual packaged recovery tests. Real cross-device/manual recovery remains an acceptance
+Credential rebinding, recovery confirmation, and separate-profile publication/selection now have
+a trusted-process controller. Next: connect it to the main security lifecycle, native export/import
+dialogs and recovery UI, then run actual packaged recovery tests. Real cross-device/manual recovery remains an acceptance
 gate. See the [readiness log](../personal-use-readiness.md) for full-suite evidence.

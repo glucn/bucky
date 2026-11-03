@@ -1,6 +1,6 @@
 # Requirements: Security Gate (F-015)
 
-Updated 2026-09-23. This feature remains **incomplete and a personal-use release blocker**.
+Updated 2026-09-28. This feature remains **incomplete and a personal-use release blocker**.
 The parent [design](../design.md#security--privacy) requires a launch lock, database encryption,
 and OS-keychain-first key management with an optional user passphrase. IPC hardening alone
 does not satisfy this feature.
@@ -52,8 +52,10 @@ use. Do not invent cryptographic algorithms or silently fall back to plaintext s
   [recovery-confirmed setup](protected-profile-setup.md), now connected to the application.
   Durable credential replacement and portable authenticated backup/recovery remain incomplete.
   The [protected artifact service](protected-backup-artifacts.md) now exports authenticated
-  files and verifies encrypted restore staging independently of the original keychain; UI,
-  credential rebinding, profile publication/activation, and installed recovery are still pending.
+  files and verifies encrypted restore staging independently of the original keychain. The
+  [restore controller](protected-profile-restore.md) adds credential rebinding, recovery
+  confirmation, separate-profile publication, and verified next-launch selection. Main lifecycle
+  and UI integration, native confirmation, and installed recovery are still pending.
 - SEC-06 conversion is not implemented. Existing plaintext books remain untouched and are
   refused at launch. New profiles are encrypted; old plaintext backup files remain plaintext.
   The old raw-SQLite export/restore UI is unavailable for encrypted profiles.

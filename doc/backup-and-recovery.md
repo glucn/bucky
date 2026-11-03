@@ -11,8 +11,10 @@ The instructions below document the previous plaintext implementation and its re
 tests, not a supported recovery path for the current encrypted build.
 
 The new [protected artifact service](F-015-security-gate/protected-backup-artifacts.md) implements
-authenticated encrypted export and verified staging, but is not yet exposed by the app. It does
-not yet publish/select a recovered profile or replace the manual acceptance drill below.
+authenticated encrypted export and verified staging. Its companion
+[restore controller](F-015-security-gate/protected-profile-restore.md) can publish a separate
+profile after fresh recovery confirmation and verify explicit next-launch selection. These
+services are not yet exposed by the app and do not replace the manual acceptance drill below.
 
 ## Create a backup
 

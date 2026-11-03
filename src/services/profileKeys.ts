@@ -124,14 +124,14 @@ async function keychainWrap(header: Header, dataKey: Buffer, keychain: KeychainP
   finally { wrappingKey.fill(0); }
 }
 
-/** Caller must confirm the generated recovery credential before persisting/activating a book. */
-export async function createProfileKeys(profileId: string, options: { keychain?: KeychainProtector; passphrase?: string }):
-Promise<{ envelope: ProfileKeyEnvelope; dataKey: Buffer; recoverySecret: string }> {
+type Protection = { keychain?: KeychainProtector; passphrase?: string };
+async function wrapProfileKeys(profileId: string, dataKey: Buffer, options: Protection):
+Promise<{ envelope: ProfileKeyEnvelope; recoverySecret: string }> {
   if (!profileIdValid(profileId)) throw new Error("Invalid personal profile");
   if (!options.keychain && options.passphrase === undefined) throw new Error("OS keychain or passphrase is required");
   if (options.passphrase !== undefined) validatePassphrase(options.passphrase);
   if (options.keychain && !options.keychain.isAvailable()) throw new Error("OS keychain is unavailable");
-  const dataKey = randomBytes(32), recoveryKey = randomBytes(32);
+  const recoveryKey = randomBytes(32);
   const header: Header = { format: "bucky-profile-key", version: 1, profileId, keyId: randomUUID() };
   try {
     const envelope: ProfileKeyEnvelope = { ...header, check: seal(CHECK, dataKey, header, "key-check"), recovery: seal(dataKey, recoveryKey, header, "recovery") };
@@ -140,9 +140,27 @@ Promise<{ envelope: ProfileKeyEnvelope; dataKey: Buffer; recoverySecret: string 
     }
     if (options.passphrase !== undefined) envelope.passphrase = await passphraseWrap(header, dataKey, options.passphrase);
     validated(envelope);
-    return { envelope, dataKey, recoverySecret: RECOVERY_PREFIX + recoveryKey.toString("base64url") };
-  } catch (error) { dataKey.fill(0); throw error; }
+    return { envelope, recoverySecret: RECOVERY_PREFIX + recoveryKey.toString("base64url") };
+  }
   finally { recoveryKey.fill(0); }
+}
+
+/** Caller must confirm the generated recovery credential before persisting/activating a book. */
+export async function createProfileKeys(profileId: string, options: Protection):
+Promise<{ envelope: ProfileKeyEnvelope; dataKey: Buffer; recoverySecret: string }> {
+  const dataKey = randomBytes(32);
+  try { return { ...await wrapProfileKeys(profileId, dataKey, options), dataKey }; }
+  catch (error) { dataKey.fill(0); throw error; }
+}
+
+/** New profile identity and fresh credential wraps, NOT database rekeying or old-copy revocation.
+ * The caller owns the existing data key and must confirm the new recovery secret before publication.
+ */
+export async function rebindProfileKeys(envelope: ProfileKeyEnvelope, dataKey: Buffer, expectedProfileId: string,
+  newProfileId: string, options: Protection): Promise<{ envelope: ProfileKeyEnvelope; recoverySecret: string }> {
+  verifyProfileKey(envelope, dataKey, expectedProfileId);
+  if (newProfileId === expectedProfileId) throw new Error("Recovery requires a new profile identity");
+  return wrapProfileKeys(newProfileId, dataKey, options);
 }
 
 export function unlockWithRecovery(envelope: ProfileKeyEnvelope, secret: string, expectedProfileId: string): Buffer {

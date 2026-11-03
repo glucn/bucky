@@ -63,6 +63,11 @@ copies and backups still accept their old credentials**. This is rewrapping, not
 or revocation of historical backups. Genuine revocation requires a separate database rekey and
 explicit treatment of existing copies.
 
+`rebindProfileKeys` verifies an existing key and wraps it for a distinct profile identity with
+fresh key/recovery IDs and explicitly chosen replacement credentials. It powers the
+[protected restore controller](protected-profile-restore.md). This does not rotate the underlying
+data key or revoke access to old copies; new recovery material must be confirmed before publication.
+
 The parser rejects unknown fields/versions/KDF identifiers, invalid profile/key IDs, malformed or
 noncanonical encodings, incorrect nonce/tag/key lengths, and input larger than 64 KiB. Credential
 failure and authentication failure do not return raw crypto/keychain errors or partial keys.
@@ -77,7 +82,7 @@ profile mismatch, parser limits, concurrency limits, and immutable passphrase re
 Keychain tests substitute the OS API; they do not provision or exercise a real macOS keychain item.
 A synthetic passphrase/recovery roundtrip and tamper check also pass on Electron's Node 18.18.2.
 
-Remaining work includes existing-envelope update persistence,
-real OS authentication/keychain acceptance, portable authenticated backup files,
-and legacy conversion. Do not mark SEC-04
+Protected backup files and a separate-profile restore controller are now implemented as services.
+Remaining work includes their application/UI integration, existing-envelope update persistence,
+real OS authentication/keychain acceptance, and legacy conversion. Do not mark SEC-04
 or SEC-05 complete merely because these library tests pass.

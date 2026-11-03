@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { randomBytes, createCipheriv, createDecipheriv } from "crypto";
 import { createProfileKeys, unlockWithRecovery, unlockWithPassphrase, unlockWithKeychain,
-  replacePassphrase, bindKeychain, portableKeyEnvelope, parseKeyEnvelope, serializeKeyEnvelope } from "./profileKeys";
+  replacePassphrase, bindKeychain, rebindProfileKeys, portableKeyEnvelope, parseKeyEnvelope, serializeKeyEnvelope } from "./profileKeys";
 
 const passphrase = "several separate words for testing";
 const newPassphrase = "a different set of recovery words";
@@ -23,6 +23,38 @@ function keychain() {
 }
 
 describe("Authenticated profile key envelopes", () => {
+  it("binds a recovered data key to a new profile identity with fresh recovery and chosen credentials", async () => {
+    const original = await createProfileKeys("default", { keychain: keychain() });
+    const before = serializeKeyEnvelope(original.envelope);
+    const rebound = await rebindProfileKeys(original.envelope, original.dataKey, "default", "restored-new", { passphrase: newPassphrase });
+    expect(rebound.envelope.profileId).toBe("restored-new");
+    expect(rebound.envelope.keyId).not.toBe(original.envelope.keyId);
+    expect(rebound.envelope.keychain).toBeUndefined();
+    expect(rebound.recoverySecret).not.toBe(original.recoverySecret);
+    expect(unlockWithRecovery(rebound.envelope, rebound.recoverySecret, "restored-new")).toEqual(original.dataKey);
+    expect(await unlockWithPassphrase(rebound.envelope, newPassphrase, "restored-new")).toEqual(original.dataKey);
+    expect(() => unlockWithRecovery(rebound.envelope, original.recoverySecret, "restored-new")).toThrow();
+    expect(() => unlockWithRecovery(rebound.envelope, rebound.recoverySecret, "default")).toThrow();
+    expect(serializeKeyEnvelope(original.envelope)).toBe(before);
+    expect(unlockWithRecovery(original.envelope, original.recoverySecret, "default")).toEqual(original.dataKey);
+    original.dataKey.fill(0);
+  });
+
+  it("refuses unrelated keys, profile identities, and unavailable replacement credentials without damaging the original", async () => {
+    const os = keychain();
+    const original = await createProfileKeys("default", { keychain: os });
+    const originalKey = Buffer.from(original.dataKey);
+    const newMachine = keychain();
+    await expect(rebindProfileKeys(original.envelope, randomBytes(32), "default", "restored-new", { keychain: newMachine })).rejects.toThrow();
+    await expect(rebindProfileKeys(original.envelope, original.dataKey, "restored-wrong", "restored-new", { keychain: newMachine })).rejects.toThrow();
+    expect(newMachine.encryptString).not.toHaveBeenCalled();
+    await expect(rebindProfileKeys(original.envelope, original.dataKey, "default", "../../escape", { keychain: newMachine })).rejects.toThrow();
+    await expect(rebindProfileKeys(original.envelope, original.dataKey, "default", "restored-new", {})).rejects.toThrow();
+    newMachine.isAvailable = () => false;
+    await expect(rebindProfileKeys(original.envelope, original.dataKey, "default", "restored-new", { keychain: newMachine, passphrase })).rejects.toThrow();
+    expect(original.dataKey).toEqual(originalKey);
+    original.dataKey.fill(0); originalKey.fill(0);
+  });
   it("uses distinct random data keys and recovery credentials, without serializing them", async () => {
     const os = keychain();
     const first = await createProfileKeys("default", { keychain: os });

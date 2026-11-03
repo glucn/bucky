@@ -22,7 +22,7 @@ function locations(userData: string, profileId: string) {
 }
 
 /** The caller chooses userData, but profiles and their children may not redirect outside it. */
-async function validateDirectories(userData: string, profileId: string): Promise<void> {
+export async function validateDirectories(userData: string, profileId: string): Promise<void> {
   const paths = locations(userData, profileId);
   if (!await exists(userData)) return;
   const root = await fs.realpath(userData);
@@ -36,7 +36,7 @@ async function validateDirectories(userData: string, profileId: string): Promise
 }
 
 /** Bounded reads and no symlink following, including for damaged/untrusted envelope files. */
-async function readPrivateFile(filename: string, maximum: number, prefixOnly = false): Promise<Buffer> {
+export async function readPrivateFile(filename: string, maximum: number, prefixOnly = false): Promise<Buffer> {
   const file = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stat = await file.stat();
@@ -87,7 +87,7 @@ export async function inspectProtectedProfile(userData: string, profileId = "def
   return { kind: "protected", profileId, methods: { keychain: Boolean(envelope.keychain), passphrase: Boolean(envelope.passphrase) } };
 }
 
-async function syncPath(filename: string) {
+export async function syncPath(filename: string) {
   const file = await fs.open(filename, "r");
   try { await file.sync(); } finally { await file.close(); }
 }

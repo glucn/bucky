@@ -88,12 +88,11 @@ describe("ReportsPage", () => {
 
     render(<ReportsPage />);
 
+    // The page shell is present before saved filters load and the report effects run.
     await waitFor(() => {
-      expect(screen.getByTestId("reports-page")).toBeTruthy();
+      expect(getIncomeExpenseTrendReport).toHaveBeenCalledWith({ preset: "LAST_12_MONTHS" });
+      expect(getIncomeExpenseBreakdownReport).toHaveBeenCalledWith({ preset: "LAST_3_MONTHS" });
     });
-
-    expect(getIncomeExpenseTrendReport).toHaveBeenCalledWith({ preset: "LAST_12_MONTHS" });
-    expect(getIncomeExpenseBreakdownReport).toHaveBeenCalledWith({ preset: "LAST_3_MONTHS" });
     expect((screen.getByTestId("trend-filter-select") as HTMLSelectElement).value).toBe(
       "LAST_12_MONTHS"
     );
