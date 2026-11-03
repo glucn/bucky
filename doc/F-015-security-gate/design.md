@@ -90,6 +90,9 @@ produce a portable authenticated encrypted artifact without writing a plaintext 
 Conversion of legacy data is copy-and-verify, with explicit user acknowledgement and a recovery
 path before activation. Retain the original until the user has a verified protected copy; report
 that old plaintext material still exists and do not claim cryptographic protection for it.
+The [conversion service](legacy-conversion.md) now implements read-only, byte-faithful record
+copying directly into encrypted staging and shares the recovery-confirmed publisher. Application
+integration and installed conversion acceptance remain open.
 
 ## Remaining implementation sequence
 

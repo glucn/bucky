@@ -9,6 +9,24 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 15 — Verified legacy conversion and confirmed publication (2026-11-03)
+
+- Added read-only snapshot conversion directly from plaintext SQLite into encrypted staging,
+  without a new plaintext financial working file. Copying preserves exact stored integers,
+  rowids, text bytes, blobs, double values, and migration records. The shared recovery validator
+  compares all records, relationships, and posting balances before commit and after encrypted reopen.
+- Extended the existing restore controller with acknowledged legacy conversion. It generates
+  fresh profile/data-key identities and requires new recovery-code re-entry before publication.
+  Selection remains separate; existing plaintext files and profiles are never replaced or deleted.
+- Added 13 tests, including failing conversion/publication regressions, source WAL concurrency,
+  disk-full/mid-copy failure, cancellation/retry, and exact-value preservation. **716 tests across
+  95 files passed in each storage mode**, plus TypeScript checking. A synthetic Electron Node
+  check passed conversion, confirmation, encrypted reopen, portable recovery, and explicit selection.
+- See [conversion contract and limits](F-015-security-gate/legacy-conversion.md). Main-owned
+  source picking, authentication/acknowledgement UI, lock cancellation, installed conversion,
+  interrupted-profile handling, and real/personal recovery acceptance remain open. SEC-06 is
+  not complete; this controller is not yet connected to app IPC/UI.
+
 ### Batch 14 — Protected recovery screens and packaged navigation (2026-11-03)
 
 - Added encrypted recovery from locked, setup, and recovery-required screens without mounting

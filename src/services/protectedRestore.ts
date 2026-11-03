@@ -4,14 +4,16 @@ import path from "path";
 import { randomUUID, timingSafeEqual } from "crypto";
 import { profileDatabasePath } from "./personalProfiles";
 import { readPrivateFile, readProtectedProfile, syncPath, validateDirectories } from "./protectedProfiles";
-import { rebindProfileKeys, parseKeyEnvelope, serializeKeyEnvelope, unlockWithRecovery, verifyProfileKey,
+import { createProfileKeys, rebindProfileKeys, parseKeyEnvelope, serializeKeyEnvelope, unlockWithRecovery, verifyProfileKey,
   type KeychainProtector, type ProfileKeyEnvelope } from "./profileKeys";
 import { validateEncryptedRecoveryDatabase, withVerifiedProtectedBackup } from "./protectedBackup";
 import type { RecoverySummary } from "../shared/recovery";
+import { withVerifiedLegacyConversion } from "./legacyConversion";
 
 const LIFETIME = 15 * 60_000;
 type Options = { source: string; credential: { mode: "recovery" | "passphrase"; secret: string };
   keychain?: KeychainProtector; passphrase?: string };
+type LegacyOptions = { source: string; acknowledgePlaintext: true; keychain?: KeychainProtector; passphrase?: string };
 type Pending = { restoreId: string; profileId: string; expires: number; dataKey: Buffer;
   envelope: ProfileKeyEnvelope; summary: RecoverySummary };
 async function exists(filename: string) {
@@ -36,6 +38,16 @@ export class ProtectedProfileRestore {
   }
 
   async begin(options: Options): Promise<{ restoreId: string; profileId: string; recoverySecret: string; summary: RecoverySummary }> {
+    return this.start(options);
+  }
+
+  /** Conversion never replaces the legacy book or hides its retained plaintext copies. */
+  async beginLegacy(options: LegacyOptions): Promise<{ restoreId: string; profileId: string; recoverySecret: string; summary: RecoverySummary }> {
+    if (options.acknowledgePlaintext !== true) throw new Error("Acknowledge that the original plaintext book and its copies remain unencrypted");
+    return this.start(options);
+  }
+
+  private async start(options: Options | LegacyOptions) {
     if (this.operation || this.pending || this.canceling || this.ownedStaging || this.ownedLock) throw new Error("A protected restore or cleanup is already in progress");
     const abort = new AbortController(); this.abort = abort;
     const operation = this.prepare(options, abort.signal); this.operation = operation;
@@ -43,7 +55,7 @@ export class ProtectedProfileRestore {
     finally { this.operation = undefined; }
   }
 
-  private async prepare(options: Options, signal: AbortSignal) {
+  private async prepare(options: Options | LegacyOptions, signal: AbortSignal) {
     const profileId = `restored-${Date.now()}-${randomUUID()}`;
     const profiles = path.dirname(path.dirname(profileDatabasePath(this.userData, profileId)));
     let key: Buffer | undefined;
@@ -51,19 +63,30 @@ export class ProtectedProfileRestore {
       await validateDirectories(this.userData, profileId);
       await fs.mkdir(profiles, { recursive: true, mode: 0o700 });
       await validateDirectories(this.userData, profileId);
-      const result = await withVerifiedProtectedBackup({ source: options.source, stagingParent: profiles,
-        migrations: this.migrations, credential: options.credential, signal }, async (verified) => {
-        signal.throwIfAborted();
-        key = Buffer.from(verified.dataKey);
-        const rebound = await rebindProfileKeys(verified.envelope, key, verified.envelope.profileId, profileId, options);
+      const stage = async (databaseFile: string, envelope: ProfileKeyEnvelope, recoverySecret: string, summary: RecoverySummary) => {
         signal.throwIfAborted();
         this.ownedStaging = await fs.mkdtemp(path.join(profiles, `.restoring-${profileId}-`));
-        await fs.copyFile(verified.databaseFile, path.join(this.ownedStaging, "book.sqlite"), constants.COPYFILE_EXCL);
+        await fs.copyFile(databaseFile, path.join(this.ownedStaging, "book.sqlite"), constants.COPYFILE_EXCL);
         const file = await fs.open(path.join(this.ownedStaging, "profile.keys.json"), "wx", 0o600);
-        try { await file.writeFile(serializeKeyEnvelope(rebound.envelope)); await file.sync(); } finally { await file.close(); }
+        try { await file.writeFile(serializeKeyEnvelope(envelope)); await file.sync(); } finally { await file.close(); }
         signal.throwIfAborted();
-        return { ...rebound, summary: verified.summary };
-      });
+        return { envelope, recoverySecret, summary };
+      };
+      let result: { envelope: ProfileKeyEnvelope; recoverySecret: string; summary: RecoverySummary };
+      if ("acknowledgePlaintext" in options) {
+        const created = await createProfileKeys(profileId, options); key = created.dataKey;
+        signal.throwIfAborted();
+        result = await withVerifiedLegacyConversion({ source: options.source, stagingParent: profiles,
+          migrations: this.migrations, dataKey: key, signal }, (verified) =>
+          stage(verified.databaseFile, created.envelope, created.recoverySecret, verified.summary));
+      } else {
+        result = await withVerifiedProtectedBackup({ source: options.source, stagingParent: profiles,
+          migrations: this.migrations, credential: options.credential, signal }, async (verified) => {
+          signal.throwIfAborted(); key = Buffer.from(verified.dataKey);
+          const rebound = await rebindProfileKeys(verified.envelope, key, verified.envelope.profileId, profileId, options);
+          return stage(verified.databaseFile, rebound.envelope, rebound.recoverySecret, verified.summary);
+        });
+      }
       signal.throwIfAborted();
       const restoreId = randomUUID();
       this.pending = { restoreId, profileId, expires: Date.now() + LIFETIME, dataKey: key!, envelope: result.envelope, summary: result.summary };

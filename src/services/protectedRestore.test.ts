@@ -10,6 +10,7 @@ import { unlockWithRecovery, unlockWithPassphrase, unlockWithKeychain } from "./
 import { createEncryptedPrisma } from "./encryptedDatabase";
 import { readActiveProfile } from "./personalProfiles";
 import { AccountType, AccountSubtype } from "../shared/accountTypes";
+import { initializePersonalDatabase, openSqlite, executeSql, closeSqlite } from "./localDatabase";
 
 const migrations = path.resolve("prisma/migrations");
 const passphrase = "Replacement restored-profile passphrase";
@@ -82,6 +83,48 @@ it("can bind an independently recovered book to a new machine's keychain", async
   const profile = await readProtectedProfile(userData, pending.profileId);
   expect(await unlockWithKeychain(profile.envelope, newMachine, pending.profileId)).toEqual(originalKey);
   await expect(unlockWithKeychain(profile.envelope, keychain, pending.profileId)).rejects.toThrow();
+});
+
+it("converts a legacy book into a fresh encrypted identity only after acknowledgement and new recovery confirmation", async () => {
+  const source = path.join(directory, "legacy.sqlite");
+  await initializePersonalDatabase(source, migrations);
+  const db = await openSqlite(source);
+  try {
+    await executeSql(db, `INSERT INTO Account(id,name,type,subtype,currency,updatedAt)
+      VALUES ('legacy-cash','Legacy cash','user','asset','CAD',CURRENT_TIMESTAMP),
+        ('legacy-equity','Legacy equity','equity','equity','CAD',CURRENT_TIMESTAMP);
+      INSERT INTO JournalEntry(id,date,description,updatedAt) VALUES ('legacy-entry','2026-09-01','Legacy entry',CURRENT_TIMESTAMP);
+      INSERT INTO JournalLine(id,entryId,accountId,amount,currency) VALUES
+        ('legacy-debit','legacy-entry','legacy-cash',72.12,'CAD'),('legacy-credit','legacy-entry','legacy-equity',-72.12,'CAD');`);
+  } finally { await closeSqlite(db); }
+  const before = await fs.readFile(source), originalBefore = await fs.readFile(original.databaseFile);
+  await expect(restore.beginLegacy({ source, passphrase, acknowledgePlaintext: false } as any)).rejects.toThrow(/acknowledge/i);
+  const pending = await restore.beginLegacy({ source, passphrase, acknowledgePlaintext: true });
+  expect(pending.summary.balances).toContainEqual({ accountId: "legacy-cash", currency: "CAD", amount: 72.12 });
+  await expect(readProtectedProfile(userData, pending.profileId)).rejects.toThrow();
+  await expect(restore.confirm(pending.restoreId, "not the new code")).rejects.toThrow(/recovery/i);
+  await restore.confirm(pending.restoreId, pending.recoverySecret);
+  const profile = await readProtectedProfile(userData, pending.profileId);
+  const key = await unlockWithPassphrase(profile.envelope, passphrase, pending.profileId);
+  try {
+    expect(key).not.toEqual(originalKey);
+    const prisma = createEncryptedPrisma(profile.databaseFile, key);
+    try { expect((await prisma.journalLine.findUniqueOrThrow({ where: { id: "legacy-debit" } })).amount).toBe(72.12); }
+    finally { await prisma.$disconnect(); }
+  } finally { key.fill(0); }
+  expect(await fs.readFile(source)).toEqual(before); expect(await fs.readFile(original.databaseFile)).toEqual(originalBefore);
+  expect(readActiveProfile(userData)).toBe("default");
+});
+
+it("discards a canceled legacy conversion without changing or deleting the plaintext source", async () => {
+  const source = path.join(directory, "legacy.sqlite");
+  await initializePersonalDatabase(source, migrations);
+  const before = await fs.readFile(source);
+  const pending = await restore.beginLegacy({ source, keychain, acknowledgePlaintext: true });
+  await restore.cancel();
+  await expect(restore.confirm(pending.restoreId, pending.recoverySecret)).rejects.toThrow();
+  expect(await fs.readFile(source)).toEqual(before);
+  expect(await profileNames()).toEqual(["default"]);
 });
 
 it("rejects wrong credentials and denied replacement protection without publishing or changing selection", async () => {

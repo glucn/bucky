@@ -58,8 +58,10 @@ use. Do not invent cryptographic algorithms or silently fall back to plaintext s
   and UI integration now own fresh authentication, native pickers/confirmation, and lock cancellation.
   Full installed recovery, actual OS authentication, native dialogs, and independent-device drills
   still need acceptance.
-- SEC-06 conversion is not implemented. Existing plaintext books remain untouched and are
-  refused at launch. New profiles are encrypted; old plaintext backup files remain plaintext.
+- SEC-06 now has a [verified conversion service](legacy-conversion.md) that copies a consistent
+  plaintext snapshot directly into encrypted staging and reuses recovery-confirmed separate-profile
+  publication. Main/IPC/UI integration and installed acceptance remain pending, so existing
+  plaintext books are still untouched and refused at launch. Old plaintext backup files remain plaintext.
   The old raw-SQLite export/restore UI is unavailable for encrypted profiles.
 - The generic compatibility `ipcRenderer.invoke` surface is now restricted to an explicit
   inventory; migrating its remaining call sites to individually typed methods is still desirable.
