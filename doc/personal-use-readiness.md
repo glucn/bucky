@@ -9,6 +9,22 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 13 — Main-owned protected recovery lifecycle (2026-11-03)
+
+- Connected encrypted export, locked-state restore, fresh recovery confirmation, and explicit
+  next-launch selection to a dedicated typed IPC surface. Main owns file pickers, fresh OS or
+  passphrase authentication, replacement credential validation, and native selection consent.
+- Lock revokes delayed authentication/dialog responses and drains recovery before another
+  setup or unlock. Recovery credentials and data keys stay out of response metadata; only
+  the dedicated pending-recovery response exposes its newly generated recovery code.
+- A failing relock regression exposed that next-launch selection was reread during lock.
+  The running profile is now fixed for the process lifetime; selection applies after restart.
+- Ten new regressions cover actual encrypted export/restore, authentication failure, native
+  cancellation, delayed results, input validation, lock drainage, and next-launch semantics.
+  **699 tests across 93 files passed** with native service storage; TypeScript checking passed.
+- Recovery UI, packaged recovery flows, real OS authentication, and manual recovery acceptance
+  remain outstanding. This batch does not complete F-015 or personal-use readiness.
+
 ### Batch 12 — Recovery-confirmed separate-profile publication (2026-09-28)
 
 - Added a trusted-process restore controller that verifies an authenticated backup, binds its

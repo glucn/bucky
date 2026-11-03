@@ -15,7 +15,7 @@ beforeEach(async () => {
   deps = { keychain, osAuthenticationAvailable: () => true, authenticateOS: vi.fn(async () => {}),
     database: { openEncryptedDatabase: vi.fn(async () => {}), disconnect: vi.fn(async () => {}) },
     enrichment: { suspendForLock: vi.fn(async () => {}), resumeAfterUnlock: vi.fn() },
-    onRevoked: vi.fn(), onStateChanged: vi.fn(), now: () => Date.now() };
+    cancelRecovery: vi.fn(async () => {}), onRevoked: vi.fn(), onStateChanged: vi.fn(), now: () => Date.now() };
   security = new PersonalSecurity(directory, migrations, deps);
 });
 afterEach(async () => { await security.lock(); await fs.rm(directory, { recursive: true, force: true }); });
@@ -98,4 +98,42 @@ it("fails closed on damaged profile metadata without attempting a plaintext fall
   expect(security.getState().status).toBe("recovery-required");
   await expect(security.unlock({ mode: "keychain" })).rejects.toThrow();
   expect(deps.database.openEncryptedDatabase).not.toHaveBeenCalled();
+});
+
+it("drains protected recovery before another unlock or completed lock", async () => {
+  await existing();
+  let finish!: () => void;
+  deps.cancelRecovery.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+  const unlocking = security.unlock({ mode: "keychain" });
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  expect(deps.authenticateOS).not.toHaveBeenCalled();
+  finish(); await unlocking;
+  deps.cancelRecovery.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+  finish = undefined as any;
+  const locking = security.lock();
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  expect(security.getState().status).toBe("locking");
+  await expect(security.unlock({ mode: "keychain" })).rejects.toThrow();
+  finish(); await locking;
+  expect(security.getState().status).toBe("locked");
+});
+
+it("refuses to unlock when recovery cleanup cannot finish", async () => {
+  await existing();
+  deps.cancelRecovery.mockRejectedValueOnce(new Error("cleanup failure"));
+  await expect(security.unlock({ mode: "keychain" })).rejects.toThrow();
+  expect(deps.authenticateOS).not.toHaveBeenCalled();
+  expect(deps.database.openEncryptedDatabase).not.toHaveBeenCalled();
+});
+
+it("keeps next-launch profile selection from changing the running profile on relock", async () => {
+  await existing(); await security.unlock({ mode: "keychain" });
+  const restored = "restored-next-launch";
+  await fs.cp(path.join(directory, "profiles", "default"), path.join(directory, "profiles", restored), { recursive: true });
+  await fs.writeFile(path.join(directory, "active-profile.json"), JSON.stringify({ id: restored }));
+  await security.lock();
+  expect(security.getActiveProfile()).toBe("default");
+  expect(security.getState().status).toBe("locked");
+  await security.unlock({ mode: "keychain" });
+  expect(deps.database.openEncryptedDatabase.mock.calls.at(-1)[0]).toBe(path.join(directory, "profiles", "default", "book.sqlite"));
 });

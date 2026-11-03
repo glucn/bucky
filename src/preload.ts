@@ -1,12 +1,21 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { isAppIpcChannel } from "./shared/ipcChannels";
 import type { SecurityApi } from "./shared/security";
+import type { ProtectedRecoveryApi } from "./shared/recovery";
 import {
   type IncomeExpenseBreakdownFilter,
   type IncomeExpenseTrendFilter,
 } from "./shared/reporting";
 
 contextBridge.exposeInMainWorld("electron", {
+  protectedRecovery: {
+    getState: () => ipcRenderer.invoke("get-protected-recovery-state"),
+    createBackup: (input) => ipcRenderer.invoke("create-protected-backup", input),
+    beginRestore: (input) => ipcRenderer.invoke("begin-protected-restore", input),
+    confirmRestore: (input) => ipcRenderer.invoke("confirm-protected-restore", input),
+    selectProfile: (input) => ipcRenderer.invoke("select-protected-profile", input),
+    cancel: () => ipcRenderer.invoke("cancel-protected-recovery"),
+  } satisfies ProtectedRecoveryApi,
   security: {
     getState: () => ipcRenderer.invoke("get-security-state"),
     beginSetup: (input) => ipcRenderer.invoke("begin-protected-setup", input),

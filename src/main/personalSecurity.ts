@@ -7,6 +7,7 @@ type Dependencies = {
   keychain: KeychainProtector;
   osAuthenticationAvailable(): boolean;
   authenticateOS(): Promise<void>;
+  cancelRecovery(): Promise<void>;
   database: { openEncryptedDatabase(file: string, migrations: string, key: Buffer): Promise<void>; disconnect(): Promise<void> };
   enrichment: { suspendForLock(): Promise<void>; resumeAfterUnlock(): void };
   onRevoked(): void | Promise<void>;
@@ -32,6 +33,7 @@ export class PersonalSecurity {
   private methods = { keychain: false, passphrase: false };
   private reason: string | undefined;
   private profileId = "default";
+  private selectionLoaded = false;
   private readonly setup: ProtectedProfileSetup;
   private operation: Promise<unknown> | undefined;
   private locking: Promise<void> | undefined;
@@ -48,6 +50,7 @@ export class PersonalSecurity {
       osAuthenticationAvailable: this.deps.osAuthenticationAvailable() && this.deps.keychain.isAvailable(),
       methods: { ...this.methods }, ...(this.reason ? { reason: this.reason } : {}) };
   }
+  getActiveProfile(): string { return this.profileId; }
   private transition(status: SecurityStatus, reason?: string) {
     this.status = status; this.reason = reason; this.revision++;
     this.deps.onStateChanged(this.getState());
@@ -60,7 +63,10 @@ export class PersonalSecurity {
   async initialize() { await this.deps.enrichment.suspendForLock(); await this.inspect(); }
   private async inspect() {
     try {
-      this.profileId = readActiveProfile(this.userData);
+      if (!this.selectionLoaded) {
+        this.profileId = readActiveProfile(this.userData);
+        this.selectionLoaded = true;
+      }
       const profile = await inspectProtectedProfile(this.userData, this.profileId);
       if (profile.kind === "protected") {
         this.methods = profile.methods;
@@ -86,6 +92,7 @@ export class PersonalSecurity {
     const epoch = this.epoch;
     this.transition("setting-up");
     const operation = (async () => {
+      await this.deps.cancelRecovery(); this.checkEpoch(epoch);
       if (input.mode === "keychain") await this.deps.authenticateOS();
       this.checkEpoch(epoch);
       const pending = await this.setup.begin({ baseCurrency: input.baseCurrency,
@@ -130,6 +137,7 @@ export class PersonalSecurity {
     const operation = (async () => {
       let key: Buffer | undefined;
       try {
+        await this.deps.cancelRecovery(); this.checkEpoch(epoch);
         const profile = await readProtectedProfile(this.userData, this.profileId);
         this.checkEpoch(epoch);
         if (input.mode === "keychain") {
@@ -176,7 +184,7 @@ export class PersonalSecurity {
     const operation = this.operation;
     const locking = (async () => {
       const settled = await Promise.allSettled([
-        revoked, this.deps.database.disconnect(), this.deps.enrichment.suspendForLock(), this.setup.cancel(),
+        revoked, this.deps.database.disconnect(), this.deps.enrichment.suspendForLock(), this.setup.cancel(), this.deps.cancelRecovery(),
         operation?.catch(() => {}), ...Array.from(this.requests, (request) => request.catch(() => {})),
       ]);
       // An open that was already in progress must also be torn down after it settles.

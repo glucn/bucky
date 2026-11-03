@@ -56,6 +56,7 @@ interface BaseCurrencyReconciliationState {
 
 export interface IElectronAPI {
   security: import("../../shared/security").SecurityApi;
+  protectedRecovery: import("../../shared/recovery").ProtectedRecoveryApi;
   ipcRenderer: {
     invoke(channel: string, ...args: any[]): Promise<any>;
     on(channel: string, listener: (...args: any[]) => void): void;

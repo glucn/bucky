@@ -5,6 +5,12 @@ export const APP_IPC_CHANNELS = [
   "confirm-protected-setup",
   "unlock-personal-profile",
   "lock-personal-profile",
+  "get-protected-recovery-state",
+  "create-protected-backup",
+  "begin-protected-restore",
+  "confirm-protected-restore",
+  "select-protected-profile",
+  "cancel-protected-recovery",
   "add-account",
   "add-account-to-group",
   "add-trade-cash-account",
@@ -106,4 +112,5 @@ const allowed = new Set<string>(APP_IPC_CHANNELS);
 export const isAppIpcChannel = (channel: unknown): channel is string => typeof channel === "string" && allowed.has(channel);
 export const DEVELOPMENT_ONLY_CHANNELS = new Set(["reset-all-data", "seed-enrichment-run-summary"]);
 export const SECURITY_IPC_CHANNELS = new Set(["get-security-state", "begin-protected-setup", "confirm-protected-setup",
-  "unlock-personal-profile", "lock-personal-profile"]);
+  "unlock-personal-profile", "lock-personal-profile", "get-protected-recovery-state", "create-protected-backup",
+  "begin-protected-restore", "confirm-protected-restore", "select-protected-profile", "cancel-protected-recovery"]);

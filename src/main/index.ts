@@ -4,7 +4,7 @@ console.log("==========================================");
 console.log("MAIN PROCESS STARTING - VERSION 2");
 console.log("==========================================");
 
-import { app, BrowserWindow, powerMonitor, ipcMain as electronIpcMain, type Session } from "electron";
+import { app, BrowserWindow, dialog, powerMonitor, ipcMain as electronIpcMain, type Session } from "electron";
 import path from "path";
 import { randomUUID } from "crypto";
 import { databaseService } from "../services/database";
@@ -25,6 +25,8 @@ import { setupRecoveryIpcHandlers } from "./ipcHandlers.recovery";
 import { createSecureIpc, protectWindow, applicationContentSecurityPolicy } from "./ipcSecurity";
 import { setupSecurityIpcHandlers } from "./ipcHandlers.security";
 import { PersonalSecurity } from "./personalSecurity";
+import { PersonalRecovery } from "./personalRecovery";
+import { setupProtectedRecoveryIpcHandlers } from "./ipcHandlers.protectedRecovery";
 import { createOsKeychain } from "./osKeychain";
 import { osAuthentication } from "./osAuthentication";
 import { enrichmentRuntimeService } from "../services/enrichmentRuntimeService";
@@ -38,6 +40,7 @@ declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 
 let mainWindow: BrowserWindow | null = null;
 let personalSecurity: PersonalSecurity | undefined;
+let personalRecovery: PersonalRecovery | undefined;
 let personalSession: Session | undefined;
 const singleInstance = !app.isPackaged || app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
@@ -54,6 +57,7 @@ async function initialize() {
       personalSecurity = new PersonalSecurity(app.getPath("userData"), path.join(process.resourcesPath, "migrations"), {
         keychain: createOsKeychain(), osAuthenticationAvailable: osAuthentication.available,
         authenticateOS: osAuthentication.authenticate, database: databaseService, enrichment: enrichmentRuntimeService,
+        cancelRecovery: () => personalRecovery?.cancel() ?? Promise.resolve(),
         now: Date.now,
         onStateChanged: (state) => mainWindow?.webContents.send("security-state-changed", state),
         onRevoked: () => {
@@ -64,6 +68,31 @@ async function initialize() {
           previous?.destroy();
           if (reopen) createWindow();
           return session?.clearStorageData();
+        },
+      });
+      personalRecovery = new PersonalRecovery(app.getPath("userData"), path.join(process.resourcesPath, "migrations"), {
+        getStatus: () => personalSecurity!.getState().status, getActiveProfile: () => personalSecurity!.getActiveProfile(),
+        keychain: createOsKeychain(), osAuthenticationAvailable: osAuthentication.available,
+        authenticateOS: osAuthentication.authenticate, now: Date.now,
+        chooseBackupDirectory: async () => {
+          if (!mainWindow) throw new Error("Application window is unavailable");
+          const result = await dialog.showOpenDialog(mainWindow, { title: "Choose encrypted backup folder",
+            properties: ["openDirectory", "createDirectory"] });
+          return result.canceled ? undefined : result.filePaths[0];
+        },
+        chooseBackupFile: async () => {
+          if (!mainWindow) throw new Error("Application window is unavailable");
+          const result = await dialog.showOpenDialog(mainWindow, { title: "Restore encrypted backup into a separate profile",
+            properties: ["openFile"], filters: [{ name: "Bucky encrypted backup", extensions: ["buckybackup"] }] });
+          return result.canceled ? undefined : result.filePaths[0];
+        },
+        confirmSelection: async (profileId) => {
+          if (!mainWindow) throw new Error("Application window is unavailable");
+          const result = await dialog.showMessageBox(mainWindow, { type: "warning", title: "Change profile on next launch?",
+            buttons: ["Cancel", "Use on next launch"], defaultId: 0, cancelId: 0, noLink: true,
+            message: `Use ${profileId} after you quit and reopen Bucky?`,
+            detail: "The current book stays on disk. Until you quit, edits still apply to the current book. Finish or cancel unsaved work first." });
+          return result.response === 1;
         },
       });
       await personalSecurity.initialize();
@@ -104,6 +133,7 @@ async function initialize() {
 function setupIpcHandlers() {
   console.log("Registering IPC handlers...");
   setupSecurityIpcHandlers(ipcMain, () => personalSecurity);
+  setupProtectedRecoveryIpcHandlers(ipcMain, () => personalRecovery);
 
   // Remove any existing handlers first
   ipcMain.removeHandler("get-accounts");
