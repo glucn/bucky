@@ -1,9 +1,9 @@
 # Protected backup artifacts
 
 Implemented 2026-09-23 as a trusted-process service. This supplies the portable file and verified
-staging portions of SEC-05. **It is not yet connected to the application UI, and does not publish
-or activate a recovered profile.** The existing backup controls remain disabled for encrypted
-books. Do not use this internal API manually against personal data.
+staging portions of SEC-05. **It is now connected to dedicated application UI through a main-owned
+recovery controller.** This low-level service does not publish or activate a recovered profile;
+the companion restore controller handles those steps. Do not use this internal API manually against personal data.
 
 ## Contract
 
@@ -92,6 +92,7 @@ encrypted book, export, recover with each credential, and reject a modified tag.
 the service from the checkout; it is not an installed UI recovery test.
 
 Credential rebinding, recovery confirmation, and separate-profile publication/selection now have
-a trusted-process controller. Next: connect it to the main security lifecycle, native export/import
-dialogs and recovery UI, then run actual packaged recovery tests. Real cross-device/manual recovery remains an acceptance
+a trusted-process controller, connected to the main security lifecycle, native export/import
+dialogs and recovery UI. Packaged navigation is tested; the full installed recovery flow and
+real cross-device/manual recovery remain an acceptance
 gate. See the [readiness log](../personal-use-readiness.md) for full-suite evidence.

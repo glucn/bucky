@@ -1,8 +1,8 @@
 # Authenticated personal-app launch
 
-Updated 2026-09-23. New packaged profiles now use encrypted storage behind main-process
-authentication. **F-015 is still incomplete: encrypted portable backup/restore and legacy
-conversion are not available. Do not use this build as the sole financial record.**
+Updated 2026-11-03. New packaged profiles use encrypted storage behind main-process
+authentication and now expose protected backup/restore. **F-015 is still incomplete: full
+recovery acceptance and legacy conversion remain open. Do not use this build as the sole financial record.**
 
 ## User workflow
 
@@ -54,7 +54,11 @@ they cannot publish results after cancellation. Provider requests have a 15-seco
 The [OS-event adapter](https://www.electronjs.org/docs/latest/api/power-monitor/) never unlocks
 automatically on resume. A single-instance guard avoids concurrent personal app processes.
 
-The existing raw-SQLite recovery page is disabled for encrypted storage. There is no temporary
+The existing raw-SQLite recovery page is disabled for encrypted storage. A dedicated protected
+recovery view now supports authenticated export while unlocked and independent restore while
+locked, including fresh credential binding, recovery-code confirmation, and authenticated
+next-launch selection with native consent. Lock/setup/unlock drain pending recovery. Actual
+native-dialog and independent-device acceptance remains open. There is no temporary
 plaintext working copy or unencrypted export fallback. Pre-upgrade encrypted snapshots remain
 storage-level copies, not independently authenticated portable backups.
 

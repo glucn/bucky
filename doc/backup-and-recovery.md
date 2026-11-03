@@ -1,5 +1,41 @@
 # Backup and Recovery
 
+## Encrypted profiles (2026-11-03)
+
+The packaged app now exposes authenticated encrypted backup and separate-profile restore.
+Full native-dialog and independent-device recovery acceptance is still outstanding; keep
+another authoritative bookkeeping record until the readiness gates are complete.
+
+To export, unlock Bucky and open **Backup & recovery**. Enter the current profile's configured
+passphrase or choose Touch ID and OS keychain, then choose **Create encrypted backup**.
+Authenticate again and choose a private folder. Wait for **Encrypted backup created and verified**.
+The `.buckybackup` file includes an authenticated encrypted snapshot and record manifest, without
+machine-bound keychain metadata. Keep its matching app version and saved recovery code or
+configured passphrase separately. Existing files are never overwritten.
+
+To restore, open **Encrypted backup recovery** from the locked/setup/recovery screen, or use
+**Backup & recovery** after unlocking. Supply the backup's saved recovery code or configured
+passphrase and explicitly choose the new profile's protection. Choose the encrypted file,
+then save and re-enter the **new** recovery code before publishing. A failed confirmation can
+be retried; cancellation drains pending work and preserves published profiles. Locking cancels
+recovery and clears the renderer. Credentials are cleared from inputs after each attempt.
+
+After publication, review the verified counts and posting balances. Select the new profile,
+authenticate with its credentials, choose **Use on next launch**, and confirm the native warning.
+Quit fully and reopen to use it. Relocking alone keeps the running profile. Authenticate the
+original profile and select it the same way to return. No current book or backup is overwritten.
+If selection metadata is damaged, the locked recovery screen can still restore and explicitly
+select a verified profile. Interrupted staging cleanup/recovery still needs dedicated UX.
+
+New credential wraps do not revoke old backup copies or rotate the underlying database key.
+The checks prove recovery fidelity, not accounting correctness. Same-version schema compatibility,
+real OS authentication, native dialogs, and an independent-device drill remain acceptance limits.
+See the [artifact contract](F-015-security-gate/protected-backup-artifacts.md),
+[restore contract](F-015-security-gate/protected-profile-restore.md), and
+[readiness log](personal-use-readiness.md) for evidence and remaining work.
+
+## Historical plaintext workflow
+
 Legacy workflow implemented 2026-09-07 for the packaged Apple Silicon macOS app.
 **Status as of 2026-09-23: the workflow below is unavailable for newly encrypted profiles.**
 The current app rejects its raw-SQLite recovery context and disables these controls. Existing
@@ -14,7 +50,8 @@ The new [protected artifact service](F-015-security-gate/protected-backup-artifa
 authenticated encrypted export and verified staging. Its companion
 [restore controller](F-015-security-gate/protected-profile-restore.md) can publish a separate
 profile after fresh recovery confirmation and verify explicit next-launch selection. These
-services are not yet exposed by the app and do not replace the manual acceptance drill below.
+services now have protected app controls described above. They do not enable the historical
+plaintext controls or replace the manual acceptance drill below.
 
 ## Create a backup
 

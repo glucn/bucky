@@ -9,6 +9,24 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 14 — Protected recovery screens and packaged navigation (2026-11-03)
+
+- Added encrypted recovery from locked, setup, and recovery-required screens without mounting
+  financial views. Unlocked Settings exposes encrypted export, independent restore, new recovery-code
+  confirmation, authenticated next-launch selection, verified summaries, and cancellation.
+  Inputs are cleared after each attempt; failed confirmation remains retryable and leaving the
+  view drains recovery. No restored profile is selected automatically.
+- Three UI regressions and the locked navigation regression failed before implementation. A new
+  packaged case failed against the old build, then passed three repetitions on the new build.
+- **703 tests across 94 files passed in each storage mode**, plus TypeScript checking and an
+  Apple Silicon package build using Node 22. All four packaged cases passed three repetitions
+  (**12 checks**): startup/relock/persistence, plaintext preservation, shipped encrypted dependencies,
+  and locked/unlocked recovery navigation. The recovery screen was visually inspected.
+- These packaged tests cover navigation and access boundaries, not the complete native-picker
+  export/restore/selection flow. Real OS/keychain, native-dialog, independent-device and personal
+  recovery drills remain required. Legacy conversion, interrupted-profile handling, durable
+  credential changes, valuation, precision, verifier, and representative pilot gates remain open.
+
 ### Batch 13 — Main-owned protected recovery lifecycle (2026-11-03)
 
 - Connected encrypted export, locked-state restore, fresh recovery confirmation, and explicit
@@ -414,9 +432,9 @@ After this small pilot succeeds, expand toward the project plan's criterion: man
 remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
-with recovery. See the implementation log for delivered portions. The next implementation batch
-is **main-security lifecycle and UI integration for protected backup/restore**,
-followed by verified legacy conversion,
+with recovery. See the implementation log for delivered portions. The next implementation work
+is **full installed protected-recovery acceptance and verified legacy conversion**,
+followed by
 interrupted-profile recovery, and the remaining onboarding/reset policy. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance
 gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.

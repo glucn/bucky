@@ -55,7 +55,9 @@ use. Do not invent cryptographic algorithms or silently fall back to plaintext s
   files and verifies encrypted restore staging independently of the original keychain. The
   [restore controller](protected-profile-restore.md) adds credential rebinding, recovery
   confirmation, separate-profile publication, and verified next-launch selection. Main lifecycle
-  and UI integration, native confirmation, and installed recovery are still pending.
+  and UI integration now own fresh authentication, native pickers/confirmation, and lock cancellation.
+  Full installed recovery, actual OS authentication, native dialogs, and independent-device drills
+  still need acceptance.
 - SEC-06 conversion is not implemented. Existing plaintext books remain untouched and are
   refused at launch. New profiles are encrypted; old plaintext backup files remain plaintext.
   The old raw-SQLite export/restore UI is unavailable for encrypted profiles.

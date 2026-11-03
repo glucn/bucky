@@ -1,7 +1,23 @@
 import React from "react";
 import type { RecoveryResponse, RecoveryResult, RecoveryState } from "../../shared/recovery";
+import type { SecurityState } from "../../shared/security";
+import { ProtectedRecovery } from "../components/ProtectedRecovery";
 
 export const Recovery: React.FC = () => {
+  const [security, setSecurity] = React.useState<SecurityState | null>(null);
+  const [error, setError] = React.useState(false);
+  React.useEffect(() => {
+    let disposed = false;
+    window.electron.security.getState().then((next) => { if (!disposed) setSecurity(next); })
+      .catch(() => { if (!disposed) setError(true); });
+    return () => { disposed = true; };
+  }, []);
+  if (error) return <p role="alert">Unable to read security state. Quit and reopen Bucky.</p>;
+  if (!security) return <p role="status">Checking profile protection…</p>;
+  return security.personal ? <ProtectedRecovery security={security} /> : <LegacyRecovery />;
+};
+
+const LegacyRecovery: React.FC = () => {
   const [state, setState] = React.useState<RecoveryState | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);

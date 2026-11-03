@@ -8,6 +8,7 @@ const state = { available: true, activeProfile: "default", nextProfile: "default
 describe("Recovery page", () => {
   beforeEach(() => {
     Object.defineProperty(window, "electron", { writable: true, value: {
+      security: { getState: vi.fn().mockResolvedValue({ personal: false }) },
       getRecoveryState: vi.fn().mockResolvedValue({ success: true, data: state }),
       createPersonalBackup: vi.fn(), restorePersonalBackup: vi.fn(), selectPersonalProfile: vi.fn(),
     } });

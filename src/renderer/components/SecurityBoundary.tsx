@@ -1,6 +1,7 @@
 import React from "react";
 import type { SecurityState } from "../../shared/security";
 import { SUPPORTED_CURRENCY_OPTIONS } from "../../shared/currencies";
+import { ProtectedRecovery } from "./ProtectedRecovery";
 
 const inputClass = "block w-full rounded border border-gray-300 px-3 py-2 mt-1";
 const buttonClass = "rounded bg-blue-700 text-white px-4 py-2 disabled:opacity-50";
@@ -23,7 +24,7 @@ export function SecurityBoundary({ children }: { children: React.ReactNode }) {
   if (state.status !== "unlocked") return <SecurityScreen state={state} />;
   return <>
     {state.personal ? <div className="bg-amber-100 p-3 flex items-center justify-between gap-4" data-testid="personal-security-banner">
-      <p className="text-sm">Encrypted backup/recovery and legacy conversion are not ready. Keep another authoritative bookkeeping record.</p>
+      <p className="text-sm">Personal-use readiness checks remain open. Keep another authoritative bookkeeping record and test your encrypted backups.</p>
       <button type="button" className={buttonClass} onClick={() => { void window.electron.security.lock().catch(() => {}); }}>Lock Bucky</button>
     </div> : null}
     {children}
@@ -39,6 +40,7 @@ function SecurityScreen({ state }: { state: SecurityState }) {
   const [reentered, setReentered] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [showRecovery, setShowRecovery] = React.useState(false);
   const setup = state.status === "setup-required";
   const locked = state.status === "locked";
   const active = busy || ["initializing", "setting-up", "unlocking", "locking"].includes(state.status);
@@ -60,6 +62,10 @@ function SecurityScreen({ state }: { state: SecurityState }) {
 
   const selectedMethodAvailable = setup ? mode === "passphrase" || state.osAuthenticationAvailable
     : mode === "keychain" ? state.methods.keychain && state.osAuthenticationAvailable : state.methods.passphrase;
+  const recoveryAvailable = setup || locked || state.status === "recovery-required";
+  if (showRecovery && recoveryAvailable) return <main className="min-h-screen bg-gray-100 flex justify-center p-6">
+    <ProtectedRecovery security={state} onClose={() => setShowRecovery(false)} />
+  </main>;
   return <main className="min-h-screen bg-gray-100 flex justify-center items-center p-6" data-testid="security-screen">
     <section className="bg-white rounded-lg shadow p-8 w-full max-w-xl space-y-5" aria-busy={active}>
       <p className="font-semibold text-blue-800">Bucky</p>
@@ -107,6 +113,7 @@ function SecurityScreen({ state }: { state: SecurityState }) {
       </> : null}
       {!locked && state.status !== "setup-required" ? <button type="button" className="underline" onClick={() => { void run("cancel"); }}>
         {state.status === "recovery-required" ? "Check profile again" : "Cancel and close"}</button> : null}
+      {recoveryAvailable ? <button type="button" className="underline block" onClick={() => setShowRecovery(true)} data-testid="open-protected-recovery">Encrypted backup recovery</button> : null}
     </section>
   </main>;
 }

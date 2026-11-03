@@ -58,7 +58,8 @@ fixed-cost scrypt passphrase derivation, and independent recovery/new-keychain b
 now used by the [protected profile provisioning controller](protected-profile-setup.md), which
 requires recovery confirmation and publishes the envelope with a verified encrypted book. The
 setup view, OS authentication adapter, and lock lifecycle are now connected to the packaged app.
-Real OS/keychain acceptance and protected recovery UX remain open.
+Protected recovery now has main-owned native dialogs, authentication, cancellation, and UI.
+Real OS/keychain and full installed recovery acceptance remain open.
 Incorrect credentials and authentication cancellation must neither initialize an empty book nor
 overwrite existing keys.
 
@@ -92,8 +93,8 @@ that old plaintext material still exists and do not claim cryptographic protecti
 
 ## Remaining implementation sequence
 
-1. Route backup/restore through authenticated encrypted artifacts; preserve encrypted migration
-   behavior and verify crash/failure cases.
+1. Complete full installed backup/restore acceptance through authenticated encrypted artifacts;
+   preserve encrypted migration behavior and verify crash/failure cases.
 2. Implement recoverable legacy conversion and interrupted-profile recovery.
 3. Exercise the installed app with real OS authentication/keychain, OS-session events, portable
    recovery, and legacy conversion; add durable credential changes and reviewed diagnostics.

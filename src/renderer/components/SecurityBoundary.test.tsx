@@ -63,3 +63,14 @@ it("stays closed when the security state cannot be obtained", async () => {
   await screen.findByRole("alert");
   expect(screen.queryByText("Must not mount")).toBeNull();
 });
+
+it("offers encrypted recovery while locked without mounting financial views", async () => {
+  fixture();
+  window.electron.protectedRecovery = { getState: vi.fn().mockResolvedValue({ available: true, activeProfile: "default", nextProfile: "default", profiles: [] }),
+    cancel: vi.fn().mockResolvedValue(undefined) } as any;
+  render(<SecurityBoundary><p>Financial view must stay closed</p></SecurityBoundary>);
+  await screen.findByRole("heading", { name: "Unlock Bucky" });
+  fireEvent.click(screen.getByRole("button", { name: "Encrypted backup recovery" }));
+  await screen.findByRole("heading", { name: "Encrypted backup and recovery" });
+  expect(screen.queryByText("Financial view must stay closed")).toBeNull();
+});

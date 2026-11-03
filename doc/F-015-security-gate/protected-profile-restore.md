@@ -1,9 +1,10 @@
 # Protected profile restore controller
 
 Implemented 2026-09-28 as a trusted-process service. The controller now publishes an independently
-recoverable encrypted profile from a [protected backup](protected-backup-artifacts.md), but **is
-not yet connected to application IPC or UI**. Native dialogs, authentication/session ownership,
-and actual installed recovery remain the next integration work. Do not invoke this internal API
+recoverable encrypted profile from a [protected backup](protected-backup-artifacts.md), and **is
+now connected to dedicated application IPC and UI**. Main owns native pickers, fresh authentication,
+selection consent, and lock-aware drainage. Actual native-dialog and independent-device recovery
+acceptance remains open. Do not invoke this internal API
 manually against personal data.
 
 ## Restore transaction
@@ -69,7 +70,7 @@ the current book or changes a running database connection. Wrong keys, invalid p
 cancellation before publication, or failed marker writes preserve the prior selection. A sync
 failure after the marker rename preserves the new marker and reports uncertain durability.
 
-Before calling it, the future main-process owner must obtain the target profile's authentication
+Before calling it, the main-process owner obtains the target profile's authentication
 and native confirmation. The service itself does not provide OS authentication or consent. It
 can select the restored profile or return to the original after successful authentication.
 
@@ -88,6 +89,6 @@ profile, and reopened it through encrypted Prisma. This loads the checkout's ser
 not an installed UI or actual cross-device/keychain recovery workflow.
 
 See the [readiness log](../personal-use-readiness.md) for full-suite results. SEC-05 remains open
-until the app exposes export/restore from appropriate locked/unlocked states, connects cancellation
-to the main security lifecycle, and passes packaged and manual recovery drills. Legacy conversion,
+until the app passes full packaged and manual recovery drills. Export/restore are now exposed from
+appropriate locked/unlocked states, with cancellation connected to the main security lifecycle. Legacy conversion,
 credential-change persistence, and the other personal-use gates are still required.

@@ -1,0 +1,65 @@
+// @vitest-environment jsdom
+import React from "react";
+import { afterEach, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { ProtectedRecovery } from "./ProtectedRecovery";
+import type { SecurityState } from "../../shared/security";
+
+afterEach(cleanup);
+const security: SecurityState = { status: "locked", personal: true, revision: 1,
+  methods: { passphrase: true, keychain: false }, osAuthenticationAvailable: false };
+const summary = { schemaVersion: "v1", recordDigest: "verified", tableCounts: { Account: 2, JournalEntry: 1 }, balances: [] };
+function fixture() {
+  const api = { getState: vi.fn().mockResolvedValue({ available: true, activeProfile: "default", nextProfile: "default", profiles: [{ id: "default" }] }),
+    createBackup: vi.fn(), beginRestore: vi.fn(), confirmRestore: vi.fn(), selectProfile: vi.fn(), cancel: vi.fn().mockResolvedValue(undefined) };
+  Object.defineProperty(window, "electron", { configurable: true, value: { protectedRecovery: api } });
+  return api;
+}
+it("requires the new recovery code, keeps failed confirmation visible, and never selects a restored profile automatically", async () => {
+  const api = fixture();
+  api.beginRestore.mockResolvedValue({ restoreId: "pending", profileId: "restored-test", recoverySecret: "NEW-CODE", summary });
+  api.confirmRestore.mockRejectedValueOnce(new Error("Re-enter saved code")).mockResolvedValue({ profileId: "restored-test", summary });
+  render(<ProtectedRecovery security={security} />);
+  await screen.findByText(/Current profile:/);
+  expect(screen.queryByRole("button", { name: "Create encrypted backup" })).toBeNull();
+  fireEvent.change(screen.getByLabelText("Backup credential"), { target: { value: "OLD-CODE" } });
+  fireEvent.change(screen.getByLabelText("New passphrase"), { target: { value: "Replacement passphrase" } });
+  fireEvent.change(screen.getByLabelText("Repeat new passphrase"), { target: { value: "Replacement passphrase" } });
+  fireEvent.click(screen.getByRole("button", { name: "Choose encrypted backup and verify" }));
+  await screen.findByText("NEW-CODE");
+  expect(api.confirmRestore).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("Re-enter new recovery code"), { target: { value: "wrong" } });
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and publish restored profile" }));
+  await screen.findByText("Re-enter saved code");
+  expect(screen.getByText("NEW-CODE")).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("Re-enter new recovery code"), { target: { value: "NEW-CODE" } });
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and publish restored profile" }));
+  await screen.findByText(/Restored profile: restored-test/);
+  expect(api.confirmRestore).toHaveBeenLastCalledWith({ restoreId: "pending", recoverySecret: "NEW-CODE" });
+  expect(api.selectProfile).not.toHaveBeenCalled();
+  expect(screen.queryByText("NEW-CODE")).toBeNull();
+  expect((screen.getByLabelText("Backup credential") as HTMLInputElement).value).toBe("");
+  expect((screen.getByLabelText("New passphrase") as HTMLInputElement).value).toBe("");
+});
+it("clears backup credentials after a failed save and allows retry", async () => {
+  const api = fixture(); api.createBackup.mockRejectedValue(new Error("Backup could not be saved"));
+  render(<ProtectedRecovery security={{ ...security, status: "unlocked" }} />);
+  await screen.findByText(/Current profile:/);
+  fireEvent.change(screen.getByLabelText("Profile passphrase"), { target: { value: "Existing passphrase" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create encrypted backup" }));
+  await screen.findByText("Backup could not be saved");
+  expect(api.createBackup).toHaveBeenCalledWith({ mode: "passphrase", passphrase: "Existing passphrase" });
+  expect((screen.getByLabelText("Profile passphrase") as HTMLInputElement).value).toBe("");
+  expect((screen.getByRole("button", { name: "Create encrypted backup" }) as HTMLButtonElement).disabled).toBe(false);
+});
+it("drains pending work when leaving the view", async () => {
+  const api = fixture(); const close = vi.fn();
+  let finish!: () => void;
+  api.cancel.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+  render(<ProtectedRecovery security={security} onClose={close} />);
+  await screen.findByText(/Current profile:/);
+  fireEvent.click(screen.getByRole("button", { name: "Back to unlock" }));
+  await waitFor(() => expect(api.cancel).toHaveBeenCalled());
+  expect(close).not.toHaveBeenCalled();
+  finish(); await waitFor(() => expect(close).toHaveBeenCalled());
+});
