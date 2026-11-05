@@ -9,6 +9,25 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 16 — Main-owned legacy conversion and recovery UI (2026-11-04)
+
+- Connected legacy conversion to the protected recovery owner, typed IPC/preload, native source
+  picker, and locked/setup/recovery-required and unlocked recovery views. Main validates explicit
+  plaintext-retention acknowledgement and replacement credentials before work; renderer-supplied
+  paths are refused. Keychain mode requires a fresh OS challenge. Late picker results are revoked
+  by lock, and conversion shares recovery cancellation/drainage before setup or unlock.
+- Added three main regressions and a UI regression, all failing before implementation. They cover
+  actual conversion/confirmation from recovery-required state, preserved originals and selection,
+  acknowledgement, rejected paths, denied OS protection, late picker cancellation, and cleared
+  replacement credentials. The installed navigation regression failed against the previous build.
+- **720 tests across 95 files passed in each storage mode**, plus TypeScript checking and a rebuilt
+  Apple Silicon app. All five packaged cases passed three repetitions (**15 checks**), including
+  conversion navigation/acknowledgement; the conversion screen was visually inspected.
+- The packaged conversion case checks navigation, acknowledgement and source preservation before
+  opening a picker; it does not execute a full native-picker conversion/selection/restart drill.
+  Installed/native-dialog, real OS/keychain and representative personal-data acceptance remain
+  required. F-015 and the broader readiness goal remain open.
+
 ### Batch 15 — Verified legacy conversion and confirmed publication (2026-11-03)
 
 - Added read-only snapshot conversion directly from plaintext SQLite into encrypted staging,
@@ -451,8 +470,7 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation work
-is **full installed protected-recovery acceptance and verified legacy conversion**,
-followed by
-interrupted-profile recovery, and the remaining onboarding/reset policy. Real OS-authentication
+is **full installed recovery/conversion acceptance and interrupted-profile handling**,
+followed by the remaining onboarding/reset policy. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance
 gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.

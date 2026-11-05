@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("electron", {
     getState: () => ipcRenderer.invoke("get-protected-recovery-state"),
     createBackup: (input) => ipcRenderer.invoke("create-protected-backup", input),
     beginRestore: (input) => ipcRenderer.invoke("begin-protected-restore", input),
+    beginLegacy: (input) => ipcRenderer.invoke("begin-legacy-conversion", input),
     confirmRestore: (input) => ipcRenderer.invoke("confirm-protected-restore", input),
     selectProfile: (input) => ipcRenderer.invoke("select-protected-profile", input),
     cancel: () => ipcRenderer.invoke("cancel-protected-recovery"),

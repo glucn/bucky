@@ -86,6 +86,12 @@ async function initialize() {
             properties: ["openFile"], filters: [{ name: "Bucky encrypted backup", extensions: ["buckybackup"] }] });
           return result.canceled ? undefined : result.filePaths[0];
         },
+        chooseLegacyFile: async () => {
+          if (!mainWindow) throw new Error("Application window is unavailable");
+          const result = await dialog.showOpenDialog(mainWindow, { title: "Convert a legacy plaintext book into a separate encrypted profile",
+            properties: ["openFile"], filters: [{ name: "Legacy SQLite book", extensions: ["sqlite", "db"] }] });
+          return result.canceled ? undefined : result.filePaths[0];
+        },
         confirmSelection: async (profileId) => {
           if (!mainWindow) throw new Error("Application window is unavailable");
           const result = await dialog.showMessageBox(mainWindow, { type: "warning", title: "Change profile on next launch?",

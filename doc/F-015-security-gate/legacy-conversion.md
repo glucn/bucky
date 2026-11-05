@@ -1,9 +1,28 @@
 # Verified legacy conversion
 
-Implemented 2026-11-03 as trusted-process services. This is not yet exposed through app IPC/UI;
-the packaged app still preserves and refuses plaintext profiles at launch. Do not call this
-internal API manually against personal data. SEC-06 remains incomplete pending integration and
-installed/manual acceptance.
+Implemented as trusted-process services on 2026-11-03, with application integration on 2026-11-04.
+The packaged app preserves and refuses direct plaintext opening, and now exposes explicit
+conversion through its recovery screen. Do not call the internal API manually against personal
+data. SEC-06 remains incomplete pending full installed/native-dialog and personal acceptance.
+
+## Application workflow
+
+From a locked/setup/recovery-required screen choose **Encrypted backup recovery**, or open
+**Backup & recovery** after unlocking. Under **Recovery source**, choose **Legacy plaintext
+SQLite book**. Read and check the acknowledgement that the original book and existing copies
+remain plaintext. Explicitly choose replacement protection and repeat any new passphrase.
+Choose **Choose legacy book and convert** and select the source through the native file picker.
+
+Main validates acknowledgement and credentials before choosing a source or starting conversion;
+the renderer cannot supply a source path. Keychain mode requires an explicit successful OS
+authentication challenge. A picker or authentication result arriving after lock is ignored.
+Conversion shares the recovery owner's serialization, cancellation, and drainage before another
+setup/unlock session. Inputs are cleared after attempts.
+
+Save and re-enter the newly generated recovery code before publication. Review the verified
+summary, then explicitly select/authenticate the new profile and confirm the native warning.
+Quit completely and reopen to use it. The original plaintext profile is retained; direct opening
+of it stays blocked. Use a matching older build on a copy if its plaintext records are needed.
 
 ## Copy and verify
 
@@ -66,5 +85,7 @@ ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/El
 It verifies confirmation, encrypted reopen, independent protected-backup recovery, explicit
 selection, and byte-for-byte source preservation. It loads checkout services, not the installed
 UI or actual OS keychain. See the [readiness log](../personal-use-readiness.md) for suite results.
-Main-owned source picking, authentication, acknowledgement UI, lock cancellation, installed
-conversion, real OS/keychain, and representative personal-data acceptance are still required.
+Main-owned source picking, authentication, acknowledgement UI, and lock cancellation are now
+connected. Packaged navigation/acknowledgement tests do not execute the complete native picker,
+conversion, selection, restart and return workflow. That installed drill, real OS/keychain, and
+representative personal-data acceptance are still required.

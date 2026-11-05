@@ -8,6 +8,7 @@ export const APP_IPC_CHANNELS = [
   "get-protected-recovery-state",
   "create-protected-backup",
   "begin-protected-restore",
+  "begin-legacy-conversion",
   "confirm-protected-restore",
   "select-protected-profile",
   "cancel-protected-recovery",
@@ -113,4 +114,4 @@ export const isAppIpcChannel = (channel: unknown): channel is string => typeof c
 export const DEVELOPMENT_ONLY_CHANNELS = new Set(["reset-all-data", "seed-enrichment-run-summary"]);
 export const SECURITY_IPC_CHANNELS = new Set(["get-security-state", "begin-protected-setup", "confirm-protected-setup",
   "unlock-personal-profile", "lock-personal-profile", "get-protected-recovery-state", "create-protected-backup",
-  "begin-protected-restore", "confirm-protected-restore", "select-protected-profile", "cancel-protected-recovery"]);
+  "begin-protected-restore", "begin-legacy-conversion", "confirm-protected-restore", "select-protected-profile", "cancel-protected-recovery"]);

@@ -1,4 +1,4 @@
-import type { RecoveryResult, RecoveryState, RecoverySummary } from "../shared/recovery";
+import type { RecoveryResult, RecoveryState, RecoverySummary, LegacyConversionRequest } from "../shared/recovery";
 import type { ProfileAuthentication as Authentication, ProtectedRestoreRequest as RestoreRequest,
   PendingProtectedRestore as PendingRestore } from "../shared/recovery";
 import type { SecurityStatus } from "../shared/security";
@@ -15,6 +15,7 @@ import { ProtectedProfileRestore, selectProtectedProfile } from "../services/pro
 type Dependencies = { getStatus(): SecurityStatus; getActiveProfile(): string; keychain: KeychainProtector;
   osAuthenticationAvailable(): boolean; authenticateOS(): Promise<void>; now(): number;
   chooseBackupDirectory(): Promise<string | undefined>; chooseBackupFile(): Promise<string | undefined>;
+  chooseLegacyFile(): Promise<string | undefined>;
   confirmSelection(profileId: string): Promise<boolean> };
 
 export class PersonalRecovery {
@@ -113,26 +114,40 @@ export class PersonalRecovery {
     if (!["recovery", "passphrase"].includes(input.credential.mode) || typeof input.credential.secret !== "string" ||
       !input.credential.secret || Buffer.byteLength(input.credential.secret) > 1024) throw new RecoveryError("Invalid recovery input");
     authentication(input.protection, true);
+    return this.prepareRecovery(input.protection, () => this.deps.chooseBackupFile(), (source, protection) =>
+      this.restore.begin({ source, credential: input.credential, ...protection }));
+  }
+
+  async beginLegacy(input: LegacyConversionRequest): Promise<PendingRestore | undefined> {
+    record(input, ["acknowledgePlaintext", "protection"]);
+    if (input.acknowledgePlaintext !== true) throw new RecoveryError("Acknowledge that the original book and its copies remain plaintext");
+    authentication(input.protection, true);
+    return this.prepareRecovery(input.protection, () => this.deps.chooseLegacyFile(), (source, protection) =>
+      this.restore.beginLegacy({ source, acknowledgePlaintext: true, ...protection }));
+  }
+
+  private prepareRecovery(protection: RestoreRequest["protection"], chooseSource: () => Promise<string | undefined>,
+    prepare: (source: string, protection: { keychain?: KeychainProtector; passphrase?: string }) => Promise<PendingRestore>) {
     return this.run(async (signal) => {
       if (this.deps.now() < this.nextAttemptAt) throw new RecoveryError("Wait briefly before another authentication attempt");
-      const source = await this.deps.chooseBackupFile(); this.check(signal);
+      const source = await chooseSource(); this.check(signal);
       if (!source) return;
-      if (input.protection.mode === "keychain") {
+      if (protection.mode === "keychain") {
         if (!this.deps.osAuthenticationAvailable() || !this.deps.keychain.isAvailable()) throw new RecoveryError("OS authentication unavailable; explicitly choose a passphrase");
         try { await this.deps.authenticateOS(); }
         catch { throw new RecoveryError("Unable to authenticate replacement protection"); }
         this.check(signal);
       }
       try {
-        const pending = await this.restore.begin({ source, credential: input.credential,
-          ...(input.protection.mode === "keychain" ? { keychain: this.deps.keychain } : {}),
-          ...(input.protection.passphrase !== undefined ? { passphrase: input.protection.passphrase } : {}) });
+        const pending = await prepare(source, {
+          ...(protection.mode === "keychain" ? { keychain: this.deps.keychain } : {}),
+          ...(protection.passphrase !== undefined ? { passphrase: protection.passphrase } : {}) });
         this.check(signal); this.pendingRestore = pending.restoreId;
         this.failures = 0; this.nextAttemptAt = 0;
         return pending;
       } catch {
         if (!signal.aborted) this.nextAttemptAt = this.deps.now() + Math.min(++this.failures, 30) * 1000;
-        throw new RecoveryError("Unable to prepare recovery. Check the backup, credential, and matching app version.");
+        throw new RecoveryError("Unable to prepare recovery. Check the selected book or backup, credential, and matching app version.");
       }
     });
   }

@@ -6,6 +6,7 @@ import { PersonalRecovery } from "./personalRecovery";
 import { ProtectedProfileSetup, readProtectedProfile } from "../services/protectedProfiles";
 import { readActiveProfile } from "../services/personalProfiles";
 import type { SecurityStatus } from "../shared/security";
+import { initializePersonalDatabase } from "../services/localDatabase";
 
 const migrations = path.resolve("prisma/migrations");
 const passphrase = "Personal recovery test passphrase";
@@ -22,7 +23,7 @@ beforeEach(async () => {
   status = "unlocked";
   deps = { getStatus: () => status, getActiveProfile: () => "default", keychain,
     osAuthenticationAvailable: () => true, authenticateOS: vi.fn(async () => {}),
-    chooseBackupDirectory: vi.fn(async () => directory), chooseBackupFile: vi.fn(),
+    chooseBackupDirectory: vi.fn(async () => directory), chooseBackupFile: vi.fn(), chooseLegacyFile: vi.fn(),
     confirmSelection: vi.fn(async () => true), now: () => Date.now() };
   recovery = new PersonalRecovery(directory, migrations, deps);
 });
@@ -112,4 +113,40 @@ it("cancels pending restoration before another session and never returns a late 
   await expect(recovery.confirmRestore({ restoreId: pending!.restoreId, recoverySecret: pending!.recoverySecret })).rejects.toThrow(/pending|matching/i);
   expect((await fs.readdir(path.join(directory, "profiles"))).filter((name) => name.startsWith(".restoring-"))).toEqual([]);
   expect((await recovery.getState()).profiles).toEqual([{ id: "default" }]);
+});
+
+it("converts a natively chosen plaintext book while recovery is required, preserving the source until explicit selection", async () => {
+  const source = path.join(directory, "legacy.sqlite"); await initializePersonalDatabase(source, migrations);
+  const before = await fs.readFile(source); deps.chooseLegacyFile.mockResolvedValue(source); status = "recovery-required";
+  const protection = { mode: "passphrase" as const, passphrase, passphraseConfirmation: passphrase };
+  await expect(recovery.beginLegacy({ acknowledgePlaintext: false, protection })).rejects.toThrow(/acknowledge/i);
+  expect(deps.chooseLegacyFile).not.toHaveBeenCalled();
+  const pending = await recovery.beginLegacy({ acknowledgePlaintext: true, protection });
+  expect(pending!.profileId).toMatch(/^restored-/);
+  expect(readActiveProfile(directory)).toBe("default");
+  await expect(readProtectedProfile(directory, pending!.profileId)).rejects.toThrow();
+  await recovery.confirmRestore({ restoreId: pending!.restoreId, recoverySecret: pending!.recoverySecret });
+  expect((await readProtectedProfile(directory, pending!.profileId)).envelope.passphrase).toBeDefined();
+  expect(await fs.readFile(source)).toEqual(before); expect(readActiveProfile(directory)).toBe("default");
+});
+
+it("cancels a late legacy picker result before reading the source or generating recovery material", async () => {
+  let finish!: (source: string) => void;
+  deps.chooseLegacyFile.mockImplementationOnce(() => new Promise<string>((resolve) => { finish = resolve; }));
+  const operation = recovery.beginLegacy({ acknowledgePlaintext: true, protection: { mode: "keychain" } });
+  const rejected = expect(operation).rejects.toThrow(/cancel|lock/i);
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  status = "locking"; const canceled = recovery.cancel(); finish(path.join(directory, "not-read.sqlite"));
+  await rejected; await canceled;
+  expect(deps.authenticateOS).not.toHaveBeenCalled();
+  expect(await fs.readdir(path.join(directory, "profiles"))).toEqual(["default"]);
+});
+
+it("rejects renderer-provided conversion paths and denied OS protection without changing books", async () => {
+  await expect(recovery.beginLegacy({ acknowledgePlaintext: true, source: "/private/file", protection: { mode: "keychain" } } as any)).rejects.toThrow(/input/i);
+  expect(deps.chooseLegacyFile).not.toHaveBeenCalled();
+  deps.chooseLegacyFile.mockResolvedValue(path.join(directory, "not-read.sqlite"));
+  deps.authenticateOS.mockRejectedValueOnce(new Error("Private OS error"));
+  await expect(recovery.beginLegacy({ acknowledgePlaintext: true, protection: { mode: "keychain" } })).rejects.toThrow(/authenticate/i);
+  expect(await fs.readdir(path.join(directory, "profiles"))).toEqual(["default"]);
 });

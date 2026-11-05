@@ -11,6 +11,7 @@ export function setupProtectedRecoveryIpcHandlers(ipc: IpcRegistrar, getRecovery
   ipc.handle("get-protected-recovery-state", () => personal().getState());
   ipc.handle("create-protected-backup", (_event, input) => personal().createBackup(input));
   ipc.handle("begin-protected-restore", (_event, input) => personal().beginRestore(input));
+  ipc.handle("begin-legacy-conversion", (_event, input) => personal().beginLegacy(input));
   ipc.handle("confirm-protected-restore", (_event, input) => personal().confirmRestore(input));
   ipc.handle("select-protected-profile", (_event, input) => personal().selectProfile(input));
   ipc.handle("cancel-protected-recovery", () => personal().cancel());

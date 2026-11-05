@@ -16,6 +16,8 @@ export function ProtectedRecovery({ security, onClose }: { security: SecuritySta
   const [mode, setMode] = React.useState<ProfileAuthentication["mode"]>(security.methods.passphrase ? "passphrase" : security.osAuthenticationAvailable ? "keychain" : "passphrase");
   const [passphrase, setPassphrase] = React.useState("");
   const [credentialMode, setCredentialMode] = React.useState<"recovery" | "passphrase">("recovery");
+  const [sourceKind, setSourceKind] = React.useState<"backup" | "legacy">("backup");
+  const [acknowledged, setAcknowledged] = React.useState(false);
   const [credential, setCredential] = React.useState("");
   const [newMode, setNewMode] = React.useState<ProfileAuthentication["mode"]>(security.osAuthenticationAvailable ? "keychain" : "passphrase");
   const [newPassphrase, setNewPassphrase] = React.useState("");
@@ -47,13 +49,14 @@ export function ProtectedRecovery({ security, onClose }: { security: SecuritySta
         if (!mounted.current) return;
         setResult(saved ?? null); setMessage(saved ? "Encrypted backup created and verified" : "Canceled");
       } else if (operation === "restore") {
-        const prepared = await api.beginRestore({ credential: { mode: credentialMode, secret: credential },
-          protection: { mode: newMode, ...(newMode === "passphrase" ? { passphrase: newPassphrase, passphraseConfirmation: repeated } : {}) } });
+        const protection = { mode: newMode, ...(newMode === "passphrase" ? { passphrase: newPassphrase, passphraseConfirmation: repeated } : {}) };
+        const prepared = sourceKind === "legacy" ? await api.beginLegacy({ acknowledgePlaintext: acknowledged, protection })
+          : await api.beginRestore({ credential: { mode: credentialMode, secret: credential }, protection });
         if (mounted.current) { setPending(prepared ?? null); setResult(null); if (!prepared) setMessage("Canceled"); }
       } else if (operation === "confirm" && pending) {
         const restored = await api.confirmRestore({ restoreId: pending.restoreId, recoverySecret: reentered });
         if (!mounted.current) return;
-        setPending(null); setResult(restored); setMessage("Restored and verified in a separate profile. Choose it below to use it on next launch.");
+        setPending(null); setResult(restored); setMessage(`${sourceKind === "legacy" ? "Converted" : "Restored"} and verified in a separate profile. Choose it below to use it on next launch.`);
         await refresh(restored.profileId);
       } else if (operation === "select") {
         const changed = await api.selectProfile({ profileId: selected, authentication: authentication() });
@@ -102,12 +105,20 @@ export function ProtectedRecovery({ security, onClose }: { security: SecuritySta
       </fieldset>
       <form onSubmit={(event) => { event.preventDefault(); void run("restore"); }}>
         <fieldset className="space-y-3 rounded border p-4" disabled={busy}>
-          <legend>Restore encrypted backup</legend>
-          <label className="block">Backup credential type<select className={inputClass} value={credentialMode} onChange={(event) => { setCredentialMode(event.target.value as typeof credentialMode); setCredential(""); }}>
+          <legend>Recover an existing book</legend>
+          <label className="block">Recovery source<select className={inputClass} value={sourceKind} onChange={(event) => {
+            setSourceKind(event.target.value as typeof sourceKind); setCredential(""); setNewPassphrase(""); setRepeated(""); setAcknowledged(false);
+          }}><option value="backup">Encrypted backup</option><option value="legacy">Legacy plaintext SQLite book</option></select></label>
+          {sourceKind === "backup" ? <><label className="block">Backup credential type<select className={inputClass} value={credentialMode} onChange={(event) => { setCredentialMode(event.target.value as typeof credentialMode); setCredential(""); }}>
             <option value="recovery">Saved recovery code</option><option value="passphrase">Backup’s configured passphrase</option>
           </select></label>
           <label className="block">Backup credential<input type="password" autoComplete="off" className={inputClass} required value={credential} maxLength={1024}
-            onChange={(event) => setCredential(event.target.value)} /></label>
+            onChange={(event) => setCredential(event.target.value)} /></label></> : <>
+            <p>Conversion reads a consistent snapshot and verifies the encrypted copy. It does not change, delete, or encrypt the original book or other plaintext copies.
+              Finish saving source edits first. Keep the matching app build and original files for recovery.</p>
+            <label className="block"><input type="checkbox" required checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />{" "}
+              I understand the original book and existing copies remain plaintext.</label>
+          </>}
           <label className="block">New profile protection<select className={inputClass} value={newMode} onChange={(event) => { setNewMode(event.target.value as typeof newMode); setNewPassphrase(""); setRepeated(""); }}>
             <option value="keychain" disabled={!security.osAuthenticationAvailable}>Touch ID + OS keychain</option><option value="passphrase">New passphrase</option>
           </select></label>
@@ -117,12 +128,13 @@ export function ProtectedRecovery({ security, onClose }: { security: SecuritySta
             <label className="block">Repeat new passphrase<input type="password" className={inputClass} required maxLength={1024} autoComplete="off"
               value={repeated} onChange={(event) => setRepeated(event.target.value)} /></label>
           </> : null}
-          <button className={buttonClass} data-testid="begin-protected-restore">Choose encrypted backup and verify</button>
+          <button className={buttonClass} disabled={sourceKind === "legacy" && !acknowledged} data-testid="begin-protected-restore">
+            {sourceKind === "legacy" ? "Choose legacy book and convert" : "Choose encrypted backup and verify"}</button>
         </fieldset>
       </form>
     </> : <div className="space-y-3 rounded border p-4">
       <h2 className="text-lg font-semibold">Save the NEW recovery code</h2>
-      <p>Store this separately in a password manager or another safe place, then re-enter it. The backup’s old code will not confirm this profile.
+      <p>Store this separately in a password manager or another safe place, then re-enter it. Only this newly generated code can confirm this profile.
         New credentials do not revoke old backup copies.</p>
       <code className="block break-all select-all bg-gray-100 p-3" data-testid="restore-recovery-code">{pending.recoverySecret}</code>
       <VerifiedSummary summary={pending.summary} />

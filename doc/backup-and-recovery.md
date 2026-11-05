@@ -34,6 +34,15 @@ See the [artifact contract](F-015-security-gate/protected-backup-artifacts.md),
 [restore contract](F-015-security-gate/protected-profile-restore.md), and
 [readiness log](personal-use-readiness.md) for evidence and remaining work.
 
+## Convert a legacy plaintext book
+
+Open the recovery screen and set **Recovery source** to **Legacy plaintext SQLite book**.
+Explicitly acknowledge that originals and existing copies remain plaintext, choose replacement
+protection, then use **Choose legacy book and convert** to pick the source. Save and re-enter
+the new recovery code before the encrypted profile is published. Review its verified summary
+and select it explicitly for next launch. Conversion never overwrites, migrates, or deletes the
+source. See [verified legacy conversion](F-015-security-gate/legacy-conversion.md) for limits.
+
 ## Historical plaintext workflow
 
 Legacy workflow implemented 2026-09-07 for the packaged Apple Silicon macOS app.

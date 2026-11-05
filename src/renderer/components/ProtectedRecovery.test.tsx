@@ -11,7 +11,7 @@ const security: SecurityState = { status: "locked", personal: true, revision: 1,
 const summary = { schemaVersion: "v1", recordDigest: "verified", tableCounts: { Account: 2, JournalEntry: 1 }, balances: [] };
 function fixture() {
   const api = { getState: vi.fn().mockResolvedValue({ available: true, activeProfile: "default", nextProfile: "default", profiles: [{ id: "default" }] }),
-    createBackup: vi.fn(), beginRestore: vi.fn(), confirmRestore: vi.fn(), selectProfile: vi.fn(), cancel: vi.fn().mockResolvedValue(undefined) };
+    createBackup: vi.fn(), beginRestore: vi.fn(), beginLegacy: vi.fn(), confirmRestore: vi.fn(), selectProfile: vi.fn(), cancel: vi.fn().mockResolvedValue(undefined) };
   Object.defineProperty(window, "electron", { configurable: true, value: { protectedRecovery: api } });
   return api;
 }
@@ -62,4 +62,26 @@ it("drains pending work when leaving the view", async () => {
   await waitFor(() => expect(api.cancel).toHaveBeenCalled());
   expect(close).not.toHaveBeenCalled();
   finish(); await waitFor(() => expect(close).toHaveBeenCalled());
+});
+
+it("requires plaintext-retention acknowledgement before conversion and clears new credentials after preparation", async () => {
+  const api = fixture(); api.beginLegacy.mockResolvedValue({ restoreId: "conversion", profileId: "restored-converted", recoverySecret: "CONVERTED-CODE", summary });
+  render(<ProtectedRecovery security={{ ...security, status: "recovery-required" }} />);
+  await screen.findByText(/Current profile:/);
+  fireEvent.change(screen.getByLabelText("Recovery source"), { target: { value: "legacy" } });
+  expect(screen.queryByLabelText("Backup credential")).toBeNull();
+  const button = screen.getByRole("button", { name: "Choose legacy book and convert" });
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText("New passphrase"), { target: { value: "Replacement passphrase" } });
+  fireEvent.change(screen.getByLabelText("Repeat new passphrase"), { target: { value: "Replacement passphrase" } });
+  fireEvent.click(screen.getByLabelText(/I understand the original book and existing copies remain plaintext/));
+  fireEvent.click(button);
+  await screen.findByText("CONVERTED-CODE");
+  expect(api.beginLegacy).toHaveBeenCalledWith({ acknowledgePlaintext: true,
+    protection: { mode: "passphrase", passphrase: "Replacement passphrase", passphraseConfirmation: "Replacement passphrase" } });
+  expect(api.beginRestore).not.toHaveBeenCalled(); expect(api.confirmRestore).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel pending recovery" }));
+  await screen.findByLabelText("New passphrase");
+  expect((screen.getByLabelText("New passphrase") as HTMLInputElement).value).toBe("");
+  expect((screen.getByLabelText("Repeat new passphrase") as HTMLInputElement).value).toBe("");
 });
