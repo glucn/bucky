@@ -1,6 +1,6 @@
 # Requirements: Security Gate (F-015)
 
-Updated 2026-09-28. This feature remains **incomplete and a personal-use release blocker**.
+Updated 2026-11-04. This feature remains **incomplete and a personal-use release blocker**.
 The parent [design](../design.md#security--privacy) requires a launch lock, database encryption,
 and OS-keychain-first key management with an optional user passphrase. IPC hardening alone
 does not satisfy this feature.
@@ -58,6 +58,9 @@ use. Do not invent cryptographic algorithms or silently fall back to plaintext s
   and UI integration now own fresh authentication, native pickers/confirmation, and lock cancellation.
   Full installed recovery, actual OS authentication, native dialogs, and independent-device drills
   still need acceptance.
+  [Interrupted recovery services](interrupted-recovery.md) now authenticate preserved staging,
+  snapshot it without changing originals, and share confirmed publication. A reviewed setup retry
+  can retain artifacts by rename. Main ownership, controls, and installed acceptance are next.
 - SEC-06 now has a [verified conversion service](legacy-conversion.md) that copies a consistent
   plaintext snapshot directly into encrypted staging and reuses recovery-confirmed separate-profile
   publication. Main/IPC/UI integration now requires acknowledged plaintext retention, native

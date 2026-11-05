@@ -9,11 +9,14 @@ import { createProfileKeys, rebindProfileKeys, parseKeyEnvelope, serializeKeyEnv
 import { validateEncryptedRecoveryDatabase, withVerifiedProtectedBackup } from "./protectedBackup";
 import type { RecoverySummary } from "../shared/recovery";
 import { withVerifiedLegacyConversion } from "./legacyConversion";
+import { withInterruptedProfileSnapshot } from "./interruptedProfiles";
 
 const LIFETIME = 15 * 60_000;
 type Options = { source: string; credential: { mode: "recovery" | "passphrase"; secret: string };
   keychain?: KeychainProtector; passphrase?: string };
 type LegacyOptions = { source: string; acknowledgePlaintext: true; keychain?: KeychainProtector; passphrase?: string };
+type InterruptedOptions = Omit<Options, "source"> & { artifactId: string; acknowledgeSnapshot: true };
+type RecoveryOptions = Options | LegacyOptions | InterruptedOptions;
 type Pending = { restoreId: string; profileId: string; expires: number; dataKey: Buffer;
   envelope: ProfileKeyEnvelope; summary: RecoverySummary };
 async function exists(filename: string) {
@@ -47,7 +50,13 @@ export class ProtectedProfileRestore {
     return this.start(options);
   }
 
-  private async start(options: Options | LegacyOptions) {
+  /** Recovers the validated staged snapshot, not proof that its original operation finished. */
+  async beginInterrupted(options: InterruptedOptions): Promise<{ restoreId: string; profileId: string; recoverySecret: string; summary: RecoverySummary }> {
+    if (options.acknowledgeSnapshot !== true) throw new Error("Acknowledge that this interrupted snapshot needs comparison with your original records");
+    return this.start(options);
+  }
+
+  private async start(options: RecoveryOptions) {
     if (this.operation || this.pending || this.canceling || this.ownedStaging || this.ownedLock) throw new Error("A protected restore or cleanup is already in progress");
     const abort = new AbortController(); this.abort = abort;
     const operation = this.prepare(options, abort.signal); this.operation = operation;
@@ -55,7 +64,7 @@ export class ProtectedProfileRestore {
     finally { this.operation = undefined; }
   }
 
-  private async prepare(options: Options | LegacyOptions, signal: AbortSignal) {
+  private async prepare(options: RecoveryOptions, signal: AbortSignal) {
     const profileId = `restored-${Date.now()}-${randomUUID()}`;
     const profiles = path.dirname(path.dirname(profileDatabasePath(this.userData, profileId)));
     let key: Buffer | undefined;
@@ -72,8 +81,16 @@ export class ProtectedProfileRestore {
         signal.throwIfAborted();
         return { envelope, recoverySecret, summary };
       };
+      const recovered = async (verified: { databaseFile: string; dataKey: Buffer; envelope: ProfileKeyEnvelope; summary: RecoverySummary }) => {
+        signal.throwIfAborted(); key = Buffer.from(verified.dataKey);
+        const rebound = await rebindProfileKeys(verified.envelope, key, verified.envelope.profileId, profileId, options);
+        return stage(verified.databaseFile, rebound.envelope, rebound.recoverySecret, verified.summary);
+      };
       let result: { envelope: ProfileKeyEnvelope; recoverySecret: string; summary: RecoverySummary };
-      if ("acknowledgePlaintext" in options) {
+      if ("artifactId" in options) {
+        result = await withInterruptedProfileSnapshot({ userData: this.userData, artifactId: options.artifactId,
+          credential: options.credential, migrations: this.migrations, signal }, recovered);
+      } else if ("acknowledgePlaintext" in options) {
         const created = await createProfileKeys(profileId, options); key = created.dataKey;
         signal.throwIfAborted();
         result = await withVerifiedLegacyConversion({ source: options.source, stagingParent: profiles,
@@ -81,11 +98,7 @@ export class ProtectedProfileRestore {
           stage(verified.databaseFile, created.envelope, created.recoverySecret, verified.summary));
       } else {
         result = await withVerifiedProtectedBackup({ source: options.source, stagingParent: profiles,
-          migrations: this.migrations, credential: options.credential, signal }, async (verified) => {
-          signal.throwIfAborted(); key = Buffer.from(verified.dataKey);
-          const rebound = await rebindProfileKeys(verified.envelope, key, verified.envelope.profileId, profileId, options);
-          return stage(verified.databaseFile, rebound.envelope, rebound.recoverySecret, verified.summary);
-        });
+          migrations: this.migrations, credential: options.credential, signal }, recovered);
       }
       signal.throwIfAborted();
       const restoreId = randomUUID();

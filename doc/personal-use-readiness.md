@@ -9,6 +9,26 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 17 — Authenticated interrupted snapshots and retained setup retry (2026-11-04)
+
+- Added metadata-only inventory of recognized interrupted setup/restore/temp/lock artifacts and
+  authenticated encrypted snapshots from viable staging. No database driver opens the original
+  files. Read-only no-follow copies preserve WAL/rollback journals, reject changing sources, and
+  validate records before exposing a consolidated encrypted snapshot. Partial initial seeding is refused.
+- Reused recovery-confirmed publication with fresh identity/credentials/recovery code and explicit
+  acknowledgement that an interrupted snapshot does not prove its original operation completed.
+  Original staged files and existing books remain intact and are never selected automatically.
+- Added preservation-by-rename of reviewed unpublished default-setup artifacts, allowing first-run
+  retry without deletion. Preserved viable setups remain recoverable. Existing books, changed lists,
+  links, and unreviewed names are refused; partial moves retain every file for refresh/retry.
+- Added 22 tests, including failing inventory/snapshot/publication/preservation regressions.
+  **742 tests across 96 files passed in each storage mode**, plus TypeScript checking. A synthetic
+  Electron check passed WAL recovery, new-code confirmation, encrypted reopen, retained source/archive,
+  and explicit selection.
+- See [interrupted recovery contract and limits](F-015-security-gate/interrupted-recovery.md).
+  Main/IPC/UI integration, exclusive maintenance ownership, native confirmation, lock cancellation,
+  and installed/manual acceptance remain required. This service batch does not complete F-015.
+
 ### Batch 16 — Main-owned legacy conversion and recovery UI (2026-11-04)
 
 - Connected legacy conversion to the protected recovery owner, typed IPC/preload, native source

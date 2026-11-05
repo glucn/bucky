@@ -127,6 +127,42 @@ it("discards a canceled legacy conversion without changing or deleting the plain
   expect(await profileNames()).toEqual(["default"]);
 });
 
+it("publishes a fresh recovery-confirmed snapshot from interrupted setup without replacing or selecting its source", async () => {
+  const artifactId = ".creating-default-unfinished";
+  const source = path.join(userData, "profiles", artifactId);
+  await fs.cp(path.dirname(original.databaseFile), source, { recursive: true });
+  const before = await fs.readFile(path.join(source, "book.sqlite"));
+  await expect(restore.beginInterrupted({ artifactId, credential: { mode: "recovery", secret: oldRecovery },
+    passphrase, acknowledgeSnapshot: false } as any)).rejects.toThrow(/acknowledge/i);
+  const pending = await restore.beginInterrupted({ artifactId, credential: { mode: "recovery", secret: oldRecovery },
+    passphrase, acknowledgeSnapshot: true });
+  expect(pending.recoverySecret).not.toBe(oldRecovery);
+  await expect(readProtectedProfile(userData, pending.profileId)).rejects.toThrow();
+  await expect(restore.confirm(pending.restoreId, oldRecovery)).rejects.toThrow(/recovery/i);
+  await restore.confirm(pending.restoreId, pending.recoverySecret);
+  const profile = await readProtectedProfile(userData, pending.profileId);
+  const key = await unlockWithPassphrase(profile.envelope, passphrase, pending.profileId);
+  try {
+    const db = createEncryptedPrisma(profile.databaseFile, key);
+    try { expect((await db.journalLine.findFirstOrThrow({ where: { accountId: "restore-cash" } })).amount).toBe(123.45); }
+    finally { await db.$disconnect(); }
+  } finally { key.fill(0); }
+  expect(await fs.readFile(path.join(source, "book.sqlite"))).toEqual(before);
+  expect(readActiveProfile(userData)).toBe("default");
+});
+
+it("leaves an interrupted source available after canceling its newly prepared recovery", async () => {
+  const artifactId = ".creating-default-cancel";
+  const source = path.join(userData, "profiles", artifactId);
+  await fs.cp(path.dirname(original.databaseFile), source, { recursive: true });
+  const before = await fs.readFile(path.join(source, "book.sqlite"));
+  const pending = await restore.beginInterrupted({ artifactId, credential: { mode: "recovery", secret: oldRecovery },
+    passphrase, acknowledgeSnapshot: true });
+  await restore.cancel(); await expect(restore.confirm(pending.restoreId, pending.recoverySecret)).rejects.toThrow();
+  expect(await fs.readFile(path.join(source, "book.sqlite"))).toEqual(before);
+  expect((await profileNames()).filter((name) => name.startsWith(".restoring-") || name.startsWith(".interrupted-recovery-"))).toEqual([]);
+});
+
 it("rejects wrong credentials and denied replacement protection without publishing or changing selection", async () => {
   const encryptString = vi.fn(async () => { throw new Error("Denied"); });
   await expect(restore.begin({ source: backup, credential: { mode: "recovery", secret: "wrong" }, keychain: { ...keychain, encryptString } })).rejects.toThrow();

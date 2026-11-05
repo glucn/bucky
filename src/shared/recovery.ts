@@ -7,6 +7,8 @@ export type RecoverySummary = {
 };
 
 export type RecoveryResult = { path: string; summary: RecoverySummary; profileId?: string };
+export type InterruptedArtifact = { id: string; kind: "setup" | "restore" | "temporary" | "lock";
+  canAttemptRecovery: boolean; profileId?: string; preserved?: true };
 export type RecoveryResponse<T> = { success: true; data: T } | { success: false; error: string } | { success: false; canceled: true };
 export type RecoveryState = {
   available: boolean;
