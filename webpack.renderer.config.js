@@ -2,6 +2,7 @@ const rules = require("./webpack.rules");
 const plugins = require("./webpack.plugins");
 const path = require("path");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
+const { developmentServer } = require("./src/shared/developmentServer");
 
 rules.push({
   test: /\.css$/,
@@ -18,7 +19,7 @@ module.exports = (_env, { mode = "development" } = {}) => ({
   output: {
     filename: "renderer.js",
     path: path.resolve(__dirname, ".webpack/renderer"),
-    publicPath: mode === "production" ? "auto" : "http://localhost:3000/",
+    publicPath: mode === "production" ? "auto" : `${developmentServer().url}/`,
   },
   module: {
     rules,
@@ -38,7 +39,7 @@ module.exports = (_env, { mode = "development" } = {}) => ({
   },
   target: "web",
   devServer: {
-    port: 3000,
+    port: developmentServer().port,
     hot: process.env.PLAYWRIGHT_TEST === "1" ? false : true,
     liveReload: process.env.PLAYWRIGHT_TEST === "1" ? false : true,
     client: process.env.PLAYWRIGHT_TEST === "1" ? false : undefined,

@@ -11,14 +11,22 @@ Bucky uses Playwright for end-to-end testing of the Electron application. E2E te
 - **Test files**: `*.spec.ts`
 - **Database**: E2E schema setup, app access, and fixtures all use `prisma/test.db`.
   Do not run Vitest and Playwright concurrently: they share this disposable test database.
-- **Webpack dev server**: Automatically started on port 3000
-- **Electron prep**: `e2e:electron:prepare` runs before tests to stabilize preload artifacts
+- **Webpack dev server**: Defaults to port 3000; `BUCKY_DEV_PORT` selects an isolated port.
+  The suite always starts its own server and refuses to reuse an occupying process.
+- **Electron prep**: `e2e:electron:prepare` requires a fresh prepare-only Electron launch marker
+  and complete bundles. Existing files alone do not establish readiness. Forge preparation uses
+  the selected port + 2 (and logger + 3), so Playwright cannot mistake it for the final server.
+  Cleanup stops only the spawned process group and waits for its output handles to close.
 
 ## Running Tests
 
 ```bash
 # Run all E2E tests (headless)
 npx playwright test
+
+# When port 3000 is occupied, leave it alone and select four free consecutive ports.
+# The validated base port must be 1024..65532 for E2E preparation.
+BUCKY_DEV_PORT=31731 npx playwright test --repeat-each=3
 
 # Run with browser UI visible
 npx playwright test --headed
@@ -29,6 +37,12 @@ npx playwright test tests/e2e/import-transactions.spec.ts
 # Debug mode with browser dev tools
 npx playwright test --debug
 ```
+
+Check port 3000 and the selected ports before running. Do not kill an occupying process without
+the user's confirmation. The isolated-server workflow was verified with Node 22. Preparation,
+Electron runtime navigation, sender validation, Webpack assets, and test navigation share the
+same validated loopback origin. Packaged builds continue using their file URL and ignore this
+development override.
 
 ## Writing E2E Tests
 
@@ -48,7 +62,10 @@ test('feature description', async ({ page }) => {
 2. **Element Targeting**: Use `data-testid` attributes for reliable selection
 3. **File Uploads**: Use `page.setInputFiles()` for CSV imports
 4. **Navigation**: Wait for page elements before interaction
-5. **Database State**: Tests start with clean test database
+5. **Database State**: Schema sync preserves rows. Each scenario must own its fixture data and
+   assertions. Import fixtures explicitly select USD through the real setup form when needed.
+6. **IPC Integration**: Invoke through `invokeInApp` or the page's preload API. Do not call
+   Electron's private handler map with a fabricated event; real sender/frame validation applies.
 
 ### Example: Import Wizard Test
 

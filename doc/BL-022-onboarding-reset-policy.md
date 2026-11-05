@@ -1,7 +1,8 @@
 # Currency setup and development reset policy
 
 Updated 2026-11-04. Explicit reset modes and the main-enforced currency setup gate are implemented.
-Full development E2E and representative personal acceptance remain open.
+Development and packaged automated acceptance are complete. Representative personal acceptance
+remains part of the broader readiness plan.
 
 Packaged personal books reject development reset at both the IPC registrar and database service,
 regardless of inherited test/development environment variables. These controls do not provide a
@@ -51,7 +52,10 @@ cover setup gating and lock revocation; renderer tests verify no early financial
 Packaged cases cover missing and malformed currency, pre-authentication denial, post-authentication
 financial denial, explicit selection, unchanged CAD records while selecting EUR, pending review,
 and restart. Development import fixtures now explicitly choose USD through the setup UI, and
-browser-only financial fixtures declare their mocked authenticated/configured state. Those
-development/browser E2E changes still need a fresh run on an isolated server: port 3000 is owned
-by an existing process and has been left untouched. Packaged acceptance uses separate disposable
-profiles and does not rely on that server.
+browser-only financial fixtures declare their mocked authenticated/configured state. All 25
+development/browser cases passed three repetitions on a freshly prepared isolated server
+(75 checks). A real development-control case verifies empty factory state across restart,
+explicit CAD setup, and data-reset currency retention; it reads the same test database directly
+to confirm no accounts/groups/settings were seeded while setup was pending. Port 3000's existing
+process was left untouched. Packaged acceptance uses separate disposable profiles and does not
+rely on that server. See the readiness log for final packaged/configuration evidence.

@@ -1,45 +1,11 @@
-import { test, expect, type ElectronApplication } from "@playwright/test";
-import { closeApp, launchApp } from "./helpers/importFlow";
-
-const waitForHandler = async (app: ElectronApplication, channel: string) => {
-  for (let i = 0; i < 40; i += 1) {
-    const exists = await app.evaluate(({ ipcMain }, ch) => {
-      const handlers = (ipcMain as any)._invokeHandlers as Map<string, Function>;
-      return handlers?.has(ch) ?? false;
-    }, channel);
-    if (exists) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error(`IPC handler not ready: ${channel}`);
-};
-
-const invoke = async <T>(
-  app: ElectronApplication,
-  channel: string,
-  arg?: unknown
-): Promise<T> => {
-  return app.evaluate(
-    async ({ ipcMain }, payload: { channel: string; arg: unknown }) => {
-      const handlers = (ipcMain as any)._invokeHandlers as Map<string, Function>;
-      const handler = handlers?.get(payload.channel);
-      if (!handler) {
-        throw new Error(`Handler not found: ${payload.channel}`);
-      }
-      return handler({} as any, payload.arg);
-    },
-    { channel, arg }
-  );
-};
+import { test, expect } from "@playwright/test";
+import { closeApp, launchApp, invokeInApp as invoke } from "./helpers/importFlow";
 
 test("opening balance adjusts for older transaction mutations", async () => {
   test.setTimeout(180000);
   const app = await launchApp();
 
   try {
-    await waitForHandler(app, "add-account");
-
     const accountName = `E2E Opening ${Date.now()}`;
     const created: any = await invoke(app, "add-account", {
       name: accountName,

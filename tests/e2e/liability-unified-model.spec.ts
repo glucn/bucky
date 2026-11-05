@@ -1,46 +1,11 @@
-import { test, expect, type ElectronApplication } from "@playwright/test";
-import { closeApp, launchApp } from "./helpers/importFlow";
-
-const waitForHandler = async (app: ElectronApplication, channel: string) => {
-  for (let i = 0; i < 40; i += 1) {
-    const exists = await app.evaluate(({ ipcMain }, ch) => {
-      const handlers = (ipcMain as any)._invokeHandlers as Map<string, Function>;
-      return handlers?.has(ch) ?? false;
-    }, channel);
-    if (exists) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error(`IPC handler not ready: ${channel}`);
-};
-
-const invoke = async <T>(app: ElectronApplication, channel: string, arg?: unknown): Promise<T> => {
-  return app.evaluate(
-    async ({ ipcMain }, payload: { channel: string; arg: unknown }) => {
-      const handlers = (ipcMain as any)._invokeHandlers as Map<string, Function>;
-      const handler = handlers?.get(payload.channel);
-      if (!handler) {
-        throw new Error(`Handler not found: ${payload.channel}`);
-      }
-      return handler({} as any, payload.arg);
-    },
-    { channel, arg }
-  );
-};
+import { test, expect } from "@playwright/test";
+import { closeApp, launchApp, invokeInApp as invoke } from "./helpers/importFlow";
 
 test("F-014 liability setup, conversion gating, history, and transaction semantics", async () => {
   test.setTimeout(240000);
   const app = await launchApp();
 
   try {
-    await waitForHandler(app, "add-account");
-    await waitForHandler(app, "upsert-liability-profile");
-    await waitForHandler(app, "convert-liability-template");
-    await waitForHandler(app, "get-liability-version-history");
-    await waitForHandler(app, "get-liability-profile");
-    await waitForHandler(app, "add-transaction");
-
     const createLiability = async (name: string) => {
       const created: any = await invoke(app, "add-account", {
         name,
@@ -159,19 +124,21 @@ test("F-014 liability setup, conversion gating, history, and transaction semanti
       "2026-02-15",
     ]);
 
-    const accounts: any[] = await invoke(app, "get-accounts", false);
-    const sourceAccount = accounts.find((account) => account.id !== blankId && account.subtype === "asset");
-    if (!sourceAccount) {
-      throw new Error("No source asset account available for transaction setup");
-    }
+    // Own the fixture's currency. The first existing asset may be a CAD default or a
+    // category; an ordinary USD payment must not silently become an invalid FX transfer.
+    const source: any = await invoke(app, "add-account", { name: `E2E USD payment ${Date.now()}`,
+      type: "user", subtype: "asset", currency: "USD" });
+    expect(source.success).toBe(true);
 
-    await invoke(app, "add-transaction", {
+    const posting: any = await invoke(app, "add-transaction", {
       date: "2026-02-20",
       description: "Liability e2e transaction",
-      fromAccountId: sourceAccount.id,
+      fromAccountId: source.account.id,
       toAccountId: blankId,
       amount: 25,
     });
+    expect(posting.skipped).toBe(false);
+    expect(posting.entry.id).toBeTruthy();
 
     const profileResult: any = await invoke(app, "get-liability-profile", blankId);
     expect(profileResult.success).toBe(true);

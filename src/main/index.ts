@@ -22,6 +22,7 @@ import { setupDevelopmentIpcHandlers } from "./ipcHandlers.development";
 import { setupBookSetupIpcHandlers } from "./ipcHandlers.bookSetup";
 import { createBookSetupGate } from "./bookSetupGate";
 import { bookSetupService } from "../services/bookSetup";
+import { developmentServer } from "../shared/developmentServer";
 import { setupInvestmentIpcHandlers } from "./ipcHandlers.investments";
 import { setupOverviewIpcHandlers } from "./ipcHandlers.overview";
 import { setupReportingIpcHandlers } from "./ipcHandlers.reporting";
@@ -48,7 +49,7 @@ let personalRecovery: PersonalRecovery | undefined;
 let personalSession: Session | undefined;
 const singleInstance = !app.isPackaged || app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
-const getAppUrl = () => app.isPackaged ? MAIN_WINDOW_WEBPACK_ENTRY : "http://localhost:3000";
+const getAppUrl = () => app.isPackaged ? MAIN_WINDOW_WEBPACK_ENTRY : developmentServer().url;
 const ipcMain = createSecureIpc(electronIpcMain, { getWindow: () => mainWindow,
   getAppUrl, isPackaged: () => app.isPackaged,
   runData: (action, channel) => {
@@ -1180,6 +1181,7 @@ function createWindow() {
 // This method will be called when Electron has finished initialization
 app.whenReady().then(() => {
   if (!singleInstance || (!app.isPackaged && process.env.PLAYWRIGHT_PREPARE_ONLY === "1")) {
+    if (!app.isPackaged && process.env.PLAYWRIGHT_PREPARE_ONLY === "1") console.log("BUCKY_E2E_PREPARED");
     app.quit();
     return;
   }

@@ -1,3 +1,4 @@
+import { appBaseUrl } from "./helpers/server";
 import { expect, test } from "@playwright/test";
 import sqlite3 from "sqlite3";
 import crypto from "crypto";
@@ -158,7 +159,7 @@ test("cleanup mode reassigns placeholder rows to category and user account", asy
       date: "2025-08-04",
     });
 
-    await page.goto(`http://localhost:3000/accounts/${accountId}/transactions`, {
+    await page.goto(`${appBaseUrl}/accounts/${accountId}/transactions`, {
       waitUntil: "domcontentloaded",
     });
     await page.getByTestId("transactions-page").waitFor();

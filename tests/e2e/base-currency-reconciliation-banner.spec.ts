@@ -1,3 +1,4 @@
+import { appBaseUrl } from "./helpers/server";
 import { expect, test } from "@playwright/test";
 import sqlite3 from "sqlite3";
 import { attachDebugLogging, closeApp, getMainWindow, launchApp, testDbPath } from "./helpers/importFlow";
@@ -43,7 +44,7 @@ test("base currency change shows banner, opens FX-only refresh, then clears on s
   attachDebugLogging(page, "base-currency-banner-resolve");
 
   try {
-    await page.goto("http://localhost:3000/settings/auto-categorization", { waitUntil: "domcontentloaded" });
+    await page.goto(`${appBaseUrl}/settings/auto-categorization`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("base-currency-settings").waitFor();
 
     await page.getByTestId("base-currency-select").selectOption("CAD");
@@ -79,7 +80,7 @@ test("dismissed banner reappears on relaunch while reconciliation remains pendin
   attachDebugLogging(page, "base-currency-banner-dismiss");
 
   try {
-    await page.goto("http://localhost:3000/settings/auto-categorization", { waitUntil: "domcontentloaded" });
+    await page.goto(`${appBaseUrl}/settings/auto-categorization`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("base-currency-settings").waitFor();
 
     await page.getByTestId("base-currency-select").selectOption("EUR");
@@ -96,7 +97,7 @@ test("dismissed banner reappears on relaunch while reconciliation remains pendin
   page = await getMainWindow(app);
 
   try {
-    await page.goto("http://localhost:3000/settings/auto-categorization", { waitUntil: "domcontentloaded" });
+    await page.goto(`${appBaseUrl}/settings/auto-categorization`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("base-currency-warning-banner").waitFor();
   } finally {
     await closeApp(app);

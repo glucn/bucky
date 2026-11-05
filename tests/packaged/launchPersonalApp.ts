@@ -41,7 +41,8 @@ export async function personalAppHarness() {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       child = spawn(path.resolve("out/Bucky-darwin-arm64/Bucky.app/Contents/MacOS/Bucky"),
         [`--user-data-dir=${directory}`, `--remote-debugging-port=${port}`], { cwd: directory,
-          env: { ...process.env, NODE_ENV: "test", VITEST: "true", ELECTRON_IS_DEV: "1", PLAYWRIGHT_TEST: "1" } });
+          env: { ...process.env, NODE_ENV: "test", VITEST: "true", ELECTRON_IS_DEV: "1", PLAYWRIGHT_TEST: "1",
+            BUCKY_DEV_PORT: "https://invalid-development-override.example" } });
       child.stdout?.on("data", (chunk) => { output += chunk; });
       child.stderr?.on("data", (chunk) => { output += chunk; });
       let error: Error | undefined;

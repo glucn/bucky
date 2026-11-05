@@ -1,6 +1,9 @@
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { preparationState } = require("./e2e-preparation-state");
+const { developmentServer } = require("../src/shared/developmentServer");
+const preparationPort = developmentServer({ BUCKY_DEV_PORT: String(developmentServer().port + 2) }).port;
 
 const root = process.cwd();
 const mainBundle = path.join(root, ".webpack", "main", "index.js");
@@ -38,43 +41,46 @@ const child = spawn("npm", ["run", "start"], {
     VITEST: "true",
     PLAYWRIGHT_TEST: "1",
     PLAYWRIGHT_PREPARE_ONLY: "1",
+    // Playwright must never mistake Forge's temporary renderer for the real test server.
+    BUCKY_DEV_PORT: String(preparationPort),
   },
-  stdio: "ignore",
+  detached: process.platform !== "win32",
+  stdio: ["ignore", "pipe", "pipe"],
 });
 
 const startedAt = Date.now();
+const state = preparationState(checkReady);
+let prepared = false, failure = "", diagnostics = "";
+const stopOwnedProcess = (signal = "SIGTERM") => {
+  try { if (process.platform === "win32") child.kill(signal); else process.kill(-child.pid, signal); }
+  catch (error) { if (error.code !== "ESRCH") throw error; }
+};
+child.stdout.on("data", (chunk) => { state.observe(chunk); diagnostics = (diagnostics + chunk).slice(-8192); });
+child.stderr.on("data", (chunk) => { diagnostics = (diagnostics + chunk).slice(-8192); });
 
 const interval = setInterval(() => {
-  if (checkReady()) {
+  if (!prepared && state.ready()) {
     ensureHotUpdateArtifacts();
-    clearInterval(interval);
-    if (!child.killed) {
-      child.kill("SIGTERM");
-    }
-    process.exit(0);
+    prepared = true;
+    stopOwnedProcess();
   }
 
   if (Date.now() - startedAt > timeoutMs) {
-    clearInterval(interval);
-    if (!child.killed) {
-      child.kill("SIGTERM");
-    }
-    console.error("Timed out preparing Electron bundles for E2E.");
-    process.exit(1);
+    failure = "Timed out preparing fresh Electron bundles for E2E.";
+    stopOwnedProcess("SIGKILL");
   }
 }, 1000);
 
-child.on("exit", (code) => {
-  if (checkReady()) {
+child.on("close", () => {
+  clearInterval(interval);
+  if (!failure && state.ready()) {
     ensureHotUpdateArtifacts();
-    clearInterval(interval);
     process.exit(0);
     return;
   }
-
-  if (code !== 0) {
-    clearInterval(interval);
-    console.error(`dev:electron exited early with code ${code}`);
-    process.exit(1);
-  }
+  console.error(failure || "Electron preparation exited before a fresh prepared launch.");
+  console.error(diagnostics);
+  process.exit(1);
 });
+child.on("error", (error) => { failure = `Electron preparation could not start: ${error.message}`; });
+for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => { failure = "Electron preparation canceled"; stopOwnedProcess(); });

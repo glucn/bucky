@@ -2,6 +2,7 @@ const { FusesPlugin } = require("@electron-forge/plugin-fuses");
 const { FuseV1Options, FuseVersion } = require("@electron/fuses");
 const path = require("path");
 const fs = require("fs/promises");
+const { developmentServer } = require("./src/shared/developmentServer");
 
 module.exports = {
   packagerConfig: {
@@ -51,6 +52,8 @@ module.exports = {
     {
       name: "@electron-forge/plugin-webpack",
       config: {
+        port: developmentServer().port,
+        loggerPort: developmentServer().port + 1,
         mainConfig: "./webpack.main.config.js",
         renderer: {
           config: "./webpack.renderer.config.js",

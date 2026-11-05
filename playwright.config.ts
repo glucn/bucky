@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import { developmentServer } from "./src/shared/developmentServer";
 
 export default defineConfig({
   testDir: "tests/e2e",
@@ -13,9 +14,9 @@ export default defineConfig({
   webServer: {
     command:
       "PLAYWRIGHT_TEST=1 npm run e2e:db:push && PLAYWRIGHT_TEST=1 npm run e2e:electron:prepare && PLAYWRIGHT_TEST=1 npm run dev:webpack",
-    url: "http://localhost:3000",
+    url: developmentServer().url,
     timeout: 120_000,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     stdout: "pipe",
     stderr: "pipe",
   },

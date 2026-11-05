@@ -1,3 +1,4 @@
+import { appBaseUrl } from "./helpers/server";
 import { test, expect } from "@playwright/test";
 
 test("opens on overview dashboard with empty allocation hint", async ({ page }) => {
@@ -60,7 +61,7 @@ test("opens on overview dashboard with empty allocation hint", async ({ page }) 
   }, overviewPayload);
 
   try {
-    await page.goto("http://localhost:3000/", { waitUntil: "networkidle" });
+    await page.goto(`${appBaseUrl}/`, { waitUntil: "networkidle" });
     await page.getByTestId("overview-dashboard").waitFor({ state: "visible", timeout: 20000 });
     await expect(page.getByTestId("overview-net-worth-card")).toBeVisible();
     await expect(page.getByTestId("overview-trend-card")).toBeVisible();

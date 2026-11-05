@@ -1,3 +1,4 @@
+import { appBaseUrl } from "./helpers/server";
 import { expect, test } from "@playwright/test";
 import crypto from "crypto";
 import sqlite3 from "sqlite3";
@@ -68,7 +69,7 @@ test("missing market data CTA opens refresh panel", async () => {
     const seeded = await seedPortfolioSecurityWithoutPrice();
 
     await page.goto(
-      `http://localhost:3000/investments/${seeded.portfolioId}/position/${seeded.tickerSymbol}`,
+      `${appBaseUrl}/investments/${seeded.portfolioId}/position/${seeded.tickerSymbol}`,
       { waitUntil: "domcontentloaded" }
     );
 
@@ -89,7 +90,7 @@ test("completed-with-issues summary is visible in refresh panel", async () => {
   attachDebugLogging(page, "enrichment-summary");
 
   try {
-    await page.goto("http://localhost:3000/", { waitUntil: "domcontentloaded" });
+    await page.goto(`${appBaseUrl}/`, { waitUntil: "domcontentloaded" });
 
     await page.evaluate(async () => {
       await (window as any).electron.ipcRenderer.invoke("seed-enrichment-run-summary");
@@ -117,7 +118,7 @@ test("refresh run completes when all categories are deselected", async () => {
   attachDebugLogging(page, "enrichment-run-completes");
 
   try {
-    await page.goto("http://localhost:3000/", { waitUntil: "domcontentloaded" });
+    await page.goto(`${appBaseUrl}/`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("open-enrichment-panel").click();
     await page.getByTestId("enrichment-panel").waitFor();
 
@@ -154,7 +155,7 @@ test("fx-only run derives pair from account currency and base currency", async (
   attachDebugLogging(page, "enrichment-fx-pairs");
 
   try {
-    await page.goto("http://localhost:3000/", { waitUntil: "domcontentloaded" });
+    await page.goto(`${appBaseUrl}/`, { waitUntil: "domcontentloaded" });
     await page.getByTestId("open-enrichment-panel").click();
     await page.getByTestId("enrichment-panel").waitFor();
 

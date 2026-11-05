@@ -9,6 +9,29 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 23 — Fresh isolated E2E execution and onboarding/reset acceptance (2026-11-04)
+
+- Added one validated development origin shared by runtime sender checks, Forge, Webpack and
+  test navigation. The suite owns its server instead of reusing an unrelated listener.
+  Preparation requires an executed fresh-launch marker and complete bundles, rejects quoted
+  source diagnostics, and uses separate temporary ports so it cannot satisfy final-server readiness.
+  Owned preparation processes are drained; port 3000's existing process remained untouched.
+- Replaced private handler-map calls/fabricated events in liability/opening-balance tests with
+  actual preload IPC. Repeated execution exposed a liability fixture choosing a CAD asset for
+  an ordinary USD payment and ignoring the rejected posting. It now owns its USD source account
+  and verifies the posting result before asserting transaction history. Production checks were
+  retained throughout.
+- Added real development reset acceptance: factory reset leaves no accounts, groups or settings
+  before currency selection, including after restart; selecting CAD seeds CAD defaults; data reset
+  retains CAD and clears book-derived reconciliation state. BL-022's implemented setup/reset
+  policy now has complete automated development acceptance, alongside prior packaged checks.
+- **All 25 development/browser E2E cases passed three repetitions (75 checks)**. The **13 focused
+  configuration/preparation tests**, TypeScript and Apple Silicon packaging passed. All **nine
+  packaged acceptance cases** passed with an intentionally invalid development-server override,
+  confirming installed startup and sender checks still use the trusted file origin.
+  Representative personal pilot, native security
+  acceptance, canonical investment valuation, exact decimals and read-only verification remain open.
+
 ### Batch 22 — Enforce explicit currency setup before financial workflows (2026-11-04)
 
 - Added a main-enforced setup gate for authenticated recovered and development books with
@@ -585,7 +608,7 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation work
-is **development E2E acceptance and financial correctness gaps**,
+is **canonical investment valuation, exact decimals and whole-book verification**,
 alongside full installed/native recovery/conversion acceptance. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance
 gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.

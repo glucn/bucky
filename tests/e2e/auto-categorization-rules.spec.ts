@@ -1,3 +1,4 @@
+import { appBaseUrl } from "./helpers/server";
 import { expect, test } from "@playwright/test";
 import crypto from "crypto";
 import sqlite3 from "sqlite3";
@@ -183,7 +184,7 @@ test("learned cleanup confirmation is auto-applied on later import", async () =>
   try {
     await page.setViewportSize({ width: 1400, height: 900 });
 
-    await page.goto(`http://localhost:3000/accounts/${sourceAccountId}/transactions`, {
+    await page.goto(`${appBaseUrl}/accounts/${sourceAccountId}/transactions`, {
       waitUntil: "domcontentloaded",
     });
     await page.getByTestId("transactions-page").waitFor();
@@ -202,7 +203,7 @@ test("learned cleanup confirmation is auto-applied on later import", async () =>
     );
     expect(learnedRule?.id).toBeTruthy();
 
-    await page.goto(`http://localhost:3000/accounts/${importAccountId}/transactions`, {
+    await page.goto(`${appBaseUrl}/accounts/${importAccountId}/transactions`, {
       waitUntil: "domcontentloaded",
     });
     await page.getByTestId("transactions-page").waitFor();
@@ -245,7 +246,7 @@ test("deleting a rule from settings changes later import behavior", async () => 
   try {
     await page.setViewportSize({ width: 1400, height: 900 });
 
-    await page.goto("http://localhost:3000/settings/auto-categorization", {
+    await page.goto(`${appBaseUrl}/settings/auto-categorization`, {
       waitUntil: "domcontentloaded",
     });
     await page.getByTestId("auto-categorization-settings-page").waitFor();
@@ -259,7 +260,7 @@ test("deleting a rule from settings changes later import behavior", async () => 
     await page.getByTestId("auto-categorization-delete-confirm-button").click();
     await expect(page.locator("tr", { hasText: "coffee bean vancouver bc" })).toHaveCount(0);
 
-    await page.goto(`http://localhost:3000/accounts/${importAccountId}/transactions`, {
+    await page.goto(`${appBaseUrl}/accounts/${importAccountId}/transactions`, {
       waitUntil: "domcontentloaded",
     });
     await page.getByTestId("transactions-page").waitFor();

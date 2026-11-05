@@ -1,3 +1,4 @@
+import { appBaseUrl } from "./helpers/server";
 import { test, expect, type Page } from "@playwright/test";
 
 const navigateToApp = async (page: Page, path: string) => {
@@ -8,7 +9,7 @@ const navigateToApp = async (page: Page, path: string) => {
 
   for (let attempt = 0; attempt < 10; attempt += 1) {
     try {
-      await page.goto(`http://localhost:3000${path}`, { waitUntil: "domcontentloaded" });
+      await page.goto(`${appBaseUrl}${path}`, { waitUntil: "domcontentloaded" });
       await page.getByTestId(targetTestId).waitFor({ state: "visible", timeout: 3000 });
       return;
     } catch (error) {

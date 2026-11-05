@@ -492,7 +492,7 @@ This file tracks deferred product improvements that are intentionally out of cur
 
 - **ID**: BL-022
 - **Title**: Clarify onboarding currency setup and reset semantics (data reset vs factory reset)
-- **Status**: in-progress
+- **Status**: done
 - **Priority**: medium
 - **Related Docs**: `doc/BL-019-base-currency-impact/requirements.md`, `src/services/database.ts`, `src/main/index.ts`
 - **Implementation update (2026-09-23)**:
@@ -504,7 +504,9 @@ This file tracks deferred product improvements that are intentionally out of cur
   - Packaged development reset remains prohibited. Recovered/development books now require
     explicit supported currency before financial IPC/view mounting; setup preserves existing
     records and seeds empty books atomically. Packaged missing/invalid-currency checks are
-    covered. Full development E2E and representative acceptance remain open.
+    covered. All 25 development/browser E2E cases passed three repetitions (2026-11-04),
+    including factory-state persistence across restart and data-reset currency retention.
+    Representative personal acceptance remains part of the readiness milestone.
 - **Context (What / Why)**:
   - Current defaults can silently fall back to USD when base currency is absent, which is deterministic but can conflict with intended first-time setup UX.
   - `reset-all-data` currently preserves base currency by convention, but reset behavior is controlled by a boolean and lacks explicit product-level reset modes.

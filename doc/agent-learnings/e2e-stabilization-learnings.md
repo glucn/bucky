@@ -27,6 +27,16 @@ This note captures practical findings from stabilizing flaky E2E runs, especiall
 
 ## Current implementation notes
 
+- The original file-existence preparation check could accept an older packaged build. Preparation
+  now waits for the `BUCKY_E2E_PREPARED` launch marker as well as complete bundle files.
+- `BUCKY_DEV_PORT` is shared across runtime origin validation, Forge, Webpack and scenarios.
+  Prep uses base port + 2/+3; the real server uses the base port. Sharing the port allowed
+  Playwright to detect the temporary Forge server, start tests early and lose the renderer.
+- `reuseExistingServer` is disabled. Keep unrelated listeners (including port 3000) untouched;
+  select free ports instead. Owned preparation processes are stopped as a process group.
+- Legacy tests that directly called `_invokeHandlers` with `{}` fail sender validation. Use
+  the real renderer/preload bridge; never weaken production checks to accommodate the fixture.
+
 - `scripts/e2e-prepare-electron.js`
   - launches prep with `PLAYWRIGHT_PREPARE_ONLY=1`,
   - waits for `.webpack/main/index.js` and `.webpack/renderer/main_window/preload.js`,
@@ -73,4 +83,5 @@ This note captures practical findings from stabilizing flaky E2E runs, especiall
 
 - Before Playwright runs, check port `3000` usage to avoid stale servers causing false failures.
 - Keep local DB artifacts (`dev.db`, `test.db`) untracked.
-- If a run stalls, clear stale `webpack` on port `3000` and rerun.
+- If a run stalls, inspect its owned process/session first. Preserve unrelated listeners; select
+  another free development port rather than killing an occupying process without confirmation.

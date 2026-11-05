@@ -1,3 +1,4 @@
+import { appBaseUrl } from "./server";
 import type { ElectronApplication, Page } from "@playwright/test";
 import { _electron as electron } from "playwright";
 import fs from "fs";
@@ -74,14 +75,14 @@ async function configureFixtureBook(page: Page): Promise<Page> {
   return page;
 }
 
-export const getMainWindow = async (app: ElectronApplication): Promise<Page> => {
+export const getMainWindow = async (app: ElectronApplication, options: { configureCurrency?: boolean } = {}): Promise<Page> => {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const windows = app.windows();
     for (const window of windows) {
       const url = await window.url();
-      if (url.includes("localhost:3000")) {
+      if (url.startsWith(appBaseUrl + "/")) {
         await window.waitForLoadState("domcontentloaded");
-        return configureFixtureBook(window);
+        return options.configureCurrency === false ? window : configureFixtureBook(window);
       }
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -89,8 +90,14 @@ export const getMainWindow = async (app: ElectronApplication): Promise<Page> => 
 
   const page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
-  return configureFixtureBook(page);
+  return options.configureCurrency === false ? page : configureFixtureBook(page);
 };
+
+/** Exercise preload and real sender/frame validation instead of calling private handlers. */
+export async function invokeInApp<T>(app: ElectronApplication, channel: string, arg?: unknown): Promise<T> {
+  const page = await getMainWindow(app);
+  return page.evaluate(({ channel, arg }) => window.electron.ipcRenderer.invoke(channel, arg), { channel, arg });
+}
 
 export const attachDebugLogging = (page: Page, label: string) => {
   if (process.env.E2E_DEBUG !== "1") {
@@ -180,7 +187,7 @@ const ensureSeedAccounts = async (): Promise<string> => {
 
 export const openTransactionsPage = async (page: Page) => {
   const accountId = await ensureSeedAccounts();
-  const targetUrl = `http://localhost:3000/accounts/${accountId}/transactions`;
+  const targetUrl = `${appBaseUrl}/accounts/${accountId}/transactions`;
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
