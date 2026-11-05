@@ -17,4 +17,5 @@ export function setupSecurityIpcHandlers(ipc: IpcRegistrar, getSecurity: () => P
   ipc.handle("unlock-personal-profile", (_event, input) => personal().unlock(input));
   ipc.handle("lock-personal-profile", () => personal().lock());
   ipc.handle("preserve-interrupted-setup", (_event, input) => personal().preserveSetup(input));
+  ipc.handle("change-profile-credentials", (_event, input) => personal().changeCredentials(input));
 }

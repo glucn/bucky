@@ -12,7 +12,7 @@ function fixture(state = locked) {
   let listener: (state: SecurityState) => void = () => {};
   const dispose = vi.fn();
   const api = { getState: vi.fn().mockResolvedValue(state), unlock: vi.fn(), lock: vi.fn(),
-    beginSetup: vi.fn(), confirmSetup: vi.fn(), preserveSetup: vi.fn(), onStateChanged: vi.fn((fn) => { listener = fn; return dispose; }) };
+    beginSetup: vi.fn(), confirmSetup: vi.fn(), preserveSetup: vi.fn(), changeCredentials: vi.fn(), onStateChanged: vi.fn((fn) => { listener = fn; return dispose; }) };
   Object.defineProperty(window, "electron", { configurable: true, value: { security: api } });
   return { api, emit: (next: SecurityState) => listener(next), dispose };
 }
@@ -116,4 +116,36 @@ it("clears a partially entered launch credential when moving into recovery and r
   fireEvent.click(screen.getByRole("button", { name: "Back to unlock" }));
   await screen.findByRole("heading", { name: "Unlock Bucky" });
   expect((screen.getByLabelText("Passphrase") as HTMLInputElement).value).toBe("");
+});
+
+it("keeps protection changes outside financial views and requires a separate unlock afterward", async () => {
+  const f = fixture(); let finish!: () => void;
+  f.api.changeCredentials.mockImplementation(async () => {
+    f.emit({ ...locked, status: "changing-credentials", revision: 2 });
+    await new Promise<void>((resolve) => { finish = resolve; });
+    f.emit({ ...locked, revision: 3 }); return { updated: true };
+  });
+  render(<SecurityBoundary><p>Financial view must stay closed</p></SecurityBoundary>);
+  await screen.findByRole("heading", { name: "Unlock Bucky" });
+  fireEvent.change(screen.getByLabelText("Passphrase"), { target: { value: "Partially entered launch credential" } });
+  fireEvent.click(screen.getByRole("button", { name: "Change profile protection" }));
+  fireEvent.change(screen.getByLabelText("Current passphrase"), { target: { value: "Original synthetic passphrase" } });
+  fireEvent.change(screen.getByLabelText("New passphrase"), { target: { value: "Replacement synthetic passphrase" } });
+  fireEvent.change(screen.getByLabelText("Repeat new passphrase"), { target: { value: "Replacement synthetic passphrase" } });
+  fireEvent.click(screen.getByRole("button", { name: "Update profile protection" }));
+  await waitFor(() => expect(finish).toBeDefined());
+  expect(screen.getByTestId("credential-change-page")).toBeTruthy();
+  finish(); await screen.findByText(/Profile protection updated/);
+  expect(f.api.unlock).not.toHaveBeenCalled(); expect(screen.queryByText("Financial view must stay closed")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Back to unlock" }));
+  await screen.findByRole("heading", { name: "Unlock Bucky" });
+  expect((screen.getByLabelText("Passphrase") as HTMLInputElement).value).toBe("");
+});
+
+it("defaults to configured passphrase protection when OS authentication is available but no keychain wrap exists", async () => {
+  fixture({ ...locked, osAuthenticationAvailable: true });
+  render(<SecurityBoundary><p>Closed view</p></SecurityBoundary>);
+  await screen.findByRole("heading", { name: "Unlock Bucky" });
+  expect((screen.getByLabelText("Authentication method") as HTMLSelectElement).value).toBe("passphrase");
+  expect((screen.getByRole("button", { name: /^Unlock$/ }) as HTMLButtonElement).disabled).toBe(false);
 });

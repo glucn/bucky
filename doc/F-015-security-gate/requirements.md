@@ -50,7 +50,11 @@ use. Do not invent cryptographic algorithms or silently fall back to plaintext s
   tests; real OS authentication/keychain and OS-session events still need manual acceptance.
 - SEC-04/SEC-05 have a tested [key-envelope foundation](key-envelopes.md) and
   [recovery-confirmed setup](protected-profile-setup.md), now connected to the application.
-  Durable credential replacement and portable authenticated backup/recovery remain incomplete.
+  [Durable credential replacement](credential-changes.md) now has verified persistence,
+  main-owned fresh authentication, saved-code recovery, lock cancellation, and application controls.
+  Packaged passphrase changes/restarts are covered; real OS/keychain and native repair acceptance
+  remain pending. Portable authenticated backup/recovery is implemented as described below;
+  full acceptance remains incomplete.
   The [protected artifact service](protected-backup-artifacts.md) now exports authenticated
   files and verifies encrypted restore staging independently of the original keychain. The
   [restore controller](protected-profile-restore.md) adds credential rebinding, recovery

@@ -9,6 +9,27 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 20 — Main-owned credential changes and saved-code fallback (2026-11-04)
+
+- Connected durable credential replacement to locked-only IPC and a dedicated form. Current
+  passphrase, fresh OS challenge, or saved recovery code must authenticate before replacement.
+  A saved code establishes ordinary protection; financial storage stays closed until separate
+  unlock. Other configured wraps and recovery remain intact; retained copies keep old credentials.
+- Main serializes the change, drains setup/recovery, shares the unlock cooldown, and cancels/drains
+  on lock. Native consent is required before preserving an authenticated interrupted credential
+  lock and retrying. Late consent cannot move files after revocation; a completed atomic publication
+  survives a subsequent lock. Responses expose no keys or filesystem paths.
+- Added eight main and four renderer tests through failing regressions. Review also fixed
+  passphrase-only profiles defaulting to unavailable keychain protection on OS-capable machines.
+  Navigation and success/failure clear form secrets without automatically mounting financial views.
+- **783 tests across 98 files passed in each native and encrypted storage mode**. TypeScript and Apple Silicon packaging
+  passed. All seven packaged cases passed three repetitions (**21 checks**), including actual
+  passphrase replacement, old-passphrase rejection, restart/unlock, original saved-code fallback,
+  and another restart. The credential-change screen was visually inspected.
+- Real Touch ID/keychain, native preservation dialogs, power-loss and representative personal
+  recovery remain acceptance gates. Onboarding/reset policy, valuation, exact decimals, read-only
+  verification and representative pilot work remain open.
+
 ### Batch 19 — Atomic credential persistence and retained lock recovery (2026-11-04)
 
 - Added verified atomic passphrase/OS-keychain wrap replacement without changing the data key,
@@ -525,7 +546,7 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation work
-is **durable credential changes and the remaining onboarding/reset policy**,
+is **the remaining onboarding/reset policy and financial correctness gaps**,
 alongside full installed/native recovery/conversion acceptance. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance
 gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.

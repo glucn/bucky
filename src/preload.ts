@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld("electron", {
     unlock: (input) => ipcRenderer.invoke("unlock-personal-profile", input),
     lock: () => ipcRenderer.invoke("lock-personal-profile"),
     preserveSetup: (input) => ipcRenderer.invoke("preserve-interrupted-setup", input),
+    changeCredentials: (input) => ipcRenderer.invoke("change-profile-credentials", input),
     onStateChanged: (listener) => {
       const receive = (_event: unknown, state: any) => listener(state);
       ipcRenderer.on("security-state-changed", receive);

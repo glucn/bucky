@@ -1,7 +1,7 @@
 # Durable profile credential changes
 
-Trusted-process services implemented 2026-11-04. Application controls and installed acceptance
-remain pending. These operations rewrap the existing data key; they do not rotate that key,
+Trusted-process services and application controls implemented 2026-11-04. Real OS/native-dialog
+and representative personal acceptance remain pending. These operations rewrap the existing data key; they do not rotate that key,
 erase old copies, or revoke credentials accepted by retained backups/envelopes.
 
 `updateProfileCredentials` requires an authenticated key and the exact expected current envelope.
@@ -27,8 +27,24 @@ exclusive security ownership, drain other work, freshly authenticate, and obtain
 before calling it. No lock is automatically declared stale or deleted. Preserved locks remain
 visible, and a new credential update can then be attempted against the current envelope.
 
+From the locked launch screen, choose **Change profile protection**, verify a current passphrase,
+fresh OS authentication, or the saved recovery code, then set a passphrase or refresh OS-keychain
+protection. New passphrases require exact repetition. Using recovery establishes ordinary
+protection; it does not unlock financial storage. Return to the launch screen and separately
+authenticate. Financial views remain unmounted during the change, and secrets are cleared from
+the form after success or failure. Failed authentication shares the bounded unlock cooldown.
+
+Main owns an exclusive maintenance operation, drains setup/recovery, and rejects financial and
+competing security requests. Lock revokes the operation, cancels it, and waits for drainage.
+Late OS/native responses cannot publish new work after revocation. A verified publication
+already completed before locking remains available. Retained-lock repair requires fresh current
+authentication and native consent, then retries against the same expected envelope.
+
 Tests cover persisted passphrase replacement, adding a fallback to keychain-only profiles,
 OS-wrap refresh, preserved recovery/alternate credentials and old copies, wrong/stale keys,
 links, competing writers, disk-full, concurrent metadata replacement, staged tampering, final
-cancellation, post-publication sync/cleanup failure, and retained-lock recovery. Main-owned
-authentication, cooldowns, cancellation/drainage, UI and installed checks are still required.
+cancellation, post-publication sync/cleanup failure, and retained-lock recovery. Main/UI tests
+cover authentication, cooldowns, cancellation/drainage, native consent denial and late responses,
+and separate unlock. A packaged scenario replaces a passphrase, rejects the old one, restarts
+and unlocks, then uses the original saved code to establish another passphrase and restarts
+again. Actual Touch ID/keychain and native preservation acceptance remain manual gates.

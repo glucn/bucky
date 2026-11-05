@@ -5,6 +5,7 @@ import path from "path";
 import { PersonalSecurity } from "./personalSecurity";
 import { ProtectedProfileSetup } from "../services/protectedProfiles";
 import * as interruptedProfiles from "../services/interruptedProfiles";
+import { readProtectedProfile } from "../services/protectedProfiles";
 
 const keychain = { isAvailable: () => true, encryptString: async (v: string) => Buffer.from(v), decryptString: async (v: Buffer) => v.toString() };
 const migrations = path.resolve("prisma/migrations");
@@ -17,6 +18,7 @@ beforeEach(async () => {
     database: { openEncryptedDatabase: vi.fn(async () => {}), disconnect: vi.fn(async () => {}) },
     enrichment: { suspendForLock: vi.fn(async () => {}), resumeAfterUnlock: vi.fn() },
     cancelRecovery: vi.fn(async () => {}), confirmPreserveSetup: vi.fn(async () => true),
+    confirmCredentialRepair: vi.fn(async () => true),
     onRevoked: vi.fn(), onStateChanged: vi.fn(), now: () => Date.now() };
   security = new PersonalSecurity(directory, migrations, deps);
 });
@@ -24,11 +26,12 @@ afterEach(async () => {
   deps.cancelRecovery.mockReset().mockResolvedValue(undefined);
   vi.restoreAllMocks(); await security.lock(); await fs.rm(directory, { recursive: true, force: true });
 });
-async function existing() {
+async function existing(passphrase?: string) {
   const setup = new ProtectedProfileSetup(directory, migrations);
-  const pending = await setup.begin({ baseCurrency: "CAD", keychain });
+  const pending = await setup.begin({ baseCurrency: "CAD", keychain, ...(passphrase ? { passphrase } : {}) });
   await setup.confirm(pending.setupId, pending.recoverySecret);
   await security.initialize();
+  return pending.recoverySecret;
 }
 
 it("starts without opening or seeding a book, denies financial work, and rejects malformed setup input", async () => {
@@ -209,4 +212,106 @@ it("does not open a native preservation prompt if locking revoked its inventory 
   await expect(security.preserveSetup({ artifactIds })).rejects.toThrow(); await locking;
   expect(deps.confirmPreserveSetup).not.toHaveBeenCalled();
   expect((await fs.readdir(path.join(directory, "profiles"))).sort()).toEqual(artifactIds);
+});
+
+const originalPassphrase = "Original main security passphrase", replacementPassphrase = "Replacement main security passphrase";
+const credentialChange = () => ({ authentication: { mode: "passphrase" as const, passphrase: originalPassphrase },
+  change: { mode: "passphrase" as const, passphrase: replacementPassphrase, passphraseConfirmation: replacementPassphrase } });
+
+it("freshly authenticates and persists a passphrase change while the book stays closed", async () => {
+  await existing(originalPassphrase);
+  expect(await security.changeCredentials(credentialChange())).toEqual({ updated: true });
+  expect(security.getState().status).toBe("locked"); expect(deps.database.openEncryptedDatabase).not.toHaveBeenCalled();
+  await expect(security.unlock({ mode: "passphrase", passphrase: originalPassphrase })).rejects.toThrow();
+  deps.now = () => Date.now() + 60000;
+  await security.unlock({ mode: "passphrase", passphrase: replacementPassphrase });
+  expect(security.getState().status).toBe("unlocked");
+  await expect(security.changeCredentials(credentialChange())).rejects.toThrow();
+});
+
+it("requires matching new credentials before authentication and rate-limits failed current credentials", async () => {
+  await existing(originalPassphrase);
+  const before = await fs.readFile(path.join(directory, "profiles/default/profile.keys.json"));
+  const wrong = credentialChange(); wrong.change.passphraseConfirmation = "does not match";
+  await expect(security.changeCredentials(wrong)).rejects.toThrow(/match/i);
+  await expect(security.changeCredentials({ ...credentialChange(), extra: "unreviewed" } as any)).rejects.toThrow(/input/i);
+  const denied = credentialChange(); denied.authentication.passphrase = "Incorrect current passphrase";
+  await expect(security.changeCredentials(denied)).rejects.toThrow();
+  await expect(security.changeCredentials(credentialChange())).rejects.toThrow(/wait/i);
+  expect(await fs.readFile(path.join(directory, "profiles/default/profile.keys.json"))).toEqual(before);
+});
+
+it("requires fresh OS consent when adding or refreshing keychain protection", async () => {
+  await existing(originalPassphrase);
+  const before = await readProtectedProfile(directory);
+  deps.authenticateOS.mockRejectedValueOnce(new Error("OS denied"));
+  const request = { authentication: credentialChange().authentication, change: { mode: "keychain" as const } };
+  await expect(security.changeCredentials(request)).rejects.toThrow();
+  expect((await readProtectedProfile(directory)).envelope).toEqual(before.envelope);
+  deps.now = () => Date.now() + 60000;
+  expect(await security.changeCredentials(request)).toEqual({ updated: true });
+  expect(deps.authenticateOS).toHaveBeenCalledTimes(2);
+  const saved = await readProtectedProfile(directory);
+  expect(saved.envelope.passphrase).toEqual(before.envelope.passphrase);
+  expect(saved.envelope.keychain).not.toEqual(before.envelope.keychain);
+});
+
+it("lets a saved recovery code establish an ordinary passphrase without opening financial storage", async () => {
+  const recoverySecret = await existing(); deps.osAuthenticationAvailable = () => false;
+  expect(await security.changeCredentials({ authentication: { mode: "recovery", recoverySecret }, change: credentialChange().change })).toEqual({ updated: true });
+  expect(deps.authenticateOS).not.toHaveBeenCalled(); expect(deps.database.openEncryptedDatabase).not.toHaveBeenCalled();
+  expect(security.getState().status).toBe("locked"); expect(security.getState().methods.passphrase).toBe(true);
+  await expect(security.unlock({ mode: "recovery", recoverySecret } as any)).rejects.toThrow(/input/i);
+  await security.unlock({ mode: "passphrase", passphrase: replacementPassphrase });
+  expect(security.getState().status).toBe("unlocked");
+});
+
+it("revokes a late OS response and drains a credential change before the next session", async () => {
+  await existing(); const before = await fs.readFile(path.join(directory, "profiles/default/profile.keys.json"));
+  let finish!: () => void;
+  deps.authenticateOS.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+  const operation = security.changeCredentials({ authentication: { mode: "keychain" }, change: credentialChange().change });
+  const rejected = expect(operation).rejects.toThrow();
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  await expect(security.unlock({ mode: "keychain" })).rejects.toThrow();
+  const locking = security.lock(); finish(); await rejected; await locking;
+  expect(await fs.readFile(path.join(directory, "profiles/default/profile.keys.json"))).toEqual(before);
+  expect(deps.database.openEncryptedDatabase).not.toHaveBeenCalled();
+});
+
+it("requires native consent to retain an interrupted credential lock before retrying", async () => {
+  await existing(originalPassphrase); const lock = path.join(directory, "profiles/.credentials-default.lock"); await fs.mkdir(lock);
+  const before = await fs.readFile(path.join(directory, "profiles/default/profile.keys.json"));
+  deps.confirmCredentialRepair.mockResolvedValueOnce(false);
+  expect(await security.changeCredentials(credentialChange())).toEqual({ updated: false });
+  expect(await fs.readFile(path.join(directory, "profiles/default/profile.keys.json"))).toEqual(before);
+  expect(await security.changeCredentials(credentialChange())).toEqual({ updated: true });
+  expect(deps.confirmCredentialRepair).toHaveBeenCalledWith("default");
+  expect((await fs.readdir(path.join(directory, "profiles"))).some((name) => name.startsWith(".preserved-credentials-default-lock-"))).toBe(true);
+});
+
+it("revokes late native credential-repair consent without moving the retained lock", async () => {
+  await existing(originalPassphrase); await fs.mkdir(path.join(directory, "profiles/.credentials-default.lock"));
+  const before = await fs.readFile(path.join(directory, "profiles/default/profile.keys.json"));
+  let finish!: (value: boolean) => void;
+  deps.confirmCredentialRepair.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+  const operation = security.changeCredentials(credentialChange()), rejected = expect(operation).rejects.toThrow();
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  const locking = security.lock(); finish(true); await rejected; await locking;
+  expect(await fs.readFile(path.join(directory, "profiles/default/profile.keys.json"))).toEqual(before);
+  expect((await fs.readdir(path.join(directory, "profiles"))).some((name) => name.startsWith(".preserved-credentials-"))).toBe(false);
+});
+
+it("retains a verified published credential when lock arrives after the envelope rename", async () => {
+  await existing(originalPassphrase); const rename = fs.rename;
+  let locking: Promise<void> | undefined;
+  vi.spyOn(fs, "rename").mockImplementation(async (...args) => {
+    await rename(...args);
+    if (String(args[1]).endsWith("profile.keys.json")) locking = security.lock();
+  });
+  await expect(security.changeCredentials(credentialChange())).rejects.toThrow(); await locking;
+  expect(security.getState().status).toBe("locked");
+  expect(deps.database.openEncryptedDatabase).not.toHaveBeenCalled();
+  await security.unlock({ mode: "passphrase", passphrase: replacementPassphrase });
+  expect(security.getState().status).toBe("unlocked");
 });

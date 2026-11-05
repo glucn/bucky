@@ -58,6 +58,14 @@ async function initialize() {
         keychain: createOsKeychain(), osAuthenticationAvailable: osAuthentication.available,
         authenticateOS: osAuthentication.authenticate, database: databaseService, enrichment: enrichmentRuntimeService,
         cancelRecovery: () => personalRecovery?.cancel() ?? Promise.resolve(),
+        confirmCredentialRepair: async (profileId) => {
+          if (!mainWindow) throw new Error("Application window is unavailable");
+          const answer = await dialog.showMessageBox(mainWindow, { type: "warning", title: "Preserve interrupted credential work?",
+            buttons: ["Cancel", "Preserve and retry"], defaultId: 0, cancelId: 0, noLink: true,
+            message: `Preserve the interrupted credential-update lock for ${profileId} and retry this change?`,
+            detail: "Authentication has succeeded. The lock and its contents will be retained under a preserved name. The book and current key envelope are not replaced by preservation." });
+          return answer.response === 1;
+        },
         confirmPreserveSetup: async (artifactIds) => {
           if (!mainWindow) throw new Error("Application window is unavailable");
           const result = await dialog.showMessageBox(mainWindow, { type: "warning", title: "Preserve unfinished setup and retry?",

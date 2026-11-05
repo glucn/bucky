@@ -11,6 +11,7 @@ export const APP_IPC_CHANNELS = [
   "begin-legacy-conversion",
   "begin-interrupted-recovery",
   "preserve-interrupted-setup",
+  "change-profile-credentials",
   "confirm-protected-restore",
   "select-protected-profile",
   "cancel-protected-recovery",
@@ -117,4 +118,4 @@ export const DEVELOPMENT_ONLY_CHANNELS = new Set(["reset-all-data", "seed-enrich
 export const SECURITY_IPC_CHANNELS = new Set(["get-security-state", "begin-protected-setup", "confirm-protected-setup",
   "unlock-personal-profile", "lock-personal-profile", "get-protected-recovery-state", "create-protected-backup",
   "begin-protected-restore", "begin-legacy-conversion", "begin-interrupted-recovery", "preserve-interrupted-setup",
-  "confirm-protected-restore", "select-protected-profile", "cancel-protected-recovery"]);
+  "confirm-protected-restore", "select-protected-profile", "cancel-protected-recovery", "change-profile-credentials"]);

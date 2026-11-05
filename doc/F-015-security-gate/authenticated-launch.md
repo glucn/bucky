@@ -1,8 +1,8 @@
 # Authenticated personal-app launch
 
-Updated 2026-11-03. New packaged profiles use encrypted storage behind main-process
+Updated 2026-11-04. New packaged profiles use encrypted storage behind main-process
 authentication and now expose protected backup/restore. **F-015 is still incomplete: full
-recovery acceptance and legacy conversion remain open. Do not use this build as the sole financial record.**
+native recovery/conversion acceptance remain open. Do not use this build as the sole financial record.**
 
 ## User workflow
 
@@ -19,10 +19,15 @@ recovery acceptance and legacy conversion remain open. Do not use this build as 
 5. Use **Lock Bucky**, quit, or close the window to revoke access. Every relaunch starts locked.
    OS session-lock, suspend, and user-session-deactivation events also request locking.
 
-The recovery code is verified cryptographically during setup, but a user-facing recovery flow
-has not been delivered. Keep the code; do not interpret its existence as a tested backup plan.
-Existing plaintext profiles are preserved and shown as **Recovery required**, not converted,
-opened, or replaced. Incomplete or malformed profiles likewise fail closed.
+6. To change protection, lock first, then choose **Change profile protection**. Verify an existing
+   credential or saved recovery code and set ordinary protection. Separately unlock afterward.
+   The saved recovery code and other configured credential remain usable. Retained backups/copies
+   still accept their previous credentials; this operation does not revoke them.
+
+The recovery code supports independent backup recovery and establishing new ordinary protection
+when local credentials are unavailable. Existing plaintext profiles are preserved and shown as
+**Recovery required**; explicit verified conversion publishes a separate encrypted profile.
+Incomplete or malformed profiles likewise fail closed and expose reviewed recovery controls.
 
 ## Trust and lifecycle boundaries
 
@@ -32,7 +37,7 @@ the personal database, seed records, or start enrichment. Development and test s
 separate and do not inherit personal authentication bypasses from environment variables.
 
 The shared IPC registrar requires authentication for every non-security channel as well as
-verifying the sender. The five security operations are inventoried separately. No data key,
+verifying the sender. Security operations are inventoried separately. No data key,
 wrapped-key envelope, or arbitrary event subscription is exposed through preload. The dedicated
 setup response contains only a setup ID and the intentionally presented one-time recovery code.
 
@@ -78,7 +83,8 @@ and power events are mocked in their focused unit tests. Manual installed-build 
 - [ ] Successful and cancelled Touch ID, unavailable keychain, and configured passphrase fallback.
 - [ ] Real OS lock/suspend/user switch while requests and enrichment are pending.
 - [ ] Portable encrypted backup, independent recovery on another profile/device, and legacy conversion.
-- [ ] Native interrupted-setup preservation/selection acceptance, durable credential replacement, and passphrase-change UI.
+- [ ] Native interrupted-setup/credential-lock preservation and profile-selection acceptance.
+- [ ] Real OS-keychain credential refresh and saved-code fallback after losing local credentials.
 - [ ] Reviewed production diagnostics, dependency/security updates, and external key/storage review.
 
 The live native database cipher is AES-256-CBC, not an authenticated backup format. JavaScript

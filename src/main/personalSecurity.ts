@@ -1,9 +1,10 @@
 import { ProtectedProfileSetup, inspectProtectedProfile, readProtectedProfile } from "../services/protectedProfiles";
 import { readActiveProfile } from "../services/personalProfiles";
 import { KeychainProtector, unlockWithKeychain, unlockWithPassphrase } from "../services/profileKeys";
-import type { SecurityState, SecurityStatus, SetupRequest } from "../shared/security";
+import type { CredentialChangeRequest, SecurityState, SecurityStatus, SetupRequest } from "../shared/security";
 import type { SetupPreservationResult } from "../shared/recovery";
 import { listInterruptedProfiles, preserveInterruptedSetup } from "../services/interruptedProfiles";
+import { changeProfileProtection } from "./changeProfileProtection";
 
 type Dependencies = {
   keychain: KeychainProtector;
@@ -11,6 +12,7 @@ type Dependencies = {
   authenticateOS(): Promise<void>;
   cancelRecovery(): Promise<void>;
   confirmPreserveSetup(artifactIds: string[]): Promise<boolean>;
+  confirmCredentialRepair(profileId: string): Promise<boolean>;
   database: { openEncryptedDatabase(file: string, migrations: string, key: Buffer): Promise<void>; disconnect(): Promise<void> };
   enrichment: { suspendForLock(): Promise<void>; resumeAfterUnlock(): void };
   onRevoked(): void | Promise<void>;
@@ -193,6 +195,43 @@ export class PersonalSecurity {
     try { return await operation; }
     catch { throw new Error("Unable to preserve unfinished setup. Files are retained; refresh interrupted artifacts before retrying."); }
     finally {
+      this.operation = undefined; this.maintenanceAbort = undefined;
+      if (epoch === this.epoch) await this.inspect();
+    }
+  }
+
+  async changeCredentials(input: CredentialChangeRequest): Promise<{ updated: boolean }> {
+    this.requireStatus("locked");
+    inputRecord(input, ["authentication", "change"]);
+    inputRecord(input.authentication, ["mode"], ["passphrase", "recoverySecret"]);
+    if (input.authentication.mode === "passphrase") { inputRecord(input.authentication, ["mode", "passphrase"]); passphraseInput(input.authentication.passphrase); }
+    else if (input.authentication.mode === "recovery") {
+      inputRecord(input.authentication, ["mode", "recoverySecret"]);
+      if (typeof input.authentication.recoverySecret !== "string" || input.authentication.recoverySecret.length > 150) throw new Error("Invalid security input");
+    } else if (input.authentication.mode === "keychain") inputRecord(input.authentication, ["mode"]);
+    else throw new Error("Invalid security input");
+    inputRecord(input.change, ["mode"], ["passphrase", "passphraseConfirmation"]);
+    if (input.change.mode === "passphrase") {
+      inputRecord(input.change, ["mode", "passphrase", "passphraseConfirmation"]); passphraseInput(input.change.passphrase);
+      if (input.change.passphrase !== input.change.passphraseConfirmation) throw new Error("Passphrases must match exactly");
+    } else if (input.change.mode === "keychain") inputRecord(input.change, ["mode"]);
+    else throw new Error("Invalid security input");
+    if (this.deps.now() < this.nextAttemptAt) throw new Error("Wait briefly before another authentication attempt");
+    const epoch = this.epoch, abort = new AbortController(); this.maintenanceAbort = abort;
+    this.transition("changing-credentials");
+    const operation = (async () => {
+      await this.deps.cancelRecovery(); await this.setup.cancel(); this.checkEpoch(epoch);
+      const result = await changeProfileProtection({ userData: this.userData, profileId: this.profileId, request: input,
+        keychain: this.deps.keychain, osAuthenticationAvailable: this.deps.osAuthenticationAvailable,
+        authenticateOS: this.deps.authenticateOS, confirmCredentialRepair: this.deps.confirmCredentialRepair, signal: abort.signal });
+      this.checkEpoch(epoch); this.failures = 0; this.nextAttemptAt = 0; return result;
+    })();
+    this.operation = operation;
+    try { return await operation; }
+    catch {
+      if (epoch === this.epoch) this.nextAttemptAt = this.deps.now() + Math.min(++this.failures, 30) * 1000;
+      throw new Error("Unable to update profile protection. If interrupted, check the new and previous credentials or use your saved recovery code.");
+    } finally {
       this.operation = undefined; this.maintenanceAbort = undefined;
       if (epoch === this.epoch) await this.inspect();
     }
