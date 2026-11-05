@@ -498,8 +498,11 @@ This file tracks deferred product improvements that are intentionally out of cur
 - **Implementation update (2026-09-23)**:
   - New packaged encrypted profiles require explicit base currency before default-account seeding;
     see `doc/F-015-security-gate/authenticated-launch.md` and the readiness log.
-  - Explicit reset modes and the broader onboarding-state policy remain unimplemented.
-    Packaged development reset remains prohibited; this is not completion of BL-022.
+  - Explicit data/factory reset modes are implemented (2026-11-04), with validated currency
+    retention, transactional reseeding, and empty factory state. Book-derived reconciliation
+    settings are cleared. See `doc/BL-022-onboarding-reset-policy.md`.
+  - Packaged development reset remains prohibited. The broader onboarding gate for recovered
+    or development books without valid currency remains open; this is not completion of BL-022.
 - **Context (What / Why)**:
   - Current defaults can silently fall back to USD when base currency is absent, which is deterministic but can conflict with intended first-time setup UX.
   - `reset-all-data` currently preserves base currency by convention, but reset behavior is controlled by a boolean and lacks explicit product-level reset modes.

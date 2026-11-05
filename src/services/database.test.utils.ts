@@ -98,7 +98,7 @@ export async function initializeTestDatabase(): Promise<void> {
     // Try to ensure default accounts exist
     // This will fail if the schema hasn't been applied yet
     try {
-      await databaseService.resetAllData();
+      await resetTestDatabase();
     } catch (schemaError: any) {
       // Check if this is a "table does not exist" error
       if (schemaError.code === 'P2021' || schemaError.message?.includes('does not exist')) {
@@ -154,8 +154,10 @@ export async function resetTestDatabase(): Promise<void> {
   console.log('[Test Utils] Resetting test database...');
   
   try {
-    // Use the existing resetAllData method from DatabaseService
-    await databaseService.resetAllData();
+    // Fixtures deliberately seed legacy USD defaults without marking setup complete.
+    // Product factory reset itself leaves an empty, unconfigured book.
+    await databaseService.resetAllData({ mode: "factory" });
+    await databaseService.ensureDefaultAccounts();
     console.log('[Test Utils] Test database reset successfully');
   } catch (error) {
     // Preserve the original failure and fixture for diagnosis. Never delete a different

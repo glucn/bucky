@@ -1,3 +1,4 @@
+import { resetTestDatabase } from "./database.test.utils";
 import { beforeAll, afterAll } from "vitest";
 import fs from "fs/promises";
 import os from "os";
@@ -11,7 +12,7 @@ beforeAll(async () => {
   const key = randomBytes(32);
   try {
     await databaseService.openEncryptedDatabase(path.join(directory, "book.sqlite"), path.resolve("prisma/migrations"), key);
-    await databaseService.resetAllData();
+    await resetTestDatabase();
   } finally { key.fill(0); }
 });
 

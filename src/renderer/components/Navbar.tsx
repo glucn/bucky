@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { EnrichmentPanel } from "./EnrichmentPanel";
+import { DevelopmentReset } from "./DevelopmentReset";
 
 type PanelOpenDetail = {
   scopePreset?: {
@@ -26,23 +27,8 @@ const Navbar: React.FC = () => {
     } | null;
   } | null>(null);
 
-  // Only show the reset button in development mode
+  // Only show reset controls in development mode.
   const isDev = process.env.NODE_ENV === "development";
-
-  const handleResetAllData = async () => {
-    if (!window.confirm("Are you sure you want to reset ALL data? This cannot be undone.")) return;
-    try {
-      const result = await (window as any).electron.ipcRenderer.invoke("reset-all-data");
-      if (result && result.success) {
-        alert("All data has been reset to the initial state.");
-        window.location.reload();
-      } else {
-        alert("Failed to reset data: " + (result?.error || "Unknown error"));
-      }
-    } catch (err) {
-      alert("Error resetting data: " + (err instanceof Error ? err.message : String(err)));
-    }
-  };
 
   React.useEffect(() => {
     const handleOpenPanel = (event: Event) => {
@@ -158,13 +144,7 @@ const Navbar: React.FC = () => {
                 Refresh Data
               </button>
             {isDev && (
-              <button
-                onClick={handleResetAllData}
-                className="ml-4 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition"
-                title="Reset all data to initial state (DEV ONLY)"
-              >
-                Reset All Data
-              </button>
+              <DevelopmentReset />
             )}
           </div>
         </div>

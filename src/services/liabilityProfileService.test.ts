@@ -1,3 +1,4 @@
+import { resetTestDatabase } from "./database.test.utils";
 import { beforeEach, describe, expect, it } from "vitest";
 import { databaseService } from "./database";
 import { liabilityProfileService } from "./liabilityProfileService";
@@ -19,7 +20,7 @@ function localTodayIsoDate(): string {
 
 describe("LiabilityProfileService", () => {
   beforeEach(async () => {
-    await databaseService.resetAllData();
+    await resetTestDatabase();
   });
 
   async function createLiabilityAccount(name = "Test Liability") {

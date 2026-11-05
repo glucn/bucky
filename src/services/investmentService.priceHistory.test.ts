@@ -1,3 +1,4 @@
+import { resetTestDatabase } from "./database.test.utils";
 import { describe, it, expect, beforeEach } from "vitest";
 import { investmentService } from "./investmentService";
 import { databaseService } from "./database";
@@ -5,7 +6,7 @@ import { databaseService } from "./database";
 describe("InvestmentService - Price History Management", () => {
   beforeEach(async () => {
     // Reset database before each test
-    await databaseService.resetAllData();
+    await resetTestDatabase();
   });
 
   describe("recordMarketPrice", () => {

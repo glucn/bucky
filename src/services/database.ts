@@ -11,6 +11,8 @@ import { resolveCurrencyTransferAmounts } from "./journalValidation";
 import { resolveDatabaseFile } from "./localDatabase";
 import { createEncryptedPrisma, initializeEncryptedDatabase } from "./encryptedDatabase";
 import { PrismaSession } from "./prismaSession";
+import { parseResetRequest, type ResetRequest } from "../shared/reset";
+import { SUPPORTED_CURRENCY_OPTIONS } from "../shared/currencies";
 
 // Type for transaction client
 type TransactionClient = Prisma.TransactionClient;
@@ -70,20 +72,25 @@ class DatabaseService {
   }
 
   /**
-   * Reset all data in the database to the initial state.
-   * Deletes all accounts, journal entries, journal lines, and checkpoints,
-   * then re-creates the default accounts.
+   * Explicit development reset. Data reset retains valid currency and reseeds defaults;
+   * factory reset clears setup and leaves an empty book awaiting explicit setup.
    * For development/testing use only!
    */
-  public async resetAllData(options: { preserveBaseCurrency?: boolean } = {}) {
+  public async resetAllData(input: ResetRequest) {
     if (this.personalDatabase) throw new Error("Destructive development reset is not allowed for a personal database");
+    const { mode } = parseResetRequest(input);
     const prisma = this.prisma;
     await prisma.$transaction(async (tx) => {
-      // TODO(BL-022): Replace this boolean with explicit reset modes (e.g. `factoryReset` vs
-      // `dataOnlyReset`) so onboarding/setup state policy is intentional and easy to reason about.
-      const preservedBaseCurrencySetting = options.preserveBaseCurrency
+      const preservedBaseCurrencySetting = mode === "data"
         ? await tx.appSetting.findUnique({ where: { key: "baseCurrency" } })
         : null;
+      if (mode === "data") {
+        let currency: unknown;
+        try { currency = JSON.parse(preservedBaseCurrencySetting?.jsonValue ?? "null"); } catch { /* validated below */ }
+        if (!SUPPORTED_CURRENCY_OPTIONS.some((option) => option.code === currency)) {
+          throw new Error("Choose a supported base currency before a data reset");
+        }
+      }
 
       // Delete all journal lines
       await tx.journalLine.deleteMany({});
@@ -104,8 +111,8 @@ class DatabaseService {
       await tx.appSetting.deleteMany({});
 
       if (preservedBaseCurrencySetting) {
-        // TODO(BL-022): When preserving base currency, also define policy for related setup flags
-        // (e.g. reconciliation/onboarding completion) to avoid partial first-time UX state.
+        // Currency is the setup context. Reconciliation and enrichment settings describe
+        // the deleted book and must be cleared, rather than retained as stale pending work.
         await tx.appSetting.create({
           data: {
             key: "baseCurrency",
@@ -118,8 +125,7 @@ class DatabaseService {
       await tx.account.deleteMany({});
       // Delete all account groups
       await tx.accountGroup.deleteMany({});
-      // Re-create default accounts
-      await this.ensureDefaultAccounts(tx);
+      if (mode === "data") await this.ensureDefaultAccounts(tx);
     });
     console.log("[DEV] All data reset to initial state.");
   }

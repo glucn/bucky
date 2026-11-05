@@ -1,3 +1,4 @@
+import { resetTestDatabase } from "./database.test.utils";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "fs/promises";
 import os from "os";
@@ -18,7 +19,7 @@ describe("encrypted database service integration", () => {
     filename = path.join(directory, "book.sqlite");
     key = randomBytes(32);
     await databaseService.openEncryptedDatabase(filename, migrations, key);
-    await databaseService.resetAllData();
+    await resetTestDatabase();
   });
   afterEach(async () => {
     await databaseService.disconnect();

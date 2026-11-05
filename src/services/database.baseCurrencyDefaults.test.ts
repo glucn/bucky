@@ -1,10 +1,11 @@
+import { resetTestDatabase } from "./database.test.utils";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { databaseService } from "./database";
 
 describe("database base-currency defaults", () => {
   beforeEach(async () => {
-    await databaseService.resetAllData();
+    await resetTestDatabase();
   });
 
   it("uses configured base currency when creating account without explicit currency", async () => {
@@ -64,7 +65,7 @@ describe("database base-currency defaults", () => {
       update: { jsonValue: JSON.stringify("CAD") },
     });
 
-    await databaseService.resetAllData({ preserveBaseCurrency: true });
+    await databaseService.resetAllData({ mode: "data" });
 
     const cash = await databaseService.prismaClient.account.findFirst({
       where: { name: "Cash", type: AccountType.User },

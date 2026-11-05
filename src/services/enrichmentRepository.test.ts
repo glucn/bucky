@@ -1,10 +1,11 @@
+import { resetTestDatabase } from "./database.test.utils";
 import { beforeEach, describe, expect, it } from "vitest";
 import { databaseService } from "./database";
 import { enrichmentRepository } from "./enrichmentRepository";
 
 describe("enrichmentRepository", () => {
   beforeEach(async () => {
-    await databaseService.resetAllData();
+    await resetTestDatabase();
   });
 
   it("fills missing metadata fields without overwriting existing non-null values", async () => {

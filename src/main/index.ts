@@ -18,6 +18,7 @@ import {
 } from "../services/autoCategorizationService";
 import { setupAutoCategorizationIpcHandlers } from "./ipcHandlers.autoCategorization";
 import { setupEnrichmentIpcHandlers } from "./ipcHandlers.enrichment";
+import { setupDevelopmentIpcHandlers } from "./ipcHandlers.development";
 import { setupInvestmentIpcHandlers } from "./ipcHandlers.investments";
 import { setupOverviewIpcHandlers } from "./ipcHandlers.overview";
 import { setupReportingIpcHandlers } from "./ipcHandlers.reporting";
@@ -1114,21 +1115,7 @@ function setupIpcHandlers() {
   setupRecoveryIpcHandlers(() => mainWindow, ipcMain);
 
   console.log("All IPC handlers registered");
-  // DEV ONLY: Reset all data to initial state
-  ipcMain.handle("reset-all-data", async () => {
-    try {
-      // TODO(BL-022): Expose reset mode in IPC contract so callers can choose preserve-setup vs
-      // full factory reset explicitly as onboarding UX evolves.
-      await databaseService.resetAllData({ preserveBaseCurrency: true });
-      return { success: true };
-    } catch (error) {
-      console.error("Error resetting all data:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
-  });
+  setupDevelopmentIpcHandlers(ipcMain, databaseService);
 
 }
 

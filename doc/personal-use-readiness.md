@@ -9,6 +9,25 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 21 — Explicit development reset modes (2026-11-04)
+
+- Replaced the reset boolean/implicit default with validated data and factory modes across
+  service, IPC and development controls. Data reset requires a supported configured currency,
+  retains it, clears book-derived reconciliation/enrichment settings, and reseeds in that currency.
+  Factory reset clears settings and leaves accounts/groups empty for explicit setup.
+- Both modes remain prohibited for personal storage at the service boundary and for packaged
+  IPC independently of environment flags. Invalid/ambiguous requests fail before deletion;
+  reseed failure rolls back records and settings together. Test helpers explicitly distinguish
+  fixture seeding from product factory reset.
+- Ten reset regressions failed against the previous implementation. Added IPC and renderer
+  coverage for explicit mode selection, confirmation cancellation, errors and service rejection.
+  **799 tests across 101 files passed in each native and encrypted storage mode**, plus
+  TypeScript and Apple Silicon packaging. All seven packaged acceptance cases passed, including
+  actual packaged rejection of development reset before any data could be changed.
+- [Reset policy](BL-022-onboarding-reset-policy.md) defines retained setup context and cleared
+  derived state. The broader onboarding gate for recovered/development books with absent or
+  invalid currency is still required; BL-022 is not complete.
+
 ### Batch 20 — Main-owned credential changes and saved-code fallback (2026-11-04)
 
 - Connected durable credential replacement to locked-only IPC and a dedicated form. Current

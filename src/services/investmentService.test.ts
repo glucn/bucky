@@ -1,3 +1,4 @@
+import { resetTestDatabase } from "./database.test.utils";
 import { describe, it, expect, beforeEach } from "vitest";
 import { investmentService } from "./investmentService";
 import { databaseService } from "./database";
@@ -5,7 +6,7 @@ import { databaseService } from "./database";
 describe("InvestmentService - Portfolio Management", () => {
   beforeEach(async () => {
     // Reset database before each test
-    await databaseService.resetAllData();
+    await resetTestDatabase();
   });
 
   describe("createInvestmentPortfolio", () => {
@@ -319,7 +320,7 @@ describe("InvestmentService - Portfolio Management", () => {
 describe("InvestmentService - Buy Transactions", () => {
   beforeEach(async () => {
     // Reset database before each test
-    await databaseService.resetAllData();
+    await resetTestDatabase();
   });
 
   describe("recordBuy", () => {
@@ -599,7 +600,7 @@ describe("InvestmentService - Buy Transactions", () => {
 describe("InvestmentService - Sell Transactions", () => {
   beforeEach(async () => {
     // Reset database before each test
-    await databaseService.resetAllData();
+    await resetTestDatabase();
   });
 
   describe("recordSell", () => {
@@ -1077,7 +1078,7 @@ describe("InvestmentService - Sell Transactions", () => {
 describe("InvestmentService - Dividend Transactions", () => {
   beforeEach(async () => {
     // Reset database before each test
-    await databaseService.resetAllData();
+    await resetTestDatabase();
   });
 
   describe("recordDividend", () => {
@@ -1509,7 +1510,7 @@ describe("InvestmentService - Dividend Transactions", () => {
 describe("InvestmentService - Cash Management", () => {
   beforeEach(async () => {
     // Reset database before each test
-    await databaseService.resetAllData();
+    await resetTestDatabase();
   });
 
   describe("depositCash", () => {

@@ -1,10 +1,11 @@
+import { resetTestDatabase } from "./database.test.utils";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ALLOWED_BASE_CURRENCIES, appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 
 describe("AppSettingsService", () => {
   beforeEach(async () => {
-    await databaseService.resetAllData();
+    await resetTestDatabase();
   });
 
   it("stores and reads generic JSON settings by key", async () => {
