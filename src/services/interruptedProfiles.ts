@@ -23,7 +23,9 @@ const identifier = (id: string): InterruptedArtifact["kind"] | undefined => {
   if (/^\.(preserved-)?creating-default-[a-zA-Z0-9-]+$/.test(id)) return "setup";
   if (/^\.restoring-restored-[a-zA-Z0-9-]+$/.test(id)) return "restore";
   if (/^(\.setup-default|\.restore-restored-[a-zA-Z0-9-]+)\.lock$/.test(id)) return "lock";
+  if (/^\.credentials-(default|restored-[a-zA-Z0-9-]+)\.lock$/.test(id)) return "lock";
   if (/^\.preserved-setup-lock-[a-zA-Z0-9-]+$/.test(id)) return "lock";
+  if (/^\.preserved-credentials-(default|restored-[a-zA-Z0-9-]+)-lock-[a-zA-Z0-9-]+$/.test(id)) return "lock";
   if (/^\.(legacy-conversion|bucky-backup|bucky-restore|interrupted-recovery)-[a-zA-Z0-9-]+$/.test(id)) return "temporary";
 };
 const absent = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";

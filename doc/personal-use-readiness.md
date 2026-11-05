@@ -9,6 +9,20 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 19 — Atomic credential persistence and retained lock recovery (2026-11-04)
+
+- Added verified atomic passphrase/OS-keychain wrap replacement without changing the data key,
+  encrypted book, alternate wrap, or saved recovery code. Expected-envelope checks prevent stale
+  writes, and the staged replacement must independently recover the key before publication.
+- Cancellation/write failure before rename retains old credentials. Late cancellation and
+  post-publication durability/cleanup failures preserve the new envelope. Known stale locks can
+  be retained by rename after current-key verification; main must own the session and obtain
+  native consent before using that recovery primitive. Old copies keep their old credentials.
+- Added 19 service tests, with initial failing persistence regressions. Focused credential and
+  interrupted-artifact checks passed (**39 tests**) plus TypeScript checking. App lifecycle/UI
+  integration and the full suites remain next; this service batch does not complete F-015.
+- See [credential persistence contract](F-015-security-gate/credential-changes.md).
+
 ### Batch 18 — Interrupted recovery controls and exclusive setup preservation (2026-11-04)
 
 - Connected artifact inventory and authenticated interrupted/preserved snapshots to dedicated
