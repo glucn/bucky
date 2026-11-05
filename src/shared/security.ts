@@ -1,5 +1,5 @@
 export type SecurityStatus = "initializing" | "setup-required" | "setting-up" | "confirm-recovery"
-  | "locked" | "unlocking" | "unlocked" | "locking" | "recovery-required";
+  | "locked" | "unlocking" | "unlocked" | "locking" | "recovery-required" | "recovering";
 export type SecurityState = {
   status: SecurityStatus;
   revision: number;
@@ -16,5 +16,6 @@ export interface SecurityApi {
   confirmSetup(input: { setupId: string; recoverySecret: string }): Promise<void>;
   unlock(input: { mode: "keychain" | "passphrase"; passphrase?: string }): Promise<void>;
   lock(): Promise<void>;
+  preserveSetup(input: { artifactIds: string[] }): Promise<import("./recovery").SetupPreservationResult>;
   onStateChanged(listener: (state: SecurityState) => void): () => void;
 }

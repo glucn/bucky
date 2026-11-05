@@ -12,7 +12,7 @@ function fixture(state = locked) {
   let listener: (state: SecurityState) => void = () => {};
   const dispose = vi.fn();
   const api = { getState: vi.fn().mockResolvedValue(state), unlock: vi.fn(), lock: vi.fn(),
-    beginSetup: vi.fn(), confirmSetup: vi.fn(), onStateChanged: vi.fn((fn) => { listener = fn; return dispose; }) };
+    beginSetup: vi.fn(), confirmSetup: vi.fn(), preserveSetup: vi.fn(), onStateChanged: vi.fn((fn) => { listener = fn; return dispose; }) };
   Object.defineProperty(window, "electron", { configurable: true, value: { security: api } });
   return { api, emit: (next: SecurityState) => listener(next), dispose };
 }
@@ -73,4 +73,47 @@ it("offers encrypted recovery while locked without mounting financial views", as
   fireEvent.click(screen.getByRole("button", { name: "Encrypted backup recovery" }));
   await screen.findByRole("heading", { name: "Encrypted backup and recovery" });
   expect(screen.queryByText("Financial view must stay closed")).toBeNull();
+});
+
+it("keeps the recovery view mounted during exclusive preservation and returns to explicit fresh setup", async () => {
+  const f = fixture({ ...locked, status: "recovery-required" }), artifactId = ".creating-default-stale";
+  const recovery = { getState: vi.fn().mockResolvedValueOnce({ available: true, activeProfile: "default", nextProfile: "default", profiles: [],
+    interruptedArtifacts: [{ id: artifactId, kind: "setup", canAttemptRecovery: false }], unfinishedSetupIds: [artifactId] })
+    .mockResolvedValue({ available: true, activeProfile: "default", nextProfile: "default", profiles: [], interruptedArtifacts: [], unfinishedSetupIds: [] }),
+    cancel: vi.fn().mockResolvedValue(undefined) };
+  window.electron.protectedRecovery = recovery as any;
+  let finish!: () => void;
+  f.api.preserveSetup.mockImplementation(async () => {
+    f.emit({ ...locked, status: "recovering", revision: 2 });
+    await new Promise<void>((resolve) => { finish = resolve; });
+    f.emit({ ...locked, status: "setup-required", revision: 3 });
+    return { preserved: true, artifacts: [{ originalId: artifactId, preservedId: ".preserved-creating-default-new" }] };
+  });
+  render(<SecurityBoundary><p>Financial view must stay closed</p></SecurityBoundary>);
+  await screen.findByRole("heading", { name: "Recovery required" });
+  fireEvent.click(screen.getByRole("button", { name: "Encrypted backup recovery" }));
+  await screen.findByText(artifactId);
+  fireEvent.click(screen.getByRole("button", { name: "Preserve unfinished setup files" }));
+  await waitFor(() => expect(finish).toBeDefined());
+  expect(screen.getByTestId("protected-recovery-page")).toBeTruthy();
+  finish(); await screen.findByText(/Unfinished setup files preserved/);
+  expect(f.api.preserveSetup).toHaveBeenCalledWith({ artifactIds: [artifactId] });
+  expect(f.api.beginSetup).not.toHaveBeenCalled();
+  expect(screen.queryByText("Financial view must stay closed")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Back to setup" }));
+  await screen.findByRole("heading", { name: "Protect your new book" });
+});
+
+it("clears a partially entered launch credential when moving into recovery and returning", async () => {
+  fixture();
+  window.electron.protectedRecovery = { getState: vi.fn().mockResolvedValue({ available: true, activeProfile: "default", nextProfile: "default", profiles: [] }),
+    cancel: vi.fn().mockResolvedValue(undefined) } as any;
+  render(<SecurityBoundary><p>Financial view must stay closed</p></SecurityBoundary>);
+  await screen.findByRole("heading", { name: "Unlock Bucky" });
+  fireEvent.change(screen.getByLabelText("Passphrase"), { target: { value: "Partially entered private passphrase" } });
+  fireEvent.click(screen.getByRole("button", { name: "Encrypted backup recovery" }));
+  await screen.findByRole("heading", { name: "Encrypted backup and recovery" });
+  fireEvent.click(screen.getByRole("button", { name: "Back to unlock" }));
+  await screen.findByRole("heading", { name: "Unlock Bucky" });
+  expect((screen.getByLabelText("Passphrase") as HTMLInputElement).value).toBe("");
 });

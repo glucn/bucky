@@ -43,6 +43,21 @@ the new recovery code before the encrypted profile is published. Review its veri
 and select it explicitly for next launch. Conversion never overwrites, migrates, or deletes the
 source. See [verified legacy conversion](F-015-security-gate/legacy-conversion.md) for limits.
 
+## Interrupted or preserved profiles
+
+The recovery screen inventories recognized interrupted artifacts without opening financial
+records. Choose **Interrupted or preserved profile** as the recovery source, select a snapshot
+candidate, supply its saved recovery code or configured passphrase, acknowledge its limits,
+and choose replacement protection. Save and re-enter the new code before publishing a separate
+profile. Compare its records with original backups and statements: staging does not prove that
+the original operation finished.
+
+For unpublished initial setup, **Preserve unfinished setup files** asks for native confirmation
+of the reviewed artifacts, then retains their contents under preserved names. **Back to setup**
+allows explicit fresh setup afterward; no empty book is created automatically. Valid preserved
+snapshots remain recoverable. Existing default books cannot be replaced by this action.
+See [interrupted recovery](F-015-security-gate/interrupted-recovery.md) for verification and limits.
+
 ## Historical plaintext workflow
 
 Legacy workflow implemented 2026-09-07 for the packaged Apple Silicon macOS app.

@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("electron", {
     createBackup: (input) => ipcRenderer.invoke("create-protected-backup", input),
     beginRestore: (input) => ipcRenderer.invoke("begin-protected-restore", input),
     beginLegacy: (input) => ipcRenderer.invoke("begin-legacy-conversion", input),
+    beginInterrupted: (input) => ipcRenderer.invoke("begin-interrupted-recovery", input),
     confirmRestore: (input) => ipcRenderer.invoke("confirm-protected-restore", input),
     selectProfile: (input) => ipcRenderer.invoke("select-protected-profile", input),
     cancel: () => ipcRenderer.invoke("cancel-protected-recovery"),
@@ -23,6 +24,7 @@ contextBridge.exposeInMainWorld("electron", {
     confirmSetup: (input) => ipcRenderer.invoke("confirm-protected-setup", input),
     unlock: (input) => ipcRenderer.invoke("unlock-personal-profile", input),
     lock: () => ipcRenderer.invoke("lock-personal-profile"),
+    preserveSetup: (input) => ipcRenderer.invoke("preserve-interrupted-setup", input),
     onStateChanged: (listener) => {
       const receive = (_event: unknown, state: any) => listener(state);
       ipcRenderer.on("security-state-changed", receive);

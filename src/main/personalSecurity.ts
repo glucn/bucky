@@ -2,12 +2,15 @@ import { ProtectedProfileSetup, inspectProtectedProfile, readProtectedProfile } 
 import { readActiveProfile } from "../services/personalProfiles";
 import { KeychainProtector, unlockWithKeychain, unlockWithPassphrase } from "../services/profileKeys";
 import type { SecurityState, SecurityStatus, SetupRequest } from "../shared/security";
+import type { SetupPreservationResult } from "../shared/recovery";
+import { listInterruptedProfiles, preserveInterruptedSetup } from "../services/interruptedProfiles";
 
 type Dependencies = {
   keychain: KeychainProtector;
   osAuthenticationAvailable(): boolean;
   authenticateOS(): Promise<void>;
   cancelRecovery(): Promise<void>;
+  confirmPreserveSetup(artifactIds: string[]): Promise<boolean>;
   database: { openEncryptedDatabase(file: string, migrations: string, key: Buffer): Promise<void>; disconnect(): Promise<void> };
   enrichment: { suspendForLock(): Promise<void>; resumeAfterUnlock(): void };
   onRevoked(): void | Promise<void>;
@@ -40,6 +43,7 @@ export class PersonalSecurity {
   private requests = new Set<Promise<unknown>>();
   private failures = 0;
   private nextAttemptAt = 0;
+  private maintenanceAbort: AbortController | undefined;
 
   constructor(private readonly userData: string, private readonly migrations: string, private readonly deps: Dependencies) {
     this.setup = new ProtectedProfileSetup(userData, migrations);
@@ -166,6 +170,34 @@ export class PersonalSecurity {
     } finally { this.operation = undefined; }
   }
 
+  async preserveSetup(input: { artifactIds: string[] }): Promise<SetupPreservationResult> {
+    this.requireStatus("recovery-required");
+    inputRecord(input, ["artifactIds"]);
+    if (!Array.isArray(input.artifactIds) || !input.artifactIds.length || input.artifactIds.length > 100 ||
+      input.artifactIds.some((id) => typeof id !== "string" || id.length > 255) || new Set(input.artifactIds).size !== input.artifactIds.length) throw new Error("Invalid interrupted setup selection");
+    const ids = [...input.artifactIds].sort(), epoch = this.epoch, abort = new AbortController();
+    this.maintenanceAbort = abort; this.transition("recovering");
+    const operation = (async (): Promise<SetupPreservationResult> => {
+      await this.deps.cancelRecovery(); await this.setup.cancel(); this.checkEpoch(epoch);
+      if (this.profileId !== "default" || (await inspectProtectedProfile(this.userData, "default")).kind !== "interrupted") throw new Error("Only unpublished setup can be preserved for retry");
+      const actual = (await listInterruptedProfiles(this.userData)).filter((item) => item.id === ".setup-default.lock" || item.id.startsWith(".creating-default-")).map((item) => item.id).sort();
+      if (JSON.stringify(actual) !== JSON.stringify(ids)) throw new Error("Interrupted setup changed; refresh before retrying");
+      this.checkEpoch(epoch);
+      const confirmed = await this.deps.confirmPreserveSetup([...ids]); this.checkEpoch(epoch);
+      if (!confirmed) return { preserved: false };
+      const artifacts = await preserveInterruptedSetup({ userData: this.userData, expectedIds: ids, signal: abort.signal });
+      this.checkEpoch(epoch);
+      return { preserved: true, artifacts };
+    })();
+    this.operation = operation;
+    try { return await operation; }
+    catch { throw new Error("Unable to preserve unfinished setup. Files are retained; refresh interrupted artifacts before retrying."); }
+    finally {
+      this.operation = undefined; this.maintenanceAbort = undefined;
+      if (epoch === this.epoch) await this.inspect();
+    }
+  }
+
   async runData<T>(action: () => Promise<T>): Promise<T> {
     if (this.status !== "unlocked") throw new Error("Application is locked");
     const epoch = this.epoch;
@@ -179,6 +211,7 @@ export class PersonalSecurity {
   async lock(): Promise<void> {
     if (this.locking) return this.locking;
     this.epoch++;
+    this.maintenanceAbort?.abort();
     this.transition("locking");
     const revoked = this.deps.onRevoked();
     const operation = this.operation;

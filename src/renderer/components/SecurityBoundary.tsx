@@ -43,7 +43,7 @@ function SecurityScreen({ state }: { state: SecurityState }) {
   const [showRecovery, setShowRecovery] = React.useState(false);
   const setup = state.status === "setup-required";
   const locked = state.status === "locked";
-  const active = busy || ["initializing", "setting-up", "unlocking", "locking"].includes(state.status);
+  const active = busy || ["initializing", "setting-up", "unlocking", "locking", "recovering"].includes(state.status);
 
   const run = async (operation: "begin" | "confirm" | "unlock" | "cancel") => {
     setBusy(true); setError("");
@@ -62,7 +62,7 @@ function SecurityScreen({ state }: { state: SecurityState }) {
 
   const selectedMethodAvailable = setup ? mode === "passphrase" || state.osAuthenticationAvailable
     : mode === "keychain" ? state.methods.keychain && state.osAuthenticationAvailable : state.methods.passphrase;
-  const recoveryAvailable = setup || locked || state.status === "recovery-required";
+  const recoveryAvailable = setup || locked || state.status === "recovery-required" || state.status === "recovering";
   if (showRecovery && recoveryAvailable) return <main className="min-h-screen bg-gray-100 flex justify-center p-6">
     <ProtectedRecovery security={state} onClose={() => setShowRecovery(false)} />
   </main>;
@@ -113,7 +113,9 @@ function SecurityScreen({ state }: { state: SecurityState }) {
       </> : null}
       {!locked && state.status !== "setup-required" ? <button type="button" className="underline" onClick={() => { void run("cancel"); }}>
         {state.status === "recovery-required" ? "Check profile again" : "Cancel and close"}</button> : null}
-      {recoveryAvailable ? <button type="button" className="underline block" onClick={() => setShowRecovery(true)} data-testid="open-protected-recovery">Encrypted backup recovery</button> : null}
+      {recoveryAvailable ? <button type="button" className="underline block" onClick={() => {
+        setPassphrase(""); setConfirmation(""); setReentered(""); setError(""); setShowRecovery(true);
+      }} data-testid="open-protected-recovery">Encrypted backup recovery</button> : null}
     </section>
   </main>;
 }

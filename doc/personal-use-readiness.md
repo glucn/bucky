@@ -9,6 +9,27 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 18 — Interrupted recovery controls and exclusive setup preservation (2026-11-04)
+
+- Connected artifact inventory and authenticated interrupted/preserved snapshots to dedicated
+  main-owned IPC and recovery UI. Source credentials and snapshot-limit acknowledgement precede
+  fresh protection/recovery confirmation. Publishing does not select or switch the running book.
+- Added exclusive security maintenance for reviewed unpublished setup preservation. Recovery/setup
+  drain before native consent; financial/setup/unlock/recovery work is denied while maintenance
+  owns the session. Lock cancels remaining moves and waits for the operation. Late inventory and
+  confirmation responses cannot prompt or move files after revocation. The view stays mounted
+  during maintenance, refreshes inventory, and offers explicit fresh setup after preservation.
+- Ten new regressions failed before implementation/fixes. Review also exposed that a partially
+  entered launch passphrase survived a round-trip through recovery; navigation now clears it.
+- **752 tests across 96 files passed in each storage mode**, plus TypeScript checking and an Apple
+  Silicon build. All six packaged cases passed three repetitions (**18 checks**). The new recovery case verifies actual app authentication,
+  new-code confirmation, publication, restart/unlock, and restored posting balance. The fixture
+  selects the target using the trusted service; native selection consent is not substituted into
+  production code or claimed as tested. The recovered snapshot screen was visually inspected.
+- Native preservation/selection dialogs, real OS authentication/keychain, actual crash/power-loss
+  and representative personal recovery still require acceptance. Durable credential changes,
+  remaining onboarding/reset policy, valuation, precision, verifier and pilot gates remain open.
+
 ### Batch 17 — Authenticated interrupted snapshots and retained setup retry (2026-11-04)
 
 - Added metadata-only inventory of recognized interrupted setup/restore/temp/lock artifacts and
@@ -490,7 +511,7 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation work
-is **full installed recovery/conversion acceptance and interrupted-profile handling**,
-followed by the remaining onboarding/reset policy. Real OS-authentication
+is **durable credential changes and the remaining onboarding/reset policy**,
+alongside full installed/native recovery/conversion acceptance. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance
 gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.

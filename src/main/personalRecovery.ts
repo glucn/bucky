@@ -1,4 +1,4 @@
-import type { RecoveryResult, RecoveryState, RecoverySummary, LegacyConversionRequest } from "../shared/recovery";
+import type { RecoveryResult, RecoveryState, RecoverySummary, LegacyConversionRequest, InterruptedRecoveryRequest } from "../shared/recovery";
 import type { ProfileAuthentication as Authentication, ProtectedRestoreRequest as RestoreRequest,
   PendingProtectedRestore as PendingRestore } from "../shared/recovery";
 import type { SecurityStatus } from "../shared/security";
@@ -11,6 +11,7 @@ import { inspectProtectedProfile, readProtectedProfile, validateDirectories } fr
 import { profileDatabasePath, readActiveProfile } from "../services/personalProfiles";
 import { createProtectedBackup } from "../services/protectedBackup";
 import { ProtectedProfileRestore, selectProtectedProfile } from "../services/protectedRestore";
+import { listInterruptedProfiles } from "../services/interruptedProfiles";
 
 type Dependencies = { getStatus(): SecurityStatus; getActiveProfile(): string; keychain: KeychainProtector;
   osAuthenticationAvailable(): boolean; authenticateOS(): Promise<void>; now(): number;
@@ -67,7 +68,12 @@ export class PersonalRecovery {
       let nextProfile: string;
       try { nextProfile = readActiveProfile(this.userData); }
       catch { nextProfile = ""; } // Recovery must remain possible when the selection is damaged.
-      return { available: true, activeProfile: this.deps.getActiveProfile(), nextProfile,
+      const interruptedArtifacts = await listInterruptedProfiles(this.userData);
+      const unfinishedSetupIds = this.deps.getStatus() === "recovery-required" && this.deps.getActiveProfile() === "default" &&
+        (await inspectProtectedProfile(this.userData, "default")).kind === "interrupted"
+        ? interruptedArtifacts.filter((item) => item.id === ".setup-default.lock" || item.id.startsWith(".creating-default-")).map((item) => item.id) : [];
+      this.check(signal);
+      return { available: true, activeProfile: this.deps.getActiveProfile(), nextProfile, interruptedArtifacts, unfinishedSetupIds,
         profiles: profiles.sort((a, b) => a.id.localeCompare(b.id)) };
     }, true);
   }
@@ -110,9 +116,7 @@ export class PersonalRecovery {
 
   async beginRestore(input: RestoreRequest): Promise<PendingRestore | undefined> {
     record(input, ["credential", "protection"]);
-    record(input.credential, ["mode", "secret"]);
-    if (!["recovery", "passphrase"].includes(input.credential.mode) || typeof input.credential.secret !== "string" ||
-      !input.credential.secret || Buffer.byteLength(input.credential.secret) > 1024) throw new RecoveryError("Invalid recovery input");
+    recoveryCredential(input.credential);
     authentication(input.protection, true);
     return this.prepareRecovery(input.protection, () => this.deps.chooseBackupFile(), (source, protection) =>
       this.restore.begin({ source, credential: input.credential, ...protection }));
@@ -124,6 +128,18 @@ export class PersonalRecovery {
     authentication(input.protection, true);
     return this.prepareRecovery(input.protection, () => this.deps.chooseLegacyFile(), (source, protection) =>
       this.restore.beginLegacy({ source, acknowledgePlaintext: true, ...protection }));
+  }
+
+  async beginInterrupted(input: InterruptedRecoveryRequest): Promise<PendingRestore | undefined> {
+    record(input, ["artifactId", "acknowledgeSnapshot", "credential", "protection"]);
+    if (typeof input.artifactId !== "string" || input.artifactId.length > 255) throw new RecoveryError("Invalid interrupted artifact");
+    if (input.acknowledgeSnapshot !== true) throw new RecoveryError("Acknowledge that this interrupted snapshot needs verification against your records");
+    recoveryCredential(input.credential); authentication(input.protection, true);
+    return this.prepareRecovery(input.protection, async () => {
+      const selected = (await listInterruptedProfiles(this.userData)).find((item) => item.id === input.artifactId && item.canAttemptRecovery);
+      if (!selected) throw new RecoveryError("Choose an available interrupted snapshot; preserve other artifacts and use a backup or original source");
+      return selected.id;
+    }, (artifactId, protection) => this.restore.beginInterrupted({ artifactId, acknowledgeSnapshot: true, credential: input.credential, ...protection }));
   }
 
   private prepareRecovery(protection: RestoreRequest["protection"], chooseSource: () => Promise<string | undefined>,
@@ -147,7 +163,7 @@ export class PersonalRecovery {
         return pending;
       } catch {
         if (!signal.aborted) this.nextAttemptAt = this.deps.now() + Math.min(++this.failures, 30) * 1000;
-        throw new RecoveryError("Unable to prepare recovery. Check the selected book or backup, credential, and matching app version.");
+        throw new RecoveryError("Unable to prepare recovery. Check the selected source, credential, and matching app version.");
       }
     });
   }
@@ -207,6 +223,10 @@ function authentication(input: unknown, replacement = false): asserts input is R
     if (typeof input.passphrase !== "string" || [...input.passphrase].length < 12 || Buffer.byteLength(input.passphrase) > 1024) throw new RecoveryError("Passphrase must contain at least 12 characters and at most 1024 UTF-8 bytes");
     if (replacement && input.passphrase !== input.passphraseConfirmation) throw new RecoveryError("Passphrases must match exactly");
   } else if (input.passphrase !== undefined || input.passphraseConfirmation !== undefined) throw new RecoveryError("Invalid authentication input");
+}
+function recoveryCredential(input: unknown): asserts input is RestoreRequest["credential"] {
+  record(input, ["mode", "secret"]);
+  if (!["recovery", "passphrase"].includes(input.mode) || typeof input.secret !== "string" || !input.secret || Buffer.byteLength(input.secret) > 1024) throw new RecoveryError("Invalid recovery input");
 }
 
 /** Only deliberate, non-sensitive messages may cross IPC. */

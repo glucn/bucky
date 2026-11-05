@@ -15,18 +15,23 @@ export type RecoveryState = {
   activeProfile: string;
   nextProfile: string;
   profiles: Array<{ id: string }>;
+  interruptedArtifacts?: InterruptedArtifact[];
+  unfinishedSetupIds?: string[];
 };
 
 export type ProfileAuthentication = { mode: "keychain" | "passphrase"; passphrase?: string };
 export type ProtectedRestoreRequest = { credential: { mode: "recovery" | "passphrase"; secret: string };
   protection: ProfileAuthentication & { passphraseConfirmation?: string } };
 export type LegacyConversionRequest = { acknowledgePlaintext: boolean; protection: ProtectedRestoreRequest["protection"] };
+export type InterruptedRecoveryRequest = ProtectedRestoreRequest & { artifactId: string; acknowledgeSnapshot: boolean };
+export type SetupPreservationResult = { preserved: false } | { preserved: true; artifacts: Array<{ originalId: string; preservedId: string }> };
 export type PendingProtectedRestore = { restoreId: string; profileId: string; recoverySecret: string; summary: RecoverySummary };
 export interface ProtectedRecoveryApi {
   getState(): Promise<RecoveryState>;
   createBackup(input: ProfileAuthentication): Promise<RecoveryResult | undefined>;
   beginRestore(input: ProtectedRestoreRequest): Promise<PendingProtectedRestore | undefined>;
   beginLegacy(input: LegacyConversionRequest): Promise<PendingProtectedRestore | undefined>;
+  beginInterrupted(input: InterruptedRecoveryRequest): Promise<PendingProtectedRestore | undefined>;
   confirmRestore(input: { restoreId: string; recoverySecret: string }): Promise<{ profileId: string; summary: RecoverySummary }>;
   selectProfile(input: { profileId: string; authentication: ProfileAuthentication }): Promise<boolean>;
   cancel(): Promise<void>;

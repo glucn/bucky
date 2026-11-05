@@ -1,8 +1,29 @@
 # Interrupted setup and restore recovery
 
-Trusted-process services implemented 2026-11-04. Main/IPC/UI integration and installed acceptance
-are still pending. Do not call these internal APIs manually against personal data. Existing
+Trusted-process services and main/IPC/UI integration implemented 2026-11-04. Full native-dialog
+and real-data acceptance are still pending. Do not call these internal APIs manually against personal data. Existing
 profiles, staged books, and backups are not automatically deleted or promoted at startup.
+
+## Application controls
+
+Open **Encrypted backup recovery** from the locked/setup/recovery-required screen. The inventory
+shows recognized interrupted/preserved files without opening their records. Under **Recovery
+source**, choose **Interrupted or preserved profile**, select an available candidate, acknowledge
+its snapshot limits, enter its saved recovery code or configured passphrase, and explicitly choose
+replacement protection. **Verify interrupted snapshot** creates a separate pending recovery;
+saving and re-entering its new code precedes publication. Selection for next launch is separate.
+
+For unpublished default setup, **Preserve unfinished setup files** invokes an exclusive main-owned
+maintenance operation. Setup and recovery drain before native confirmation of the exact reviewed
+artifact list. Setup/unlock/data/recovery calls are refused while it owns the session. Lock cancels
+the operation, suppresses late inventory/confirmation responses, and waits for drainage. Successful
+preservation returns to setup-required; **Back to setup** offers explicit fresh currency/protection
+choices. No new empty book is created automatically. Preserved candidates stay in inventory.
+
+The recovery view remains mounted through maintenance so cancellation/failure messages and refreshed
+inventory stay visible. Credentials are cleared after attempts and when leaving the launch form
+for recovery. Native profile-selection consent, source authenticity limits, and real OS/keychain
+acceptance remain as described below.
 
 ## Inventory and candidate snapshots
 
@@ -78,6 +99,9 @@ Run the synthetic Electron service check with:
 ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/security/interrupted-recovery-runtime.cjs
 ```
 
-This loads checkout services, not the installed UI or actual OS keychain. Main-owned inventory
-and controls, fresh OS authentication for replacement protection, maintenance serialization,
-native confirmation, lock-aware cancellation, and installed/manual recovery remain required.
+This loads checkout services, not the installed UI or actual OS keychain. The packaged recovery
+test authenticates a staged snapshot, rejects the old code at fresh confirmation, publishes, then
+restarts/unlocks the recovered book and checks its posting balance. Its next-launch selection is
+prepared through the trusted service fixture; it does not exercise native selection consent.
+Native preservation/selection dialogs, real OS authentication/keychain, actual crash/power-loss,
+and representative personal-data recovery still require acceptance.

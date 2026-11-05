@@ -58,6 +58,14 @@ async function initialize() {
         keychain: createOsKeychain(), osAuthenticationAvailable: osAuthentication.available,
         authenticateOS: osAuthentication.authenticate, database: databaseService, enrichment: enrichmentRuntimeService,
         cancelRecovery: () => personalRecovery?.cancel() ?? Promise.resolve(),
+        confirmPreserveSetup: async (artifactIds) => {
+          if (!mainWindow) throw new Error("Application window is unavailable");
+          const result = await dialog.showMessageBox(mainWindow, { type: "warning", title: "Preserve unfinished setup and retry?",
+            buttons: ["Cancel", "Preserve files"], defaultId: 0, cancelId: 0, noLink: true,
+            message: "Move these unpublished setup artifacts aside so you can start a new setup?",
+            detail: `All contents will be retained under preserved names. Valid snapshots can still be recovered with their saved credentials.\n\n${artifactIds.join("\n")}` });
+          return result.response === 1;
+        },
         now: Date.now,
         onStateChanged: (state) => mainWindow?.webContents.send("security-state-changed", state),
         onRevoked: () => {

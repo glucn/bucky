@@ -1,6 +1,7 @@
 import React from "react";
 import type { SecurityState } from "../../shared/security";
 import type { PendingProtectedRestore, ProfileAuthentication, RecoveryState, RecoverySummary } from "../../shared/recovery";
+import { InterruptedArtifactsPanel } from "./InterruptedArtifactsPanel";
 
 const inputClass = "block w-full rounded border border-gray-300 px-3 py-2 mt-1";
 const buttonClass = "rounded bg-blue-700 text-white px-4 py-2 disabled:opacity-50";
@@ -16,7 +17,8 @@ export function ProtectedRecovery({ security, onClose }: { security: SecuritySta
   const [mode, setMode] = React.useState<ProfileAuthentication["mode"]>(security.methods.passphrase ? "passphrase" : security.osAuthenticationAvailable ? "keychain" : "passphrase");
   const [passphrase, setPassphrase] = React.useState("");
   const [credentialMode, setCredentialMode] = React.useState<"recovery" | "passphrase">("recovery");
-  const [sourceKind, setSourceKind] = React.useState<"backup" | "legacy">("backup");
+  const [sourceKind, setSourceKind] = React.useState<"backup" | "legacy" | "interrupted">("backup");
+  const [artifactId, setArtifactId] = React.useState("");
   const [acknowledged, setAcknowledged] = React.useState(false);
   const [credential, setCredential] = React.useState("");
   const [newMode, setNewMode] = React.useState<ProfileAuthentication["mode"]>(security.osAuthenticationAvailable ? "keychain" : "passphrase");
@@ -40,7 +42,7 @@ export function ProtectedRecovery({ security, onClose }: { security: SecuritySta
     const next = await api.getState();
     if (mounted.current) { setState(next); setSelected(preferred ?? next.nextProfile); }
   };
-  const run = async (operation: "backup" | "restore" | "confirm" | "select" | "cancel" | "close" | "refresh") => {
+  const run = async (operation: "backup" | "restore" | "confirm" | "select" | "cancel" | "close" | "refresh" | "preserve") => {
     if (running.current) return;
     running.current = true; setBusy(true); setError(""); setMessage("");
     try {
@@ -51,17 +53,27 @@ export function ProtectedRecovery({ security, onClose }: { security: SecuritySta
       } else if (operation === "restore") {
         const protection = { mode: newMode, ...(newMode === "passphrase" ? { passphrase: newPassphrase, passphraseConfirmation: repeated } : {}) };
         const prepared = sourceKind === "legacy" ? await api.beginLegacy({ acknowledgePlaintext: acknowledged, protection })
+          : sourceKind === "interrupted" ? await api.beginInterrupted({ artifactId, acknowledgeSnapshot: acknowledged,
+            credential: { mode: credentialMode, secret: credential }, protection })
           : await api.beginRestore({ credential: { mode: credentialMode, secret: credential }, protection });
         if (mounted.current) { setPending(prepared ?? null); setResult(null); if (!prepared) setMessage("Canceled"); }
       } else if (operation === "confirm" && pending) {
         const restored = await api.confirmRestore({ restoreId: pending.restoreId, recoverySecret: reentered });
         if (!mounted.current) return;
-        setPending(null); setResult(restored); setMessage(`${sourceKind === "legacy" ? "Converted" : "Restored"} and verified in a separate profile. Choose it below to use it on next launch.`);
+        setPending(null); setResult(restored); setMessage(sourceKind === "interrupted"
+          ? "Interrupted snapshot recovered into a separate profile. Compare it with statements and available source backups before relying on it."
+          : `${sourceKind === "legacy" ? "Converted" : "Restored"} and verified in a separate profile. Choose it below to use it on next launch.`);
         await refresh(restored.profileId);
       } else if (operation === "select") {
         const changed = await api.selectProfile({ profileId: selected, authentication: authentication() });
         if (!mounted.current) return;
         setMessage(changed ? "Profile selected. Quit and reopen Bucky to use it." : "Canceled");
+        await refresh();
+      } else if (operation === "preserve") {
+        const preserved = await window.electron.security.preserveSetup({ artifactIds: state?.unfinishedSetupIds ?? [] });
+        if (!mounted.current) return;
+        setMessage(preserved.preserved ? "Unfinished setup files preserved. Return to setup or recover a preserved snapshot."
+          : "Canceled. No setup files moved.");
         await refresh();
       } else if (operation === "cancel" || operation === "close") {
         await api.cancel();
@@ -81,14 +93,17 @@ export function ProtectedRecovery({ security, onClose }: { security: SecuritySta
 
   return <section className="max-w-4xl space-y-5 p-6" aria-busy={busy} data-testid="protected-recovery-page">
     <h1 className="text-2xl font-semibold">Encrypted backup and recovery</h1>
-    <p>Restore verifies an encrypted backup and creates a separate profile with new credentials and a new recovery code.
-      Your current book and backup are preserved. Use the same app database version. Keep another authoritative record while readiness checks remain open.</p>
+    <p>Recover an encrypted backup, convert a legacy book, or authenticate an interrupted snapshot into a separate profile with new credentials and a new recovery code.
+      Your current book and source files are preserved. Use the same app database version. Keep another authoritative record while readiness checks remain open.</p>
     {state ? <p>Current profile: <code>{state.activeProfile}</code>. Next launch: <code>{state.nextProfile || "selection needs recovery"}</code>.</p> : null}
     {state && state.nextProfile !== state.activeProfile ? <p role="status">Selection applies after quitting and reopening. The current profile stays active until then.</p> : null}
     {error ? <p role="alert" className="text-red-700">{error}</p> : null}
     {message ? <p role="status">{message}</p> : null}
     {busy ? <p role="status">Working… Keep Bucky open.</p> : null}
     {!pending ? <>
+      <InterruptedArtifactsPanel artifacts={state?.interruptedArtifacts ?? []}
+        canPreserve={Boolean(state?.unfinishedSetupIds?.length) && security.status === "recovery-required"} busy={busy}
+        onPreserve={() => void run("preserve")} />
       <fieldset className="space-y-3 rounded border p-4" disabled={busy}>
         <legend>Authenticate a profile</legend>
         <p>Backup requires fresh authentication of the current book. Profile selection requires the target profile’s credentials and a native confirmation.</p>
@@ -107,12 +122,22 @@ export function ProtectedRecovery({ security, onClose }: { security: SecuritySta
         <fieldset className="space-y-3 rounded border p-4" disabled={busy}>
           <legend>Recover an existing book</legend>
           <label className="block">Recovery source<select className={inputClass} value={sourceKind} onChange={(event) => {
-            setSourceKind(event.target.value as typeof sourceKind); setCredential(""); setNewPassphrase(""); setRepeated(""); setAcknowledged(false);
-          }}><option value="backup">Encrypted backup</option><option value="legacy">Legacy plaintext SQLite book</option></select></label>
-          {sourceKind === "backup" ? <><label className="block">Backup credential type<select className={inputClass} value={credentialMode} onChange={(event) => { setCredentialMode(event.target.value as typeof credentialMode); setCredential(""); }}>
-            <option value="recovery">Saved recovery code</option><option value="passphrase">Backup’s configured passphrase</option>
+            setSourceKind(event.target.value as typeof sourceKind); setCredential(""); setNewPassphrase(""); setRepeated(""); setAcknowledged(false); setArtifactId("");
+          }}><option value="backup">Encrypted backup</option><option value="legacy">Legacy plaintext SQLite book</option>
+            <option value="interrupted">Interrupted or preserved profile</option></select></label>
+          {sourceKind === "interrupted" ? <>
+            <label className="block">Interrupted snapshot<select className={inputClass} required value={artifactId} onChange={(event) => { setArtifactId(event.target.value); setCredential(""); setAcknowledged(false); }}>
+              <option value="">Select a snapshot candidate</option>
+              {state?.interruptedArtifacts?.filter((item) => item.canAttemptRecovery).map((item) => <option key={item.id} value={item.id}>{item.id}</option>)}
+            </select></label>
+            <p>This recovers the staged snapshot available now. It does not prove that the original operation finished or matched your original source.</p>
+            <label className="block"><input type="checkbox" required checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />{" "}
+              I understand this interrupted snapshot may be incomplete; I will compare it with statements and available backups.</label>
+          </> : null}
+          {sourceKind !== "legacy" ? <><label className="block">{sourceKind === "backup" ? "Backup credential type" : "Interrupted credential type"}<select className={inputClass} value={credentialMode} onChange={(event) => { setCredentialMode(event.target.value as typeof credentialMode); setCredential(""); }}>
+            <option value="recovery">Saved recovery code</option><option value="passphrase">Configured passphrase</option>
           </select></label>
-          <label className="block">Backup credential<input type="password" autoComplete="off" className={inputClass} required value={credential} maxLength={1024}
+          <label className="block">{sourceKind === "backup" ? "Backup credential" : "Interrupted profile credential"}<input type="password" autoComplete="off" className={inputClass} required value={credential} maxLength={1024}
             onChange={(event) => setCredential(event.target.value)} /></label></> : <>
             <p>Conversion reads a consistent snapshot and verifies the encrypted copy. It does not change, delete, or encrypt the original book or other plaintext copies.
               Finish saving source edits first. Keep the matching app build and original files for recovery.</p>
@@ -128,8 +153,8 @@ export function ProtectedRecovery({ security, onClose }: { security: SecuritySta
             <label className="block">Repeat new passphrase<input type="password" className={inputClass} required maxLength={1024} autoComplete="off"
               value={repeated} onChange={(event) => setRepeated(event.target.value)} /></label>
           </> : null}
-          <button className={buttonClass} disabled={sourceKind === "legacy" && !acknowledged} data-testid="begin-protected-restore">
-            {sourceKind === "legacy" ? "Choose legacy book and convert" : "Choose encrypted backup and verify"}</button>
+          <button className={buttonClass} disabled={sourceKind !== "backup" && (!acknowledged || (sourceKind === "interrupted" && !artifactId))} data-testid="begin-protected-restore">
+            {sourceKind === "legacy" ? "Choose legacy book and convert" : sourceKind === "interrupted" ? "Verify interrupted snapshot" : "Choose encrypted backup and verify"}</button>
         </fieldset>
       </form>
     </> : <div className="space-y-3 rounded border p-4">
@@ -152,7 +177,7 @@ export function ProtectedRecovery({ security, onClose }: { security: SecuritySta
     <div className="flex gap-4">
       <button className="underline" disabled={busy} onClick={() => void run("cancel")}>Cancel pending recovery</button>
       <button className="underline" disabled={busy} onClick={() => void run("refresh")}>Refresh profiles</button>
-      {onClose ? <button className="underline" disabled={busy} onClick={() => void run("close")}>Back to unlock</button> : null}
+      {onClose ? <button className="underline" disabled={busy} onClick={() => void run("close")}>{security.status === "setup-required" ? "Back to setup" : "Back to unlock"}</button> : null}
     </div>
   </section>;
 }
@@ -166,6 +191,6 @@ function VerifiedSummary({ summary }: { summary: RecoverySummary }) {
         <tbody>{summary.balances.map((balance) => <tr key={`${balance.accountId}:${balance.currency}`}>
           <td className="break-all">{balance.accountId}</td><td>{balance.currency}</td><td>{balance.amount}</td></tr>)}</tbody></table>
     </details>
-    <p>Recovery checks establish that records match the backup. Compare the reopened book with your statements.</p>
+    <p>These checks verify the recovered snapshot’s records and structure. Compare the reopened book with your statements and original sources.</p>
   </div>;
 }

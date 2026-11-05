@@ -60,7 +60,9 @@ use. Do not invent cryptographic algorithms or silently fall back to plaintext s
   still need acceptance.
   [Interrupted recovery services](interrupted-recovery.md) now authenticate preserved staging,
   snapshot it without changing originals, and share confirmed publication. A reviewed setup retry
-  can retain artifacts by rename. Main ownership, controls, and installed acceptance are next.
+  can retain artifacts by rename. Main-owned controls, maintenance serialization, native
+  confirmation, and lock cancellation are connected. Full native-dialog/real-data acceptance
+  remains open.
 - SEC-06 now has a [verified conversion service](legacy-conversion.md) that copies a consistent
   plaintext snapshot directly into encrypted staging and reuses recovery-confirmed separate-profile
   publication. Main/IPC/UI integration now requires acknowledged plaintext retention, native

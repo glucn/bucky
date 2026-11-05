@@ -11,7 +11,7 @@ const security: SecurityState = { status: "locked", personal: true, revision: 1,
 const summary = { schemaVersion: "v1", recordDigest: "verified", tableCounts: { Account: 2, JournalEntry: 1 }, balances: [] };
 function fixture() {
   const api = { getState: vi.fn().mockResolvedValue({ available: true, activeProfile: "default", nextProfile: "default", profiles: [{ id: "default" }] }),
-    createBackup: vi.fn(), beginRestore: vi.fn(), beginLegacy: vi.fn(), confirmRestore: vi.fn(), selectProfile: vi.fn(), cancel: vi.fn().mockResolvedValue(undefined) };
+    createBackup: vi.fn(), beginRestore: vi.fn(), beginLegacy: vi.fn(), beginInterrupted: vi.fn(), confirmRestore: vi.fn(), selectProfile: vi.fn(), cancel: vi.fn().mockResolvedValue(undefined) };
   Object.defineProperty(window, "electron", { configurable: true, value: { protectedRecovery: api } });
   return api;
 }
@@ -84,4 +84,27 @@ it("requires plaintext-retention acknowledgement before conversion and clears ne
   await screen.findByLabelText("New passphrase");
   expect((screen.getByLabelText("New passphrase") as HTMLInputElement).value).toBe("");
   expect((screen.getByLabelText("Repeat new passphrase") as HTMLInputElement).value).toBe("");
+});
+
+it("requires explicit snapshot acknowledgement and saved credentials before preparing interrupted recovery", async () => {
+  const api = fixture(), artifactId = ".creating-default-unfinished";
+  api.getState.mockResolvedValue({ available: true, activeProfile: "default", nextProfile: "default", profiles: [],
+    interruptedArtifacts: [{ id: artifactId, kind: "setup", canAttemptRecovery: true, profileId: "default" },
+      { id: ".legacy-conversion-unknown", kind: "temporary", canAttemptRecovery: false }], unfinishedSetupIds: [] });
+  api.beginInterrupted.mockResolvedValue({ restoreId: "interrupted", profileId: "restored-snapshot", recoverySecret: "INTERRUPTED-CODE", summary });
+  render(<ProtectedRecovery security={{ ...security, status: "recovery-required" }} />);
+  await screen.findByText(artifactId);
+  fireEvent.change(screen.getByLabelText("Recovery source"), { target: { value: "interrupted" } });
+  fireEvent.change(screen.getByLabelText("Interrupted snapshot"), { target: { value: artifactId } });
+  fireEvent.change(screen.getByLabelText("Interrupted profile credential"), { target: { value: "SAVED-CODE" } });
+  fireEvent.change(screen.getByLabelText("New passphrase"), { target: { value: "Replacement passphrase" } });
+  fireEvent.change(screen.getByLabelText("Repeat new passphrase"), { target: { value: "Replacement passphrase" } });
+  const button = screen.getByRole("button", { name: "Verify interrupted snapshot" });
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByLabelText(/I understand this interrupted snapshot may be incomplete/));
+  fireEvent.click(button); await screen.findByText("INTERRUPTED-CODE");
+  expect(api.beginInterrupted).toHaveBeenCalledWith({ artifactId, acknowledgeSnapshot: true,
+    credential: { mode: "recovery", secret: "SAVED-CODE" },
+    protection: { mode: "passphrase", passphrase: "Replacement passphrase", passphraseConfirmation: "Replacement passphrase" } });
+  expect(api.beginRestore).not.toHaveBeenCalled(); expect(api.confirmRestore).not.toHaveBeenCalled();
 });

@@ -150,3 +150,27 @@ it("rejects renderer-provided conversion paths and denied OS protection without 
   await expect(recovery.beginLegacy({ acknowledgePlaintext: true, protection: { mode: "keychain" } })).rejects.toThrow(/authenticate/i);
   expect(await fs.readdir(path.join(directory, "profiles"))).toEqual(["default"]);
 });
+
+it("inventories and recovers an interrupted snapshot through fresh confirmation without automatically selecting it", async () => {
+  const artifactId = ".creating-default-interrupted";
+  await fs.cp(path.join(directory, "profiles", "default"), path.join(directory, "profiles", artifactId), { recursive: true });
+  status = "recovery-required";
+  expect((await recovery.getState()).interruptedArtifacts).toContainEqual({ id: artifactId, kind: "setup", canAttemptRecovery: true, profileId: "default" });
+  const protection = { mode: "passphrase" as const, passphrase, passphraseConfirmation: passphrase };
+  await expect(recovery.beginInterrupted({ artifactId, protection, credential: { mode: "passphrase", secret: passphrase }, acknowledgeSnapshot: false })).rejects.toThrow(/acknowledge/i);
+  const pending = await recovery.beginInterrupted({ artifactId, protection, credential: { mode: "passphrase", secret: passphrase }, acknowledgeSnapshot: true });
+  await recovery.confirmRestore({ restoreId: pending!.restoreId, recoverySecret: pending!.recoverySecret });
+  expect(readActiveProfile(directory)).toBe("default");
+  expect((await recovery.getState()).profiles).toContainEqual({ id: pending!.profileId });
+  expect((await recovery.getState()).unfinishedSetupIds).toEqual([]); // A default book exists.
+});
+
+it("offers setup preservation only for unpublished setup and rejects interrupted recovery while security maintenance owns the session", async () => {
+  const artifactId = ".creating-default-interrupted";
+  await fs.rename(path.join(directory, "profiles", "default"), path.join(directory, "profiles", artifactId));
+  await fs.mkdir(path.join(directory, "profiles", ".setup-default.lock")); status = "recovery-required";
+  expect((await recovery.getState()).unfinishedSetupIds).toEqual([artifactId, ".setup-default.lock"]);
+  status = "recovering";
+  await expect(recovery.beginInterrupted({ artifactId, protection: { mode: "keychain" }, credential: { mode: "passphrase", secret: passphrase }, acknowledgeSnapshot: true })).rejects.toThrow(/operation|lock/i);
+  expect(deps.authenticateOS).not.toHaveBeenCalled();
+});

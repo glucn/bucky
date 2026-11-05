@@ -75,8 +75,8 @@ imported declarations omits Electron's `Process.resourcesPath` augmentation.
 
 The setup UI, main-owned OS/passphrase boundary, fail-closed startup, lock/relock, and OS-event
 wiring are now implemented; see the authenticated-launch note for newer verification evidence.
-Protected portable backups now have app controls. Still required: installed recovery acceptance,
-interrupted-setup recovery UX, legacy conversion,
+Protected portable backups, legacy conversion, and interrupted recovery/preservation now have app controls.
+Still required: full installed/native recovery acceptance,
 and real keychain/user recovery drills. Existing credential-envelope
 replacement and passphrase-change persistence are not provided by this initial-creation controller.
 BL-022's reset modes and onboarding-state policy also remain open; this controller establishes

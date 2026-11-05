@@ -78,7 +78,7 @@ and power events are mocked in their focused unit tests. Manual installed-build 
 - [ ] Successful and cancelled Touch ID, unavailable keychain, and configured passphrase fallback.
 - [ ] Real OS lock/suspend/user switch while requests and enrichment are pending.
 - [ ] Portable encrypted backup, independent recovery on another profile/device, and legacy conversion.
-- [ ] Interrupted setup recovery, durable credential replacement, and passphrase-change UI.
+- [ ] Native interrupted-setup preservation/selection acceptance, durable credential replacement, and passphrase-change UI.
 - [ ] Reviewed production diagnostics, dependency/security updates, and external key/storage review.
 
 The live native database cipher is AES-256-CBC, not an authenticated backup format. JavaScript
