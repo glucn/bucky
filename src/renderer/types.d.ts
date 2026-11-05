@@ -91,6 +91,7 @@ type BaseCurrencyReconciliationState = {
 };
 
 interface IElectronAPI {
+  bookSetup: import("../shared/bookSetup").BookSetupApi;
   security: import("../shared/security").SecurityApi;
   protectedRecovery: import("../shared/recovery").ProtectedRecoveryApi;
   getRecoveryState(): Promise<RecoveryResponse<RecoveryState>>;

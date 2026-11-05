@@ -61,6 +61,19 @@ export const closeApp = async (app: ElectronApplication): Promise<void> => {
   }
 };
 
+async function configureFixtureBook(page: Page): Promise<Page> {
+  await page.waitForFunction(() => Boolean(window.electron?.bookSetup));
+  const state = await page.evaluate(() => window.electron.bookSetup.getState());
+  if (state.required) {
+    // Import scenarios deliberately choose USD through the shipped setup UI. This
+    // is fixture setup, not an application bypass for missing currency.
+    await page.getByLabel("Base currency").selectOption("USD");
+    await page.getByRole("button", { name: "Save base currency" }).click();
+    await page.getByTestId("book-setup-page").waitFor({ state: "detached" });
+  }
+  return page;
+}
+
 export const getMainWindow = async (app: ElectronApplication): Promise<Page> => {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const windows = app.windows();
@@ -68,7 +81,7 @@ export const getMainWindow = async (app: ElectronApplication): Promise<Page> => 
       const url = await window.url();
       if (url.includes("localhost:3000")) {
         await window.waitForLoadState("domcontentloaded");
-        return window;
+        return configureFixtureBook(window);
       }
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -76,7 +89,7 @@ export const getMainWindow = async (app: ElectronApplication): Promise<Page> => 
 
   const page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
-  return page;
+  return configureFixtureBook(page);
 };
 
 export const attachDebugLogging = (page: Page, label: string) => {

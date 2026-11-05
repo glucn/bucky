@@ -1,5 +1,7 @@
 // Explicit IPC inventory. Review both preload exposure and main-process authorization when adding channels.
 export const APP_IPC_CHANNELS = [
+  "get-book-setup-state",
+  "complete-book-setup",
   "get-security-state",
   "begin-protected-setup",
   "confirm-protected-setup",

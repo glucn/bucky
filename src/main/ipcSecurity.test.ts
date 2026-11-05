@@ -14,6 +14,15 @@ function fixture(packaged = true) {
 }
 
 describe("Main-process IPC security", () => {
+  it.each([true, false])("passes the channel through the book gate in packaged=%s mode", async (packaged) => {
+    const handlers = new Map<string, any>(), action = vi.fn(), runData = vi.fn().mockRejectedValue(new Error("Choose a base currency"));
+    const frame = { url: packaged ? packagedUrl : "http://localhost:3000" };
+    const secure = createSecureIpc({ handle: (name: string, handler: any) => handlers.set(name, handler) } as any,
+      { getWindow: () => ({ webContents: { id: 1, mainFrame: frame } }) as any, getAppUrl: () => frame.url, isPackaged: () => packaged, runData });
+    secure.handle("get-accounts", action);
+    await expect(handlers.get("get-accounts")({ sender: { id: 1 }, senderFrame: frame })).rejects.toThrow(/base currency/i);
+    expect(action).not.toHaveBeenCalled(); expect(runData).toHaveBeenCalledWith(expect.any(Function), "get-accounts");
+  });
   it("requires the personal lock gate even for an authorized application frame", async () => {
     const handlers = new Map<string, any>();
     const frame = { url: packagedUrl };

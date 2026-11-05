@@ -237,10 +237,12 @@ export class PersonalSecurity {
     }
   }
 
-  async runData<T>(action: () => Promise<T>): Promise<T> {
+  async runData<T>(action: () => Promise<T>, before?: () => Promise<unknown>): Promise<T> {
     if (this.status !== "unlocked") throw new Error("Application is locked");
     const epoch = this.epoch;
-    const request = Promise.resolve().then(() => { this.checkEpoch(epoch); return action(); }).then(
+    const request = Promise.resolve().then(async () => {
+      this.checkEpoch(epoch); if (before) await before(); this.checkEpoch(epoch); return action();
+    }).then(
       (result) => { this.checkEpoch(epoch); return result; },
       (error) => { this.checkEpoch(epoch); throw error; });
     this.requests.add(request);

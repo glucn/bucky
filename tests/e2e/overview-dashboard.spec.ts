@@ -33,6 +33,9 @@ test("opens on overview dashboard with empty allocation hint", async ({ page }) 
 
   await page.addInitScript((payload) => {
     (window as any).electron = {
+      security: { getState: async () => ({ status: "unlocked", personal: false, revision: 0,
+        osAuthenticationAvailable: false, methods: { keychain: false, passphrase: false } }), onStateChanged: () => () => {} },
+      bookSetup: { getState: async () => ({ required: false }) },
       getOverviewDashboard: async () => payload,
       getAccountsWithGroups: async () => ({
         success: true,

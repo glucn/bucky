@@ -501,8 +501,10 @@ This file tracks deferred product improvements that are intentionally out of cur
   - Explicit data/factory reset modes are implemented (2026-11-04), with validated currency
     retention, transactional reseeding, and empty factory state. Book-derived reconciliation
     settings are cleared. See `doc/BL-022-onboarding-reset-policy.md`.
-  - Packaged development reset remains prohibited. The broader onboarding gate for recovered
-    or development books without valid currency remains open; this is not completion of BL-022.
+  - Packaged development reset remains prohibited. Recovered/development books now require
+    explicit supported currency before financial IPC/view mounting; setup preserves existing
+    records and seeds empty books atomically. Packaged missing/invalid-currency checks are
+    covered. Full development E2E and representative acceptance remain open.
 - **Context (What / Why)**:
   - Current defaults can silently fall back to USD when base currency is absent, which is deterministic but can conflict with intended first-time setup UX.
   - `reset-all-data` currently preserves base currency by convention, but reset behavior is controlled by a boolean and lacks explicit product-level reset modes.

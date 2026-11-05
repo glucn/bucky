@@ -87,6 +87,17 @@ it("revokes immediately and waits for late IPC work before allowing another unlo
   expect(security.getState().status).toBe("locked");
 });
 
+it("rechecks authentication after an asynchronous book-setup gate before starting financial work", async () => {
+  await existing(); await security.unlock({ mode: "keychain" });
+  let finish!: () => void;
+  const before = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; })), action = vi.fn().mockResolvedValue("private records");
+  const request = security.runData(action, before); request.catch(() => {});
+  await Promise.resolve();
+  expect(before).toHaveBeenCalledOnce();
+  const rejected = expect(request).rejects.toThrow(/locked/i), locking = security.lock(); finish();
+  await rejected; await locking; expect(action).not.toHaveBeenCalled();
+});
+
 it("does not let a late authentication response reopen after lock", async () => {
   await existing();
   let finish!: () => void;

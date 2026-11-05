@@ -74,6 +74,9 @@ test.describe("F-013 Reporting Basics E2E", () => {
   test("shows reports page with trend report by default", async ({ page }) => {
     await page.addInitScript((payload) => {
       (window as any).electron = {
+        security: { getState: async () => ({ status: "unlocked", personal: false, revision: 0,
+          osAuthenticationAvailable: false, methods: { keychain: false, passphrase: false } }), onStateChanged: () => () => {} },
+        bookSetup: { getState: async () => ({ required: false }) },
         getIncomeExpenseTrendReport: async () => payload.trend,
         getIncomeExpenseBreakdownReport: async () => payload.breakdown,
         getAccountsWithGroups: async () => ({
@@ -104,6 +107,9 @@ test.describe("F-013 Reporting Basics E2E", () => {
   test("switching between trend and breakdown reports", async ({ page }) => {
     await page.addInitScript((payload) => {
       (window as any).electron = {
+        security: { getState: async () => ({ status: "unlocked", personal: false, revision: 0,
+          osAuthenticationAvailable: false, methods: { keychain: false, passphrase: false } }), onStateChanged: () => () => {} },
+        bookSetup: { getState: async () => ({ required: false }) },
         getIncomeExpenseTrendReport: async () => payload.trend,
         getIncomeExpenseBreakdownReport: async () => payload.breakdown,
         getAccountsWithGroups: async () => ({
@@ -144,6 +150,9 @@ test.describe("F-013 Reporting Basics E2E", () => {
   test("trend and breakdown filters are independent", async ({ page }) => {
     await page.addInitScript(() => {
       (window as any).electron = {
+        security: { getState: async () => ({ status: "unlocked", personal: false, revision: 0,
+          osAuthenticationAvailable: false, methods: { keychain: false, passphrase: false } }), onStateChanged: () => () => {} },
+        bookSetup: { getState: async () => ({ required: false }) },
         getIncomeExpenseTrendReport: async (filter: { preset: string }) => {
           // Return different data based on preset to verify filter selection
           if (filter.preset === "LAST_3_MONTHS") {
@@ -254,6 +263,9 @@ test.describe("F-013 Reporting Basics E2E", () => {
 
     await page.addInitScript((persistedSettings) => {
       (window as any).electron = {
+        security: { getState: async () => ({ status: "unlocked", personal: false, revision: 0,
+          osAuthenticationAvailable: false, methods: { keychain: false, passphrase: false } }), onStateChanged: () => () => {} },
+        bookSetup: { getState: async () => ({ required: false }) },
         getIncomeExpenseTrendReport: async () => ({
           range: { preset: "LAST_12_MONTHS", startMonthKey: "2025-04", endMonthKey: "2026-03" },
           months: [
@@ -306,6 +318,9 @@ test.describe("F-013 Reporting Basics E2E", () => {
   test("coexists with investment performance reports route", async ({ page }) => {
     await page.addInitScript(() => {
       (window as any).electron = {
+        security: { getState: async () => ({ status: "unlocked", personal: false, revision: 0,
+          osAuthenticationAvailable: false, methods: { keychain: false, passphrase: false } }), onStateChanged: () => () => {} },
+        bookSetup: { getState: async () => ({ required: false }) },
         getIncomeExpenseTrendReport: async () => ({
           range: { preset: "LAST_6_MONTHS", startMonthKey: "2025-10", endMonthKey: "2026-03" },
           months: [{ monthKey: "2026-03", income: 1400, expense: 1100, netIncome: 300 }],
@@ -385,6 +400,9 @@ test.describe("F-013 Reporting Basics E2E", () => {
   test("displays trend chart with grouped bars", async ({ page }) => {
     await page.addInitScript((payload) => {
       (window as any).electron = {
+        security: { getState: async () => ({ status: "unlocked", personal: false, revision: 0,
+          osAuthenticationAvailable: false, methods: { keychain: false, passphrase: false } }), onStateChanged: () => () => {} },
+        bookSetup: { getState: async () => ({ required: false }) },
         getIncomeExpenseTrendReport: async () => payload.trend,
         getIncomeExpenseBreakdownReport: async () => payload.breakdown,
         getAccountsWithGroups: async () => ({
@@ -420,6 +438,9 @@ test.describe("F-013 Reporting Basics E2E", () => {
   test("displays breakdown with KPI and tables", async ({ page }) => {
     await page.addInitScript((payload) => {
       (window as any).electron = {
+        security: { getState: async () => ({ status: "unlocked", personal: false, revision: 0,
+          osAuthenticationAvailable: false, methods: { keychain: false, passphrase: false } }), onStateChanged: () => () => {} },
+        bookSetup: { getState: async () => ({ required: false }) },
         getIncomeExpenseTrendReport: async () => payload.trend,
         getIncomeExpenseBreakdownReport: async () => payload.breakdown,
         getAccountsWithGroups: async () => ({

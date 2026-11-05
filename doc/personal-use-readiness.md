@@ -9,6 +9,26 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 22 — Enforce explicit currency setup before financial workflows (2026-11-04)
+
+- Added a main-enforced setup gate for authenticated recovered and development books with
+  missing/invalid currency. Financial IPC, providers, and views stay unavailable until explicit
+  supported selection. The setting read/completion still require personal authentication.
+  Startup no longer seeds USD defaults; empty-book selection and seeding commit together.
+- Existing currencies and postings remain unchanged; legacy records receive pending valuation
+  review. Competing setup is refused. Failed seeding rolls selection back. Lock rechecks its
+  epoch after the asynchronous currency check before starting financial work, and late UI results
+  are ignored after unmount. Recreated opening-balance system accounts honor selected currency.
+- Initial failing service/main/renderer regressions drove implementation, including a generic
+  settings validation bypass for non-string base currency. **818 tests across 104 files passed
+  in each native and encrypted storage mode**, plus TypeScript and Apple Silicon packaging. Packaged cases verified missing and invalid
+  currency, IPC denial, explicit selection, unchanged CAD posting balance with EUR selected,
+  pending review and restart. All nine packaged cases passed three repetitions (**27 checks**),
+  and the setup screen was visually inspected.
+- Development fixtures now explicitly configure USD through the real setup form; browser-only
+  fixtures declare mocked setup/authentication. Their E2E rerun still needs an isolated server;
+  the existing process on port 3000 was left untouched. See the [setup/reset policy](BL-022-onboarding-reset-policy.md).
+
 ### Batch 21 — Explicit development reset modes (2026-11-04)
 
 - Replaced the reset boolean/implicit default with validated data and factory modes across
@@ -565,7 +585,7 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation work
-is **the remaining onboarding/reset policy and financial correctness gaps**,
+is **development E2E acceptance and financial correctness gaps**,
 alongside full installed/native recovery/conversion acceptance. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance
 gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.

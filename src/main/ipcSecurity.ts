@@ -29,7 +29,7 @@ export function createSecureIpc(transport: IpcRegistrar, context: {
   getWindow: () => BrowserWindow | null;
   getAppUrl: () => string;
   isPackaged: () => boolean;
-  runData?: (action: () => Promise<any>) => Promise<any>;
+  runData?: (action: () => Promise<any>, channel: string) => Promise<any>;
 }): IpcRegistrar {
   return {
     removeHandler: (channel) => transport.removeHandler(channel),
@@ -46,9 +46,9 @@ export function createSecureIpc(transport: IpcRegistrar, context: {
         if (context.isPackaged() && DEVELOPMENT_ONLY_CHANNELS.has(channel)) {
           throw new Error("This operation is development-only");
         }
-        if (context.isPackaged() && !SECURITY_IPC_CHANNELS.has(channel)) {
-          if (!context.runData) throw new Error("Application is locked");
-          return context.runData(async () => handler(event, ...args));
+        if (!SECURITY_IPC_CHANNELS.has(channel)) {
+          if (context.runData) return context.runData(async () => handler(event, ...args), channel);
+          if (context.isPackaged()) throw new Error("Application is locked");
         }
         return handler(event, ...args);
       });

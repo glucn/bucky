@@ -19,6 +19,9 @@ import {
 import { setupAutoCategorizationIpcHandlers } from "./ipcHandlers.autoCategorization";
 import { setupEnrichmentIpcHandlers } from "./ipcHandlers.enrichment";
 import { setupDevelopmentIpcHandlers } from "./ipcHandlers.development";
+import { setupBookSetupIpcHandlers } from "./ipcHandlers.bookSetup";
+import { createBookSetupGate } from "./bookSetupGate";
+import { bookSetupService } from "../services/bookSetup";
 import { setupInvestmentIpcHandlers } from "./ipcHandlers.investments";
 import { setupOverviewIpcHandlers } from "./ipcHandlers.overview";
 import { setupReportingIpcHandlers } from "./ipcHandlers.reporting";
@@ -48,7 +51,13 @@ if (!singleInstance) app.quit();
 const getAppUrl = () => app.isPackaged ? MAIN_WINDOW_WEBPACK_ENTRY : "http://localhost:3000";
 const ipcMain = createSecureIpc(electronIpcMain, { getWindow: () => mainWindow,
   getAppUrl, isPackaged: () => app.isPackaged,
-  runData: (action) => personalSecurity ? personalSecurity.runData(action) : Promise.reject(new Error("Application is locked")) });
+  runData: (action, channel) => {
+    if (app.isPackaged) return personalSecurity
+      ? personalSecurity.runData(action, () => runConfiguredBook(channel, async () => undefined))
+      : Promise.reject(new Error("Application is locked"));
+    return runConfiguredBook(channel, action);
+  } });
+const runConfiguredBook = createBookSetupGate(() => bookSetupService.getState());
 
 // Initialize database and create window
 async function initialize() {
@@ -126,15 +135,7 @@ async function initialize() {
     await databaseService.initialize();
     console.log("Database initialized successfully");
 
-    // Ensure default accounts exist only if there are no accounts
-    const existingAccounts = await databaseService.getAccounts(true);
-    if (!existingAccounts || existingAccounts.length === 0) {
-      console.log("No accounts found. Ensuring default accounts exist...");
-      await databaseService.ensureDefaultAccounts();
-      console.log("Default accounts ensured");
-    } else {
-      console.log("Accounts already exist. Skipping default account creation.");
-    }
+    // Currency setup owns initial seeding. Startup must not silently select USD.
     }
 
     // Set up IPC handlers
@@ -1113,6 +1114,7 @@ function setupIpcHandlers() {
   setupAutoCategorizationIpcHandlers(ipcMain);
   setupEnrichmentIpcHandlers(ipcMain);
   setupRecoveryIpcHandlers(() => mainWindow, ipcMain);
+  setupBookSetupIpcHandlers(ipcMain);
 
   console.log("All IPC handlers registered");
   setupDevelopmentIpcHandlers(ipcMain, databaseService);

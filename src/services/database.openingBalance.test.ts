@@ -8,6 +8,14 @@ describe("Opening Balance Workflow", () => {
     await resetTestDatabase();
   });
 
+  it("creates a missing opening-balance system account in the explicitly selected base currency", async () => {
+    await databaseService.prismaClient.appSetting.create({ data: { key: "baseCurrency", jsonValue: '"CAD"' } });
+    await databaseService.prismaClient.account.deleteMany({ where: { type: AccountType.System } });
+    const account = await databaseService.createAccount({ name: "CAD checking", type: AccountType.User, subtype: AccountSubtype.Asset, currency: "CAD" });
+    await databaseService.setOpeningBalance({ accountId: account.id, displayAmount: 10, asOfDate: "2026-09-01" });
+    expect((await databaseService.prismaClient.account.findFirstOrThrow({ where: { name: "Opening Balances", type: AccountType.System } })).currency).toBe("CAD");
+  });
+
   it("should create an opening balance entry with a system equity counter-account", async () => {
     const account = await databaseService.createAccount({
       name: "Checking",

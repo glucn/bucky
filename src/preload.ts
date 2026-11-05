@@ -122,6 +122,10 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("get-enrichment-config-state"),
 
   // Generic app settings operations
+  bookSetup: {
+    getState: () => ipcRenderer.invoke("get-book-setup-state"),
+    complete: (input: { baseCurrency: string }) => ipcRenderer.invoke("complete-book-setup", input),
+  },
   getAppSetting: (key: string) =>
     ipcRenderer.invoke("get-app-setting", key),
   setAppSetting: (key: string, value: unknown) =>

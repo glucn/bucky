@@ -1366,14 +1366,13 @@ class DatabaseService {
     }
 
     if (!equityAccount) {
-      // TODO(BL-022): Align this fallback with first-time setup policy so system-account currency
-      // does not silently default to USD when onboarding intends an explicit base-currency choice.
+      const currency = (await this.getConfiguredBaseCurrency(prisma)) || "USD";
       equityAccount = await prisma.account.create({
         data: {
           name: "Opening Balances",
           type: AccountType.System,
           subtype: AccountSubtype.Asset,
-          currency: "USD",
+          currency,
         },
       });
     } else if (equityAccount.name !== "Opening Balances") {
@@ -1936,8 +1935,8 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
    */
   public async ensureDefaultAccounts(tx?: TransactionClient) {
     const prisma = tx || this.prisma;
-    // TODO(BL-022): Decouple default-account seeding from implicit fallback currency selection.
-    // Prefer an explicit initialization context from onboarding once first-time setup UX is revised.
+    // Application IPC requires explicit setup before financial actions. The USD fallback
+    // remains for deliberate legacy test fixtures; startup no longer invokes implicit seeding.
     const initializationCurrency = (await this.getConfiguredBaseCurrency(prisma)) || "USD";
     
     // First, ensure account groups exist

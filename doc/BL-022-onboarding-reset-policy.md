@@ -1,6 +1,7 @@
 # Currency setup and development reset policy
 
-Updated 2026-11-04. BL-022 remains in progress; explicit reset modes are implemented.
+Updated 2026-11-04. Explicit reset modes and the main-enforced currency setup gate are implemented.
+Full development E2E and representative personal acceptance remain open.
 
 Packaged personal books reject development reset at both the IPC registrar and database service,
 regardless of inherited test/development environment variables. These controls do not provide a
@@ -26,8 +27,31 @@ Test fixtures intentionally reset using factory mode and separately seed their l
 defaults without claiming onboarding is complete. That fixture operation is not product
 factory-reset behavior, and never targets packaged personal storage.
 
-New encrypted-profile setup already requires explicit currency before publication/default seeding.
-Still required: block ordinary financial workflows for legacy/recovered or development books
-with missing/invalid currency until explicit setup, remove implicit startup/fallback seeding from
-those paths, preserve existing record currencies/amounts, and verify restart and lock behavior.
-The existing nonblocking navigation prompt does not establish that requirement.
+New encrypted-profile setup requires explicit currency before publication/default seeding.
+After authentication, recovered/legacy and development books must also have a valid supported
+base currency before financial IPC or financial providers/views can run. The setup-state read
+and completion are ordinary authenticated IPC, so they cannot inspect encrypted settings while
+locked. Main permits only setup and the already-guarded development reset through this gate;
+setup read failure denies ordinary data access. Startup no longer seeds default accounts.
+
+The setup form starts with no selected currency. Completion commits the selection and initial
+seeding together for an empty book. Existing account currencies and postings are preserved
+exactly, with valuation reconciliation marked pending; selecting base currency never converts
+or relabels those records. Setup cannot replace an already configured base currency. Competing
+setup requests are refused while one transaction owns initialization. Ordinary currency changes
+continue through settings, with non-string currency writes rejected in IPC.
+
+Lock drains setup IPC and closes/revokes storage. The security owner rechecks its session after
+the asynchronous currency preflight and before invoking a financial action. The renderer ignores
+late setup responses after unmount. Restart requires authentication again and uses the committed
+selection. A recreated Opening Balances system account now respects the configured currency.
+
+Native/encrypted service tests cover setup transaction failure and retained records; main tests
+cover setup gating and lock revocation; renderer tests verify no early financial mounts and retry.
+Packaged cases cover missing and malformed currency, pre-authentication denial, post-authentication
+financial denial, explicit selection, unchanged CAD records while selecting EUR, pending review,
+and restart. Development import fixtures now explicitly choose USD through the setup UI, and
+browser-only financial fixtures declare their mocked authenticated/configured state. Those
+development/browser E2E changes still need a fresh run on an isolated server: port 3000 is owned
+by an existing process and has been left untouched. Packaged acceptance uses separate disposable
+profiles and does not rely on that server.

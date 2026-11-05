@@ -59,6 +59,12 @@ vi.mock("../services/appSettingsService", () => ({
 import { setupEnrichmentIpcHandlers } from "./ipcHandlers.enrichment";
 
 describe("setupEnrichmentIpcHandlers", () => {
+  it("rejects non-string base currency writes instead of bypassing currency validation", async () => {
+    setupEnrichmentIpcHandlers(ipcMain);
+    const handler = handle.mock.calls.find(([channel]) => channel === "set-app-setting")?.[1];
+    for (const value of [null, 123, { code: "CAD" }]) await expect(handler({}, { key: "baseCurrency", value })).rejects.toThrow(/currency/i);
+    expect(setAppSetting).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });
