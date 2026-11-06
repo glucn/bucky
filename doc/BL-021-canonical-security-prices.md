@@ -1,8 +1,8 @@
 # Canonical investment prices and market identity
 
 Updated 2026-11-05. BL-021 remains in progress. The persisted identity and canonical price
-services are implemented; existing application valuation, price controls and refresh targeting
-still need cutover. This foundation does not establish investment readiness.
+services and market-aware refresh targeting are implemented; existing application valuation and
+price controls still need cutover. This foundation does not establish investment readiness.
 
 `SecurityDailyPrice(ticker, market, marketDate)` is the price source of truth. Market strings
 are opaque, case-sensitive provider identities; surrounding whitespace is normalized, and
@@ -30,6 +30,15 @@ validate completely, reject duplicate normalized dates, and commit or roll back 
 `source` defaults to `provider` for existing canonical rows, which the prior application wrote
 only through provider ingestion. Legacy manual prices stay in their original table.
 
+Refresh now queries each holding's persisted market and account quote currency. Same-ticker
+holdings on different markets remain separate. An unresolved holding can discover only one exact
+ticker candidate; ambiguity is reported, and discovery never persists a binding. Metadata and
+price adapters must verify the requested listing and quote currency. Yahoo daily bars use the
+exchange time zone and an inclusive requested calendar range; Twelve Data requests include the
+exchange and validate response metadata. These are fixture-tested contracts, not proof of live
+provider availability. Invalid batches are refused before writing, and provider batches commit
+atomically. Manual/import prices and future points do not advance provider backfill coverage.
+
 Remaining required integration:
 
 - Persist user/provider-selected identity through security setup and position controls. Use
@@ -41,10 +50,13 @@ Remaining required integration:
 - Migrate manual price and CSV controls to the canonical service with visible fill/correction
   choice. Offer explicit reviewed promotion of retained legacy prices to a selected market;
   never infer an exchange during schema migration.
-- Remove refresh's first-metadata-row/first-search-result market guesses. Preserve each bound
-  identity independently. Provider adapters must validate requested market and quote currency;
-  the current Yahoo price adapter ignores market and metadata has first-result fallbacks.
-  A canonical table alone cannot make those incorrectly targeted quotes trustworthy.
+- Define and persist price adjustment basis and completed-bar policy before valuation cutover.
+  [Twelve Data's time-series contract](https://twelvedata.com/docs/market-data/time-series)
+  defaults to split adjustment; changing requests to unadjusted without identifying existing
+  rows would mix incompatible series. Existing rows have no verified adjustment basis. Provider
+  daily responses can include unfinished current-session bars; insert-missing-only storage must
+  not freeze an intraday quote as a final close. Verify actual provider contracts and quarantine
+  unknown basis/finality rather than silently treating stored prices as comparable.
 - Historical quantities/basis must reflect the requested date, including purchases, sales,
   reinvestment and splits. Existing current quantities/lots are insufficient after sales;
   user-editable descriptions are not an authoritative quantity ledger. Add structured dated

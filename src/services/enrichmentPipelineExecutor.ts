@@ -1,10 +1,14 @@
 import type { EnrichmentRunScope } from "./enrichmentRunCoordinator";
 import type { EnrichmentProviderAdapter } from "./enrichmentProviderRegistry";
 import { withTransientRetry } from "./enrichmentRetry";
+import { parseSecurityIdentity } from "../shared/securityMarket";
+import { isValidStandardDate } from "../shared/dateUtils";
 
 type SecurityRange = {
   ticker: string;
   market: string;
+  quoteCurrency: string;
+  validationError?: string;
   startDate: string;
   endDate: string;
 };
@@ -75,12 +79,24 @@ const toReason = (error: unknown): string => {
   return "Unable to fetch data from provider";
 };
 
+const verifySecurity = (security: SecurityRange) => {
+  if (security.validationError) throw new Error(security.validationError);
+  parseSecurityIdentity({ ticker: security.ticker, market: security.market });
+  if (!/^[A-Z]{3}$/.test(security.quoteCurrency)) throw new Error("Security quote currency must be verified before refreshing prices");
+};
+const verifyRange = (security: SecurityRange) => {
+  if (!isValidStandardDate(security.startDate) || !isValidStandardDate(security.endDate) || security.startDate > security.endDate ||
+    security.endDate > new Date().toISOString().slice(0, 10)) throw new Error("Invalid security refresh date range");
+};
+
 export const executeEnrichmentPipeline = async (input: PipelineInput) => {
   const failedItems: Array<{
     category: "securityMetadata" | "securityPrices" | "fxRates";
     identifier: string;
     reason: string;
   }> = [];
+  const metadataFailures = new Set<string>();
+  const identityKey = (security: SecurityRange) => JSON.stringify([security.ticker, security.market, security.quoteCurrency]);
 
   const retryOptions = input.retryOptions || {
     maxRetries: 2,
@@ -115,6 +131,7 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
       }
 
       try {
+        verifySecurity(security);
         const metadata = await withTransientRetry(
           () => requireActive(() =>
             input.provider.fetchSecurityMetadata({
@@ -124,16 +141,15 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
           retryOptions
         );
         if (shouldCancel()) return canceledResult();
-        if (metadata) {
-          await input.repository.upsertSecurityMetadataFillMissing({
-            ticker: security.ticker,
-            market: security.market,
-            displayName: metadata.displayName,
-            assetType: metadata.assetType,
-            quoteCurrency: metadata.quoteCurrency,
-          });
+        if (!metadata || metadata.symbol !== security.ticker || metadata.market !== security.market || metadata.quoteCurrency !== security.quoteCurrency) {
+          throw new Error("Provider metadata did not match the requested security market and quote currency");
         }
+        await input.repository.upsertSecurityMetadataFillMissing({
+          ticker: security.ticker, market: security.market, displayName: metadata.displayName,
+          assetType: metadata.assetType, quoteCurrency: metadata.quoteCurrency,
+        });
       } catch (error) {
+        metadataFailures.add(identityKey(security));
         const failedItem = {
           category: "securityMetadata" as const,
           identifier: `${security.ticker}/${security.market}`,
@@ -169,17 +185,24 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
       }
 
       try {
+        verifySecurity(security); verifyRange(security);
+        if (metadataFailures.has(identityKey(security))) throw new Error("Price refresh skipped because market metadata verification failed");
         const points = await withTransientRetry(
           () => requireActive(() =>
             input.provider.fetchSecurityDailyPrices({
               symbol: security.ticker,
               market: security.market,
+              quoteCurrency: security.quoteCurrency,
               startDate: security.startDate,
               endDate: security.endDate,
             })),
           retryOptions
         );
         if (shouldCancel()) return canceledResult();
+        if (!Array.isArray(points) || points.some((point) => !isValidStandardDate(point.marketDate) || point.marketDate < security.startDate ||
+          point.marketDate > security.endDate || typeof point.close !== "number" || !Number.isFinite(point.close) || point.close < 0)) {
+          throw new Error("Provider returned an invalid or out-of-range security price batch");
+        }
         await input.repository.insertMissingSecurityDailyPrices(
           {
             ticker: security.ticker,

@@ -68,3 +68,10 @@ it("rolls back an entire canonical import when a later SQLite write fails", asyn
     expect(await databaseService.prismaClient.securityDailyPrice.count()).toBe(0);
   } finally { await databaseService.prismaClient.$executeRawUnsafe("DROP TRIGGER fail_security_price"); }
 });
+
+it("permits provider fill but never permits provider correction of existing points", async () => {
+  const input = { identity, points: [{ date: "2026-01-02", price: 10 }], mode: "fill" as const, source: "provider" as const };
+  expect(await securityMarketData.write(input)).toEqual({ inserted: 1, corrected: 0, retained: 0 });
+  await expect(securityMarketData.write({ ...input, mode: "correct" })).rejects.toThrow(/provider|policy/i);
+  expect(await securityMarketData.latest(identity, "2026-01-02")).toMatchObject({ price: 10, source: "provider" });
+});

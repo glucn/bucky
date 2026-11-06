@@ -2,6 +2,28 @@ import { describe, expect, it, vi } from "vitest";
 import { createEnrichmentRuntimeService } from "./enrichmentRuntimeService";
 
 describe("enrichmentRuntimeService", () => {
+  it("refreshes both persisted markets for the same ticker with each account's quote currency", async () => {
+    const executePipeline = vi.fn().mockResolvedValue({ status: "completed", failedItems: [] });
+    const holdings = vi.fn().mockResolvedValue([
+      { tickerSymbol: "ABC", market: "NASDAQ", account: { currency: "USD" } },
+      { tickerSymbol: "ABC", market: "LSE", account: { currency: "GBP" } },
+    ]);
+    const runtime = createEnrichmentRuntimeService({ getBaseCurrency: async () => "USD", env: { ENRICHMENT_PROVIDER: "yahoo" },
+      prismaClient: { account: { findMany: vi.fn().mockResolvedValue([]) }, investmentProperties: { findMany: holdings },
+        securityMetadata: { findMany: vi.fn().mockResolvedValue([{ ticker: "ABC", market: "LSE", quoteCurrency: "GBP" }]) },
+        journalEntry: { aggregate: vi.fn().mockResolvedValue({ _min: { date: "2026-01-01" } }) } } as any,
+      repository: { getLatestSecurityPriceDate: vi.fn().mockResolvedValue(null), getLatestFxRateDate: vi.fn().mockResolvedValue(null) } as any,
+      executePipeline: executePipeline as any,
+      resolveProvider: () => ({ ok: true, provider: { id: "yahoo", searchSecuritiesByTicker: vi.fn() } as any }),
+    });
+    runtime.startRun({ securityMetadata: true, securityPrices: true, fxRates: false });
+    await vi.waitFor(() => expect(executePipeline).toHaveBeenCalledOnce());
+    expect(executePipeline.mock.calls[0][0].securities).toEqual([
+      expect.objectContaining({ ticker: "ABC", market: "NASDAQ", quoteCurrency: "USD" }),
+      expect.objectContaining({ ticker: "ABC", market: "LSE", quoteCurrency: "GBP" }),
+    ]);
+    expect(holdings).toHaveBeenCalledWith({ select: { tickerSymbol: true, market: true, account: { select: { currency: true } } } });
+  });
   it("starts pipeline and derives FX pairs from all account currencies", async () => {
     const executePipeline = vi.fn().mockResolvedValue({ status: "completed", failedItems: [] });
     const repository = {
@@ -27,8 +49,8 @@ describe("enrichmentRuntimeService", () => {
         },
         investmentProperties: {
           findMany: vi.fn().mockResolvedValue([
-            { tickerSymbol: "AAPL" },
-            { tickerSymbol: "7203" },
+            { tickerSymbol: "AAPL", market: "NASDAQ", account: { currency: "USD" } },
+            { tickerSymbol: "7203", market: "TSE", account: { currency: "JPY" } },
           ]),
         },
         securityMetadata: {
@@ -88,7 +110,7 @@ describe("enrichmentRuntimeService", () => {
           findMany: vi.fn().mockResolvedValue([{ currency: "USD" }]),
         },
         investmentProperties: {
-          findMany: vi.fn().mockResolvedValue([{ tickerSymbol: "AMZN" }]),
+          findMany: vi.fn().mockResolvedValue([{ tickerSymbol: "AMZN", market: null, account: { currency: "USD" } }]),
         },
         securityMetadata: {
           findMany: vi.fn().mockResolvedValue([]),

@@ -10,6 +10,16 @@ const asJsonResponse = (payload: unknown, ok = true): Response =>
   } as unknown as Response);
 
 describe("createTwelveDataEnrichmentProvider", () => {
+  it("qualifies security requests by exchange and rejects a response from another listing", async () => {
+    const fetch = vi.fn().mockResolvedValue(asJsonResponse({ meta: { symbol: "ABC", exchange: "LSE", currency: "GBP", interval: "1day" }, values: [{ datetime: "2024-01-02", close: "12" }] }));
+    vi.stubGlobal("fetch", fetch); const provider = createTwelveDataEnrichmentProvider("test-key");
+    await expect(provider.fetchSecurityDailyPrices({ symbol: "ABC", market: "NASDAQ", quoteCurrency: "USD", startDate: "2024-01-01", endDate: "2024-01-02" })).rejects.toThrow(/market|identity|currency/i);
+    expect(new URL(fetch.mock.calls[0][0]).searchParams.get("exchange")).toBe("NASDAQ");
+  });
+  it("rejects partially numeric prices rather than truncating provider strings", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(asJsonResponse({ meta: { symbol: "ABC", exchange: "NASDAQ", currency: "USD", interval: "1day" }, values: [{ datetime: "2024-01-02", close: "12garbage" }] })));
+    await expect(createTwelveDataEnrichmentProvider("test-key").fetchSecurityDailyPrices({ symbol: "ABC", market: "NASDAQ", quoteCurrency: "USD", startDate: "2024-01-01", endDate: "2024-01-02" })).rejects.toThrow(/price|number/i);
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -59,6 +69,7 @@ describe("createTwelveDataEnrichmentProvider", () => {
       vi.fn().mockResolvedValue(
         asJsonResponse({
           symbol: "AAPL",
+          exchange: "NASDAQ",
           name: "Apple Inc",
           type: "Common Stock",
           currency: "USD",
@@ -87,6 +98,7 @@ describe("createTwelveDataEnrichmentProvider", () => {
       "fetch",
       vi.fn().mockResolvedValue(
         asJsonResponse({
+          meta: { symbol: "AAPL", exchange: "NASDAQ", currency: "USD", interval: "1day" },
           values: [
             { datetime: "2024-01-02", close: "188.12" },
             { datetime: "2024-01-01", close: "187.43" },
@@ -98,6 +110,7 @@ describe("createTwelveDataEnrichmentProvider", () => {
     const result = await provider.fetchSecurityDailyPrices({
       symbol: "AAPL",
       market: "NASDAQ",
+      quoteCurrency: "USD",
       startDate: "2024-01-01",
       endDate: "2024-01-02",
     });

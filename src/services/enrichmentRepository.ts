@@ -1,5 +1,7 @@
 import { databaseService } from "./database";
 import { Prisma } from "@prisma/client";
+import { securityMarketData } from "./securityMarketData";
+import { parseSecurityIdentity } from "../shared/securityMarket";
 
 type SecurityKey = {
   ticker: string;
@@ -26,37 +28,19 @@ class EnrichmentRepository {
     assetType: string | null;
     quoteCurrency: string | null;
   }) {
-    const existing = await databaseService.prismaClient.securityMetadata.findUnique({
-      where: {
-        ticker_market: {
-          ticker: input.ticker,
-          market: input.market,
-        },
-      },
-    });
-
-    if (!existing) {
-      return databaseService.prismaClient.securityMetadata.create({
-        data: {
-          ...input,
-          lastFetchedAt: new Date(),
-        },
-      });
-    }
-
-    return databaseService.prismaClient.securityMetadata.update({
-      where: {
-        ticker_market: {
-          ticker: input.ticker,
-          market: input.market,
-        },
-      },
-      data: {
+    const key = parseSecurityIdentity({ ticker: input.ticker, market: input.market });
+    return databaseService.prismaClient.$transaction(async (tx) => {
+      const existing = await tx.securityMetadata.findUnique({ where: { ticker_market: key } });
+      if (!existing) return tx.securityMetadata.create({ data: { ...input, ...key, lastFetchedAt: new Date() } });
+      if (existing.quoteCurrency && input.quoteCurrency && existing.quoteCurrency !== input.quoteCurrency) {
+        throw new Error("Stored market quote currency conflicts with the provider");
+      }
+      return tx.securityMetadata.update({ where: { ticker_market: key }, data: {
         displayName: existing.displayName ?? input.displayName,
         assetType: existing.assetType ?? input.assetType,
         quoteCurrency: existing.quoteCurrency ?? input.quoteCurrency,
         lastFetchedAt: new Date(),
-      },
+      } });
     });
   }
 
@@ -68,23 +52,7 @@ class EnrichmentRepository {
       return;
     }
 
-    for (const point of points) {
-      try {
-        await databaseService.prismaClient.securityDailyPrice.create({
-          data: {
-            ticker: key.ticker,
-            market: key.market,
-            marketDate: point.marketDate,
-            close: point.close,
-            fetchedAt: new Date(),
-          },
-        });
-      } catch (error) {
-        if (!this.isUniqueViolation(error)) {
-          throw error;
-        }
-      }
-    }
+    await securityMarketData.write({ identity: key, points: points.map((point) => ({ date: point.marketDate, price: point.close })), mode: "fill", source: "provider" });
   }
 
   async insertMissingFxDailyRates(
@@ -119,6 +87,8 @@ class EnrichmentRepository {
       where: {
         ticker: key.ticker,
         market: key.market,
+        source: "provider",
+        marketDate: { lte: new Date().toISOString().slice(0, 10) },
       },
       orderBy: {
         marketDate: "desc",

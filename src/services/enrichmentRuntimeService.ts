@@ -1,3 +1,4 @@
+import { securityRefreshTargets, type RefreshHolding } from "./securityRefreshTargets";
 import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { executeEnrichmentPipeline } from "./enrichmentPipelineExecutor";
@@ -36,7 +37,7 @@ type RuntimeDependencies = {
       findMany: (args: unknown) => Promise<Array<{ currency: string }>>;
     };
     investmentProperties: {
-      findMany: (args: unknown) => Promise<Array<{ tickerSymbol: string }>>;
+      findMany: (args: unknown) => Promise<RefreshHolding[]>;
     };
     securityMetadata: {
       findMany: (args: unknown) => Promise<Array<{ ticker: string; market: string; quoteCurrency: string | null }>>;
@@ -122,7 +123,7 @@ export class EnrichmentRuntimeService {
     const [accounts, investmentProperties, securityMetadataRows, txBounds] = await Promise.all([
       this.deps.prismaClient.account.findMany({ select: { currency: true } }),
       this.deps.prismaClient.investmentProperties.findMany({
-        select: { tickerSymbol: true },
+        select: { tickerSymbol: true, market: true, account: { select: { currency: true } } },
       }),
       this.deps.prismaClient.securityMetadata.findMany({
         select: { ticker: true, market: true, quoteCurrency: true },
@@ -134,67 +135,17 @@ export class EnrichmentRuntimeService {
     const today = toIsoDate(new Date());
     const earliestRelevantTransactionDate = txBounds._min.date || today;
 
-    const metadataByTicker = new Map<string, { market: string; quoteCurrency: string | null }>();
-    for (const row of securityMetadataRows) {
-      if (!metadataByTicker.has(row.ticker)) {
-        metadataByTicker.set(row.ticker, {
-          market: row.market,
-          quoteCurrency: row.quoteCurrency,
-        });
-      }
-    }
-
-    const baseSecurities = Array.from(
-      new Set(
-        investmentProperties
-          .map((item) => item.tickerSymbol?.trim())
-          .filter((ticker): ticker is string => Boolean(ticker))
-      )
-    ).map((ticker) => {
-      const metadata = metadataByTicker.get(ticker);
-      return {
-        ticker,
-        market: metadata?.market || "UNKNOWN",
-        quoteCurrency: metadata?.quoteCurrency || null,
-      };
-    });
-
-    const securities = await Promise.all(
-      baseSecurities.map(async (security) => {
-        if (canceled()) return security;
-        if (security.market !== "UNKNOWN") {
-          return security;
-        }
-
-        try {
-          const candidates = await providerResolution.provider.searchSecuritiesByTicker(
-            security.ticker
-          );
-          const exactMatches = candidates.filter(
-            (candidate) => candidate.symbol.toUpperCase() === security.ticker.toUpperCase()
-          );
-          const resolved = exactMatches[0] || candidates[0];
-
-          if (!resolved) {
-            return security;
-          }
-
-          return {
-            ticker: security.ticker,
-            market: resolved.market || security.market,
-            quoteCurrency: security.quoteCurrency || resolved.quoteCurrency || null,
-          };
-        } catch {
-          return security;
-        }
-      })
-    );
+    const securities = await securityRefreshTargets(investmentProperties, securityMetadataRows,
+      (ticker) => scope.securityMetadata || scope.securityPrices
+        ? providerResolution.provider.searchSecuritiesByTicker(ticker) : Promise.resolve([]), canceled);
 
     if (canceled()) return;
     const securityRanges = await Promise.all(
       securities.map(async (security) => ({
         ticker: security.ticker,
         market: security.market,
+        quoteCurrency: security.quoteCurrency,
+        ...(security.validationError ? { validationError: security.validationError } : {}),
         startDate: deriveIncrementalStartDate({
           earliestRelevantTransactionDate,
           lastSuccessfulRefreshDate: await this.deps.repository.getLatestSecurityPriceDate({

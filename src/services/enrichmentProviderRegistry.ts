@@ -43,6 +43,7 @@ export interface EnrichmentProviderAdapter {
   fetchSecurityDailyPrices(input: {
     symbol: string;
     market: string;
+    quoteCurrency: string;
     startDate: string;
     endDate: string;
   }): Promise<SecurityDailyPricePoint[]>;

@@ -3,12 +3,14 @@ import type {
   FxDailyRatePoint,
   SecurityDailyPricePoint,
 } from "../enrichmentProviderRegistry";
+import { parseSecurityIdentity } from "../../shared/securityMarket";
 
 const formatUnixDate = (timestamp: number): string =>
   new Date(timestamp * 1000).toISOString().slice(0, 10);
 
-const parseDateToUnix = (date: string): string => {
-  const unixSeconds = Math.floor(new Date(`${date}T00:00:00Z`).getTime() / 1000);
+const parseDateToUnix = (date: string, offsetDays = 0): string => {
+  const value = new Date(`${date}T00:00:00Z`); value.setUTCDate(value.getUTCDate() + offsetDays);
+  const unixSeconds = Math.floor(value.getTime() / 1000);
   return String(unixSeconds);
 };
 
@@ -25,7 +27,7 @@ const requestJson = async (url: string): Promise<any> => {
   const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
   const payload = await response.json().catch(async () => ({ raw: await response.text() }));
 
-  if (!response.ok) {
+  if (!response.ok || payload?.chart?.error) {
     const providerMessage =
       payload?.message ||
       payload?.chart?.error?.description ||
@@ -36,7 +38,7 @@ const requestJson = async (url: string): Promise<any> => {
   return payload;
 };
 
-const mapChartSeries = (payload: any): SecurityDailyPricePoint[] => {
+const mapChartSeries = (payload: any, dateForTimestamp = formatUnixDate): SecurityDailyPricePoint[] => {
   const result = payload?.chart?.result?.[0];
   const timestamps: number[] = result?.timestamp || [];
   const closes: Array<number | null> = result?.indicators?.quote?.[0]?.close || [];
@@ -44,12 +46,11 @@ const mapChartSeries = (payload: any): SecurityDailyPricePoint[] => {
   const points: SecurityDailyPricePoint[] = [];
   for (let index = 0; index < timestamps.length; index += 1) {
     const close = closes[index];
-    if (typeof close !== "number") {
-      continue;
-    }
+    if (close === null || close === undefined) continue;
+    if (typeof close !== "number" || !Number.isFinite(close) || close < 0 || !Number.isFinite(timestamps[index])) throw new Error("Invalid provider price or timestamp");
 
     points.push({
-      marketDate: formatUnixDate(timestamps[index]),
+      marketDate: dateForTimestamp(timestamps[index]),
       close,
     });
   }
@@ -79,37 +80,43 @@ export const yahooEnrichmentProvider: EnrichmentProviderAdapter = {
   },
 
   async fetchSecurityMetadata({ symbol, market }) {
+    const key = parseSecurityIdentity({ ticker: symbol, market });
     const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}`;
     const payload = await requestJson(url);
     const quotes = payload?.quotes || [];
-    const exactSymbolMatches = quotes.filter(
-      (quote: any) => String(quote?.symbol || "").toUpperCase() === symbol.toUpperCase()
-    );
-    const marketMatch = exactSymbolMatches.find(
-      (quote: any) =>
-        String(quote?.exchDisp || quote?.exchange || "").toUpperCase() === market.toUpperCase()
-    );
-    const bestMatch = marketMatch || exactSymbolMatches[0] || quotes[0];
+    const matches = quotes.filter((quote: any) => String(quote?.symbol || "").trim() === key.ticker &&
+      String(quote?.exchDisp || quote?.exchange || "").trim() === key.market);
+    if (new Set(matches.map((quote: any) => quote.currency ?? null)).size > 1) throw new Error("Conflicting provider quote currencies for this market");
+    const bestMatch = matches[0];
 
     if (!bestMatch) {
       return null;
     }
 
     return {
-      symbol,
-      market: bestMatch?.exchDisp || bestMatch?.exchange || market,
+      symbol: key.ticker,
+      market: key.market,
       displayName: bestMatch?.shortname || bestMatch?.longname || null,
       assetType: bestMatch?.quoteType || null,
       quoteCurrency: bestMatch?.currency || null,
     };
   },
 
-  async fetchSecurityDailyPrices({ symbol, startDate, endDate }) {
+  async fetchSecurityDailyPrices({ symbol, market, quoteCurrency, startDate, endDate }) {
+    const key = parseSecurityIdentity({ ticker: symbol, market });
     const url =
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
-      `?interval=1d&period1=${parseDateToUnix(startDate)}&period2=${parseDateToUnix(endDate)}`;
+      `?interval=1d&period1=${parseDateToUnix(startDate, -1)}&period2=${parseDateToUnix(endDate, 2)}`;
     const payload = await requestJson(url);
-    return mapChartSeries(payload);
+    const meta = payload?.chart?.result?.[0]?.meta;
+    if (!meta || meta.symbol !== key.ticker || ![meta.fullExchangeName, meta.exchangeName].includes(key.market) ||
+      !/^[A-Z]{3}$/.test(quoteCurrency) || meta.currency !== quoteCurrency || meta.dataGranularity !== "1d" ||
+      typeof meta.exchangeTimezoneName !== "string") throw new Error("Provider chart identity, market, currency or daily interval could not be verified");
+    const formatter = new Intl.DateTimeFormat("en", { timeZone: meta.exchangeTimezoneName, year: "numeric", month: "2-digit", day: "2-digit" });
+    return mapChartSeries(payload, (timestamp) => {
+      const parts = new Map(formatter.formatToParts(new Date(timestamp * 1000)).map((part) => [part.type, part.value]));
+      return `${parts.get("year")}-${parts.get("month")}-${parts.get("day")}`;
+    }).filter((point) => point.marketDate >= startDate && point.marketDate <= endDate).sort((a, b) => a.marketDate.localeCompare(b.marketDate));
   },
 
   async fetchFxDailyRates({ sourceCurrency, targetCurrency, startDate, endDate }) {

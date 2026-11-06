@@ -9,6 +9,29 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 25 — Preserve market identity through provider refresh (2026-11-05)
+
+- Refresh targets now retain each holding's persisted market and account quote currency rather
+  than selecting the first ticker metadata/search result. Ambiguous discovery is reported, never
+  saved as a binding. Same-ticker holdings on different exchanges refresh independently.
+- Yahoo and Twelve Data adapters validate requested listing/currency and daily interval; Twelve
+  Data requests specify the exchange. Yahoo dates use the exchange time zone and inclusive
+  calendar bounds. Provider error payloads and malformed numeric values are refused.
+- Pipeline validation rejects wrong metadata and invalid/out-of-range price batches before any
+  write. Canonical provider ingestion is atomic and fill-only, retaining manual corrections;
+  manual/import/future points do not advance provider backfill coverage. Conflicting quote
+  metadata is refused transactionally. Regressions include a real two-market runtime/database
+  refresh and a simulated second-write SQLite failure.
+- **876 tests across 110 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging. All six affected development Electron
+  refresh/reconciliation cases passed three repetitions (**18 checks**), and all **nine packaged
+  acceptance cases passed**.
+- Adjustment basis and completed-bar handling remain necessary before valuation cutover: old
+  canonical rows do not establish either, and an unfinished daily bar must not become an immutable
+  close. See the [canonical price contract](BL-021-canonical-security-prices.md). Application
+  valuation/manual-price controls and historical quantity activity still need integration;
+  BL-021 remains open.
+
 ### Batch 24 — Persist market identity and define canonical price operations (2026-11-05)
 
 - Added nullable holding market identity and canonical price provenance through an additive

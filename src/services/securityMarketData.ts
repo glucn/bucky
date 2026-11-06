@@ -3,7 +3,7 @@ import { parseToStandardDate } from "../shared/dateUtils";
 import { databaseService } from "./database";
 
 export type CanonicalSecurityPrice = { date: string; price: number; source: string };
-type Write = { identity: SecurityIdentity; points: Array<{ date: string; price: number }>; mode: "fill" | "correct"; source: "manual" | "import" };
+type Write = { identity: SecurityIdentity; points: Array<{ date: string; price: number }>; mode: "fill" | "correct"; source: "manual" | "import" | "provider" };
 function date(value: unknown): string {
   const normalized = typeof value === "string" && value.length <= 64 ? parseToStandardDate(value) : null;
   if (!normalized) throw new Error("Invalid security price date");
@@ -31,7 +31,8 @@ export const securityMarketData = {
     })).map(point);
   },
   async write(input: Write): Promise<{ inserted: number; corrected: number; retained: number }> {
-    if (!input || !["fill", "correct"].includes(input.mode) || !["manual", "import"].includes(input.source)) throw new Error("An explicit price mode and source policy are required");
+    if (!input || !["fill", "correct"].includes(input.mode) || !["manual", "import", "provider"].includes(input.source)) throw new Error("An explicit price mode and source policy are required");
+    if (input.source === "provider" && input.mode !== "fill") throw new Error("Provider policy permits fill only; correction must be explicit manual or import work");
     const key = parseSecurityIdentity(input.identity);
     if (!Array.isArray(input.points) || !input.points.length || input.points.length > 10000) throw new Error("Supply between 1 and 10000 security price points");
     const points = input.points.map((row) => {
@@ -52,6 +53,6 @@ export const securityMarketData = {
         }
       }
       return result;
-    });
+    }, { timeout: 30000 });
   },
 };

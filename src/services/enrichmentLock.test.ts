@@ -15,7 +15,7 @@ it("quiesces a late provider response without writing or retaining financial sta
     getBaseCurrencyReconciliationState: async () => null,
     prismaClient: {
       account: { findMany: async () => [] },
-      investmentProperties: { findMany: async () => [{ tickerSymbol: "PRIVATE" }] },
+      investmentProperties: { findMany: async () => [{ tickerSymbol: "PRIVATE", market: "TSX", account: { currency: "CAD" } }] },
       securityMetadata: { findMany: async () => [{ ticker: "PRIVATE", market: "TSX", quoteCurrency: "CAD" }] },
       journalEntry: { aggregate: async () => ({ _min: { date: "2026-01-01" } }) },
     },
