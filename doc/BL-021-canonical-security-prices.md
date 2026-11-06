@@ -60,7 +60,10 @@ Remaining required integration:
 - Historical quantities/basis must reflect the requested date, including purchases, sales,
   reinvestment and splits. Existing current quantities/lots are insufficient after sales;
   user-editable descriptions are not an authoritative quantity ledger. Add structured dated
-  investment activity and atomic posting/holding updates. Missing legacy history must be
+  investment activity. Buy/sell posting and holding updates are now atomic with corrected fee
+  accounting; reinvestment, splits and return of capital still need equivalent integration.
+  See the [trade policy](F-007-investment-account-management/trade-posting-policy.md).
+  Missing legacy history must be
   explained, not reconstructed from current quantities or guessed descriptions.
 - Verify upgrade/recovery of old books, current and historical valuation, same-ticker market
   isolation, manual correction/refresh behavior and packaged controls before closing BL-021.

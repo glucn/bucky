@@ -387,8 +387,8 @@ describe("InvestmentService - Buy Transactions", () => {
         fee: 9.99,
       });
 
-      // Verify journal entry has 4 lines (security debit, cash credit for purchase, cash credit for fee, expense debit)
-      expect(journalEntry.lines).toHaveLength(4);
+      // Acquisition fees belong in cost basis and cash once, without a second expense.
+      expect(journalEntry.lines).toHaveLength(2);
 
       // Find the security account line
       const securityAccount = await investmentService.getSecurityAccount(group.id, "MSFT");
@@ -514,20 +514,18 @@ describe("InvestmentService - Buy Transactions", () => {
         fee: 10,
       });
 
-      // Verify 4 lines: security debit, cash credit (purchase), cash credit (fee), expense debit
-      expect(journalEntry.lines).toHaveLength(4);
+      expect(journalEntry.lines).toHaveLength(2);
 
       // Find the investment expense line
       const expenseAccount = await databaseService.prismaClient.account.findFirst({
         where: { name: "Investment Expenses" },
       });
       const expenseLine = journalEntry.lines.find((l: any) => l.accountId === expenseAccount!.id);
-      expect(expenseLine).toBeDefined();
-      expect(expenseLine.amount).toBe(10); // Fee amount
+      expect(expenseLine).toBeUndefined(); // Already capitalized in security cost basis.
 
       // Verify trade cash was debited for both purchase and fee
       const cashLines = journalEntry.lines.filter((l: any) => l.accountId === tradeCashAccount.id);
-      expect(cashLines).toHaveLength(2);
+      expect(cashLines).toHaveLength(1);
       const totalCashDebit = cashLines.reduce((sum: number, line: any) => sum + line.amount, 0);
       expect(totalCashDebit).toBe(-1010); // -(1000 + 10)
     });
@@ -1064,8 +1062,7 @@ describe("InvestmentService - Sell Transactions", () => {
         where: { name: "Investment Expenses" },
       });
       const expenseLine = journalEntry.lines.find((l: any) => l.accountId === expenseAccount!.id);
-      expect(expenseLine).toBeDefined();
-      expect(expenseLine.amount).toBe(10); // Fee amount
+      expect(expenseLine).toBeUndefined(); // Disposal fees already reduce net proceeds/gain.
 
       // Verify trade cash received proceeds minus fee
       const cashLines = journalEntry.lines.filter((l: any) => l.accountId === tradeCashAccount.id);

@@ -9,6 +9,30 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 26 — Atomic, balanced investment buys and sells (2026-11-05)
+
+- Review found buys posting capitalized fees a second time as expense (unbalanced journals),
+  sales deducting fees twice from cash, and one-cent gains being omitted. New trade posting
+  capitalizes acquisition fees once and nets disposal fees once. Partial FIFO disposals conserve
+  rounded lot cost; full disposal releases its residual, including zero-basis positions.
+- Extracted buy/sell posting from the large investment service. Journal, quantity/lots and
+  implicit security creation commit or roll back together. Reads happen inside the transaction;
+  concurrent-save coverage verifies every acknowledged purchase is reflected in quantities.
+- Trades retain account currency, choose matching cash, and refuse ambiguous ticker/cash
+  selection. Explicit account IDs permit unambiguous service/IPC calls. New holdings inherit
+  selected cash currency; invalid dates/non-finite or unrepresentable amounts fail before writes.
+- All initial **17 accounting/rollback/input regressions failed against the previous code**;
+  the corrected implementation passes those and six further identity/currency/concurrency checks.
+  Existing fee tests had asserted the erroneous extra expense and were updated to the explicit
+  [trade posting policy](F-007-investment-account-management/trade-posting-policy.md).
+- **899 tests across 111 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging. The new actual packaged CAD buy/sell,
+  oversell rejection and restart case passed three repetitions; all **ten packaged acceptance
+  cases passed** together.
+- Older flawed postings remain preserved for read-only verification and reviewed correction.
+  Reinvestment/split/return-of-capital atomicity, structured dated quantity history, coordinated
+  journal editing, exact decimals and canonical valuation remain open.
+
 ### Batch 25 — Preserve market identity through provider refresh (2026-11-05)
 
 - Refresh targets now retain each holding's persisted market and account quote currency rather
