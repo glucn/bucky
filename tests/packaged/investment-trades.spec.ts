@@ -42,3 +42,50 @@ test("packaged CAD trades balance fees, reject overselling, and preserve cash an
     await test.info().attach("packaged-investment-trades.log", { body: app.output(), contentType: "text/plain" }); throw error;
   } finally { await app.dispose(); }
 });
+
+test("packaged distributions and split preserve CAD cash, lot basis and disposal after restart", async () => {
+  const app = await personalAppHarness(), passphrase = "Synthetic corporate action acceptance passphrase";
+  try {
+    const setup = new ProtectedProfileSetup(app.directory, path.resolve("prisma/migrations"));
+    const pending = await setup.begin({ baseCurrency: "CAD", passphrase });
+    await setup.confirm(pending.setupId, pending.recoverySecret);
+    let page = await app.launch();
+    const unlock = async () => {
+      await page.getByLabel("Passphrase", { exact: true }).fill(passphrase);
+      await page.getByRole("button", { name: "Unlock", exact: true }).click();
+      await expect(page.getByRole("link", { name: "Accounts", exact: true }).first()).toBeVisible();
+    };
+    const invoke = (channel: string, params: unknown) => page.evaluate(({ channel, params }) => (window as any).electron.ipcRenderer.invoke(channel, params), { channel, params });
+    await unlock();
+    const portfolio = await invoke("create-investment-portfolio", { name: "Synthetic corporate actions", currency: "CAD" });
+    expect(portfolio.success).toBe(true);
+    const portfolioId = portfolio.group.id, cashId = portfolio.tradeCashAccount.id;
+    await page.evaluate((id) => (window as any).electron.setOpeningBalance({ accountId: id, displayAmount: 10000, asOfDate: "2026-01-01" }), cashId);
+    const common = { portfolioId, tickerSymbol: "ABC.TO", date: "2026-01-02" };
+    expect((await invoke("record-buy", { ...common, quantity: 10, pricePerShare: 100 })).success).toBe(true);
+    const actions = [
+      ["record-reinvested-dividend", { ...common, dividendAmount: 100, reinvestmentPrice: 50, recordAsIncome: true, date: "2026-01-03" }],
+      ["record-dividend", { ...common, amount: 12, isReturnOfCapital: true, date: "2026-01-04" }],
+      ["record-reinvested-dividend", { ...common, dividendAmount: 12, reinvestmentPrice: 50, recordAsIncome: false, date: "2026-01-05" }],
+    ] as const;
+    for (const [channel, params] of actions) {
+      const result = await invoke(channel, params);
+      expect(result.success, `${channel}: ${result.error || ""}`).toBe(true);
+      expect(result.entry.lines.every((line: any) => line.currency === "CAD")).toBe(true);
+      expect(result.entry.lines.reduce((sum: number, line: any) => sum + line.amount, 0)).toBeCloseTo(0, 10);
+    }
+    const accounts = await invoke("get-portfolio-accounts", portfolioId), securityId = accounts.accounts.securities[0].id;
+    expect((await invoke("record-stock-split", { accountId: securityId, splitRatio: 2, date: "2026-01-06" })).success).toBe(true);
+    await app.stop(); page = await app.launch(); await unlock();
+    const reopened = await invoke("get-portfolio-accounts", portfolioId), security = reopened.accounts.securities[0];
+    expect(security.investmentProperties.quantity).toBeCloseTo(24.48, 10);
+    expect(JSON.parse(security.investmentProperties.lots).map((lot: any) => lot.amount)).toEqual([980, 96, 12]);
+    expect(await invoke("get-account-balance", securityId)).toEqual({ success: true, balance: 1088 });
+    expect(await invoke("get-account-balance", cashId)).toEqual({ success: true, balance: 9012 });
+    expect((await invoke("record-sell", { ...common, quantity: security.investmentProperties.quantity, pricePerShare: 100, date: "2026-01-07" })).success).toBe(true);
+    expect(await invoke("get-account-balance", securityId)).toEqual({ success: true, balance: 0 });
+    expect(await invoke("get-account-balance", cashId)).toEqual({ success: true, balance: 11460 });
+  } catch (error) {
+    await test.info().attach("packaged-distributions.log", { body: app.output(), contentType: "text/plain" }); throw error;
+  } finally { await app.dispose(); }
+});

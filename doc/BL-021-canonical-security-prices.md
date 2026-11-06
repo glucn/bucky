@@ -1,6 +1,6 @@
 # Canonical investment prices and market identity
 
-Updated 2026-11-05. BL-021 remains in progress. The persisted identity and canonical price
+Updated 2026-11-06. BL-021 remains in progress. The persisted identity and canonical price
 services and market-aware refresh targeting are implemented; existing application valuation and
 price controls still need cutover. This foundation does not establish investment readiness.
 
@@ -47,6 +47,10 @@ Remaining required integration:
 - Make position, portfolio, overview and report valuation read the canonical service. Preserve
   currency context, use `FxDailyRate` for FX, and expose missing quotes as unavailable rather
   than silently presenting cost basis as market value.
+- Income/gain reports must include every trade cash currency and retain structured identity.
+  Current income helpers filter by the first cash account, sum nominal amounts across currencies
+  and extract ticker labels from editable descriptions. Current-position posting fixes do not
+  establish correctness of those reports.
 - Migrate manual price and CSV controls to the canonical service with visible fill/correction
   choice. Offer explicit reviewed promotion of retained legacy prices to a selected market;
   never infer an exchange during schema migration.
@@ -61,7 +65,8 @@ Remaining required integration:
   reinvestment and splits. Existing current quantities/lots are insufficient after sales;
   user-editable descriptions are not an authoritative quantity ledger. Add structured dated
   investment activity. Buy/sell posting and holding updates are now atomic with corrected fee
-  accounting; reinvestment, splits and return of capital still need equivalent integration.
+  accounting; reinvestment, splits and return of capital now have atomic current-position
+  posting too. Structured historical integration remains required.
   See the [trade policy](F-007-investment-account-management/trade-posting-policy.md).
   Missing legacy history must be
   explained, not reconstructed from current quantities or guessed descriptions.

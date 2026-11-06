@@ -9,6 +9,33 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 27 — Atomic distributions, return-of-capital basis and splits (2026-11-06)
+
+- Reinvestment receipt/purchase journals, quantities/lots and implicit holdings now commit
+  together. Splits also roll back quantity/lot changes if their journal record fails. Shared
+  transaction-scoped selection preserves security currency and rejects ambiguous identities.
+- Cash return of capital now reduces FIFO lot basis with journal basis. Whole-position per-share
+  allocation conserves cents, handles fractional lots and refuses any lot requiring excess
+  classification. Reinvested returns reduce old basis then purchase new units without inventing
+  income or opening equity, retaining total basis/cash. Average-cost disposal remains consistent.
+- Initial regressions produced **17 failures against the old code**. Two further allocation
+  regressions failed against an initial cost-weighted approach, driving per-share allocation.
+  The suite also covers failed second journals/position updates, implicit account rollback,
+  invalid inputs, differently priced/fractional lots, average cost and reverse splits.
+- An existing test that expected invented additional basis for reinvested returns was corrected
+  to the [distribution posting policy](F-007-investment-account-management/distribution-posting-policy.md).
+- Packaged distribution acceptance exposed Babel rewriting BigInt exponentiation to
+  `Math.pow`, which cannot accept BigInts. A regression using the actual Babel rule reproduced
+  that failure; the rule now targets the installed Electron version for both application bundles.
+- **929 tests across 113 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging with the corrected target.
+  Both packaged investment cases passed three repetitions (**six checks**), and all **11 packaged
+  acceptance cases passed** together. All 25 development/browser E2E cases passed three
+  repetitions (**75 checks**) with the updated main/renderer bundles.
+- Legacy records remain preserved for read-only verification and reviewed correction. Historical
+  quantity/entitlement replay, coordinated edits, exact decimals, canonical valuation and the
+  representative personal pilot remain open.
+
 ### Batch 26 — Atomic, balanced investment buys and sells (2026-11-05)
 
 - Review found buys posting capitalized fees a second time as expense (unbalanced journals),

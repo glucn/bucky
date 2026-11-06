@@ -1326,9 +1326,9 @@ describe("InvestmentService - Dividend Transactions", () => {
       const updatedAccount = await investmentService.getSecurityAccount(group.id, "AAPL");
       expect(updatedAccount.investmentProperties.quantity).toBeCloseTo(10.666667, 5);
 
-      // Verify cost basis increased
+      // Returned capital reduces old basis; reinvesting adds it back without new equity.
       const newBalance = await databaseService.getAccountBalance(securityAccount.id);
-      expect(newBalance).toBe(initialBalance + 100);
+      expect(newBalance).toBe(initialBalance);
     });
 
     it("should calculate shares purchased correctly", async () => {

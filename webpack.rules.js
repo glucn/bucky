@@ -23,7 +23,7 @@ module.exports = [
       loader: "babel-loader",
       options: {
         presets: [
-          "@babel/preset-env",
+          ["@babel/preset-env", { targets: { electron: require("electron/package.json").version } }],
           "@babel/preset-react",
           "@babel/preset-typescript",
         ],

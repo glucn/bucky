@@ -1,6 +1,6 @@
 # Investment trade posting policy
 
-Updated 2026-11-05. Buy/sell posting is implemented in `investmentTrades.ts`; this does not
+Updated 2026-11-06. Buy/sell posting is implemented in `investmentTrades.ts`; this does not
 establish historical investment readiness or exact-decimal precision.
 
 A buy capitalizes the rounded purchase consideration plus rounded acquisition fee in both
@@ -32,8 +32,9 @@ inside the same transaction and supports a zero-basis position.
 The current storage still uses binary Float, cent-rounded consideration and floating-point
 quantities. BL-031 must replace this with a defined exact-decimal policy. Dated structured
 investment activity, historical replay/backdated corrections, generic journal edit/delete
-coordination, reinvestment/split/return-of-capital atomicity, and canonical market valuation
-remain required. Current lots and descriptions must not be treated as a historical activity
+coordination and canonical market valuation remain required. Reinvestment/split/return-of-capital
+posting is now atomic; see the [distribution policy](distribution-posting-policy.md).
+Current lots and descriptions must not be treated as a historical activity
 ledger. Older fee postings are retained unchanged: buy entries can be unbalanced, and sale
 cash can include a duplicate fee. The read-only whole-book verifier and reviewed corrections
 must identify these rather than silently rewrite a user's financial history.
