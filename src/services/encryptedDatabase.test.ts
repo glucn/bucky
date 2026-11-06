@@ -74,6 +74,7 @@ describe("encrypted personal database lifecycle", () => {
     expect((await query("SELECT quantity FROM InvestmentProperties WHERE id='legacy-holding'", result.backupPath!))[0].quantity).toBe(3);
     expect((await query("SELECT hasCompleteActivityHistory FROM InvestmentProperties WHERE id='legacy-holding'"))[0].hasCompleteActivityHistory).toBe(0);
     expect((await query("SELECT count(*) AS count FROM InvestmentActivity"))[0].count).toBe(0);
+    expect((await query("SELECT count(*) AS count FROM InvestmentImportOrigin"))[0].count).toBe(0);
     expect((await fs.readFile(result.backupPath!)).includes(Buffer.from(sentinel))).toBe(false);
     await expect(query("SELECT name FROM Account", result.backupPath!, randomBytes(32))).rejects.toThrow();
   });

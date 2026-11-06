@@ -81,6 +81,7 @@ describe("Personal database lifecycle", () => {
     expect(await sql("SELECT hasCompleteActivityHistory FROM InvestmentProperties WHERE id='legacy-holding'"))
       .toEqual([{ hasCompleteActivityHistory: 0 }]);
     expect(await sql("SELECT count(*) AS count FROM InvestmentActivity")).toEqual([{ count: 0 }]);
+    expect(await sql("SELECT count(*) AS count FROM InvestmentImportOrigin")).toEqual([{ count: 0 }]);
   });
 
   it("rolls back an unsuccessful migration and leaves a recoverable pre-upgrade snapshot", async () => {

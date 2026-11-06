@@ -1,6 +1,11 @@
 import type { Prisma } from "@prisma/client";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
+import { databaseService } from "./database";
+
+export function investmentTransaction<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>, tx?: Prisma.TransactionClient): Promise<T> {
+  return tx ? operation(tx) : databaseService.prismaClient.$transaction(operation, { timeout: 30000 });
+}
 
 export type InvestmentSelection = { portfolioId: string; tickerSymbol: string; securityAccountId?: string; tradeCashAccountId?: string };
 

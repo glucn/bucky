@@ -67,6 +67,7 @@ model AccountGroup {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   accounts     Account[]
+  investmentImportOrigins InvestmentImportOrigin[]
   
   @@unique([name, accountType])
   @@index([accountType, displayOrder])
@@ -122,6 +123,7 @@ model JournalEntry {
   updatedAt    DateTime      @updatedAt
   lines        JournalLine[]
   investmentActivityLink InvestmentActivityJournal?
+  investmentImportOrigin InvestmentImportOrigin?
   
   @@index([displayOrder])
   @@index([entryType])
@@ -303,6 +305,28 @@ model InvestmentActivityJournal {
   entry      JournalEntry @relation(fields: [entryId], references: [id], onDelete: Restrict)
 
   @@index([activityId])
+}
+
+model InvestmentImportOrigin {
+  id              String @id @default(uuid())
+  portfolioId     String
+  sourceNamespace String @default("")
+  sourceKey       String
+  sourceId        String?
+  fingerprint     String
+  currency        String
+  date            String
+  type            String
+  ticker          String
+  payload         String
+  entryId         String? @unique
+  createdAt       DateTime @default(now())
+  portfolio       AccountGroup @relation(fields: [portfolioId], references: [id], onDelete: Restrict)
+  entry           JournalEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+
+  @@unique([portfolioId, sourceNamespace, sourceKey])
+  @@index([portfolioId, sourceNamespace, fingerprint])
+  @@index([portfolioId, sourceNamespace, date, type, ticker])
 }
 
 model SecurityPriceHistory {

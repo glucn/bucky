@@ -1,7 +1,7 @@
-import { databaseService } from "./database";
+import type { Prisma } from "@prisma/client";
 import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
-import { cents, readLots, resolveInvestmentAccounts } from "./investmentPosting";
+import { cents, readLots, resolveInvestmentAccounts, investmentTransaction } from "./investmentPosting";
 import { parseToStandardDate } from "../shared/dateUtils";
 
 export type InvestmentTrade = {
@@ -19,7 +19,7 @@ export type InvestmentTrade = {
  * Acquisition fees are capitalized; disposal fees reduce proceeds and realized gains.
  * Neither is posted a second time as a separate expense.
  */
-export async function recordInvestmentTrade(kind: "buy" | "sell", input: InvestmentTrade) {
+export async function recordInvestmentTrade(kind: "buy" | "sell", input: InvestmentTrade, transaction?: Prisma.TransactionClient) {
   if (!input.portfolioId) throw new Error("Portfolio ID is required");
   if (typeof input.tickerSymbol !== "string" || !input.tickerSymbol.trim()) throw new Error("Ticker symbol is required");
   if (!Number.isFinite(input.quantity) || input.quantity <= 0) throw new Error("Quantity must be a positive number");
@@ -32,7 +32,7 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
   const consideration = kind === "buy" ? gross + fee : gross - fee;
   if (!Number.isSafeInteger(consideration)) throw new Error("Trade amount exceeds supported precision");
 
-  return databaseService.prismaClient.$transaction(async (tx) => {
+  return investmentTransaction(async (tx) => {
     const { security, cash } = await resolveInvestmentAccounts(tx, input, { createSecurity: kind === "buy", requireSecurity: true });
     if (!security) throw new Error("Security account not found");
     const history = await beginInvestmentActivity(tx, security.id, date);
@@ -81,5 +81,5 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
     await tx.investmentProperties.update({ where: { id: props.id }, data: { quantity: newQuantity, lots: lots ? JSON.stringify(lots) : null } });
     await finishInvestmentActivity(tx, history, { kind, units: input.quantity, price: input.pricePerShare, fee: fee / 100, cashAmount: (kind === "buy" ? -consideration : consideration) / 100 }, [entry.id]);
     return entry;
-  }, { timeout: 30000 });
+  }, transaction);
 }

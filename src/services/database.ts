@@ -92,6 +92,7 @@ class DatabaseService {
         }
       }
 
+      await tx.investmentImportOrigin.deleteMany({});
       await tx.investmentActivityJournal.deleteMany({});
       await tx.investmentActivity.deleteMany({});
       // Delete all journal lines

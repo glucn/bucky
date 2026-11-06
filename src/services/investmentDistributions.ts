@@ -1,9 +1,8 @@
 import type { Prisma } from "@prisma/client";
-import { databaseService } from "./database";
 import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
-import { cents, readLots, resolveInvestmentAccounts, type InvestmentSelection, type Lot } from "./investmentPosting";
+import { cents, readLots, resolveInvestmentAccounts, investmentTransaction, type InvestmentSelection, type Lot } from "./investmentPosting";
 
 export type DividendInput = InvestmentSelection & { amount: number; date: string; isReturnOfCapital?: boolean; description?: string };
 export type ReinvestmentInput = InvestmentSelection & { dividendAmount: number; reinvestmentPrice: number; date: string; recordAsIncome: boolean; description?: string };
@@ -70,10 +69,10 @@ async function incomeAccount(tx: Prisma.TransactionClient) {
   return account;
 }
 
-export async function recordCashDividend(input: DividendInput) {
+export async function recordCashDividend(input: DividendInput, transaction?: Prisma.TransactionClient) {
   const date = normalizedDate(input.date), amount = distributionAmount(input.amount);
   if (input.isReturnOfCapital !== undefined && typeof input.isReturnOfCapital !== "boolean") throw new Error("Select dividend classification explicitly");
-  return databaseService.prismaClient.$transaction(async (tx) => {
+  return investmentTransaction(async (tx) => {
     const { security, cash } = await resolveInvestmentAccounts(tx, input, { createSecurity: false, requireSecurity: Boolean(input.isReturnOfCapital) });
     const history = security ? await beginInvestmentActivity(tx, security.id, date) : null;
     const description = input.description || `Dividend from ${input.tickerSymbol.trim()}${input.isReturnOfCapital ? " (Return of Capital)" : ""}`;
@@ -86,16 +85,16 @@ export async function recordCashDividend(input: DividendInput) {
     const entry = await journal(tx, date, description, "dividend_cash", cash.currency, [{ accountId: cash.id, cents: amount }, { accountId: creditAccountId, cents: -amount }]);
     if (history) await finishInvestmentActivity(tx, history, { kind: input.isReturnOfCapital ? "return_of_capital" : "dividend", cashAmount: amount / 100 }, [entry.id]);
     return entry;
-  }, { timeout: 30000 });
+  }, transaction);
 }
 
-export async function recordReinvestment(input: ReinvestmentInput) {
+export async function recordReinvestment(input: ReinvestmentInput, transaction?: Prisma.TransactionClient) {
   const date = normalizedDate(input.date), amount = distributionAmount(input.dividendAmount);
   if (!Number.isFinite(input.reinvestmentPrice) || input.reinvestmentPrice <= 0) throw new Error("Reinvestment price must be a positive number");
   if (typeof input.recordAsIncome !== "boolean") throw new Error("Select reinvestment classification explicitly");
   const quantity = Math.round((amount / 100 / input.reinvestmentPrice) * 1e6) / 1e6;
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("Reinvestment quantity exceeds supported precision");
-  return databaseService.prismaClient.$transaction(async (tx) => {
+  return investmentTransaction(async (tx) => {
     const { security, cash } = await resolveInvestmentAccounts(tx, input, { createSecurity: input.recordAsIncome, requireSecurity: true });
     const history = await beginInvestmentActivity(tx, security!.id, date);
     const props = security!.investmentProperties!;
@@ -114,14 +113,14 @@ export async function recordReinvestment(input: ReinvestmentInput) {
     await tx.investmentProperties.update({ where: { id: props.id }, data: { quantity: newQuantity, lots: lots ? JSON.stringify(lots) : null } });
     await finishInvestmentActivity(tx, history, { kind: input.recordAsIncome ? "income_reinvestment" : "capital_reinvestment", units: quantity, price: input.reinvestmentPrice, cashAmount: 0 }, [receipt.id, entry.id]);
     return entry;
-  }, { timeout: 30000 });
+  }, transaction);
 }
 
-export async function recordSplit(accountId: string, splitRatio: number, inputDate: string, description?: string) {
+export async function recordSplit(accountId: string, splitRatio: number, inputDate: string, description?: string, transaction?: Prisma.TransactionClient) {
   if (typeof accountId !== "string" || !accountId.trim()) throw new Error("Account ID is required");
   if (!Number.isFinite(splitRatio) || splitRatio <= 0) throw new Error("Split ratio must be a positive number");
   const date = normalizedDate(inputDate);
-  return databaseService.prismaClient.$transaction(async (tx) => {
+  return investmentTransaction(async (tx) => {
     const account = await tx.account.findUnique({ where: { id: accountId }, include: { investmentProperties: true } });
     if (!account?.investmentProperties || account.isArchived) throw new Error("Security account not found or archived");
     const history = await beginInvestmentActivity(tx, accountId, date);
@@ -135,5 +134,5 @@ export async function recordSplit(accountId: string, splitRatio: number, inputDa
     const entry = await tx.journalEntry.create({ data: { date, description: description || `Stock split ${splitRatio}:1 for ${props.tickerSymbol}`, type: "stock_split", displayOrder: Date.now() }, include: { lines: true } });
     await finishInvestmentActivity(tx, history, { kind: "split", splitRatio, cashAmount: 0 }, [entry.id]);
     return entry;
-  }, { timeout: 30000 });
+  }, transaction);
 }
