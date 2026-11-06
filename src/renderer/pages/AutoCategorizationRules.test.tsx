@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AutoCategorizationRules } from "./AutoCategorizationRules";
 
 const mockGetAutoCategorizationRules = vi.fn();
@@ -229,7 +229,7 @@ describe("AutoCategorizationRules", () => {
     render(<AutoCategorizationRules />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("base-currency-select")).toBeTruthy();
+      expect((screen.getByTestId("base-currency-select") as HTMLSelectElement).disabled).toBe(false);
     });
 
     fireEvent.change(screen.getByTestId("base-currency-select"), {
@@ -241,5 +241,19 @@ describe("AutoCategorizationRules", () => {
       expect(mockSetAppSetting).toHaveBeenCalledWith("baseCurrency", "CAD");
       expect(screen.getByTestId("base-currency-save-message")).toBeTruthy();
     });
+  });
+  it("keeps currency controls unavailable until saved currency loads so a late response cannot overwrite a user's choice", async () => {
+    mockGetAutoCategorizationRules.mockResolvedValue([]);
+    let finishLoading!: (value: string) => void;
+    mockGetAppSetting.mockReturnValue(new Promise<string>((resolve) => { finishLoading = resolve; }));
+    render(<AutoCategorizationRules />);
+    await waitFor(() => expect(mockGetAppSetting).toHaveBeenCalledWith("baseCurrency"));
+    expect((screen.getByTestId("base-currency-select") as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByTestId("base-currency-save") as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => finishLoading("USD"));
+    expect((screen.getByTestId("base-currency-select") as HTMLSelectElement).disabled).toBe(false);
+    fireEvent.change(screen.getByTestId("base-currency-select"), { target: { value: "EUR" } });
+    fireEvent.click(screen.getByTestId("base-currency-save"));
+    await waitFor(() => expect(mockSetAppSetting).toHaveBeenCalledWith("baseCurrency", "EUR"));
   });
 });

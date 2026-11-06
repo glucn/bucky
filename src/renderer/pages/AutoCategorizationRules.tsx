@@ -116,7 +116,7 @@ export const AutoCategorizationRules: React.FC = () => {
   };
 
   const saveBaseCurrency = async () => {
-    if (!baseCurrency) {
+    if (loading || !baseCurrency) {
       return;
     }
 
@@ -135,6 +135,7 @@ export const AutoCategorizationRules: React.FC = () => {
         <div className="mt-3 flex items-center gap-2">
           <select
             value={baseCurrency}
+            disabled={loading}
             onChange={(event) => setBaseCurrency(event.target.value)}
             className="rounded-md border border-gray-300 px-3 py-2 text-sm"
             data-testid="base-currency-select"
@@ -152,7 +153,7 @@ export const AutoCategorizationRules: React.FC = () => {
             onClick={() => {
               void saveBaseCurrency();
             }}
-            disabled={!baseCurrency}
+            disabled={loading || !baseCurrency}
             data-testid="base-currency-save"
           >
             Save
