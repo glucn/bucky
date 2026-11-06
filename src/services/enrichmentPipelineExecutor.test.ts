@@ -19,11 +19,20 @@ const provider = (): EnrichmentProviderAdapter => ({
     assetType: "EQUITY",
     quoteCurrency: "USD",
   })),
-  fetchSecurityDailyPrices: vi.fn(async () => [{ marketDate: "2024-01-01", close: 100 }]),
+  fetchSecurityDailyPrices: vi.fn(async () => [{ marketDate: "2024-01-01", close: 100, priceBasis: "raw" as const, barStatus: "complete" as const }]),
   fetchFxDailyRates: vi.fn(async () => [{ marketDate: "2024-01-01", rate: 1.3 }]),
 });
 
 describe("executeEnrichmentPipeline", () => {
+  it("reports a retained quarantined price as an issue rather than a successful usable refresh", async () => {
+    const p = provider();
+    const repo = { upsertSecurityMetadataFillMissing: vi.fn(), insertMissingSecurityDailyPrices: vi.fn().mockResolvedValue({ unavailable: 1 }), insertMissingFxDailyRates: vi.fn() };
+    const coordinator = createEnrichmentRunCoordinator(), { run } = coordinator.startOrGetExistingRun({ securityMetadata: false, securityPrices: true, fxRates: false });
+    const result = await executeEnrichmentPipeline({ runId: run.id, provider: p, repository: repo, coordinator, scope: run.scope,
+      securities: [{ ticker: "AAPL", market: "NASDAQ", quoteCurrency: "USD", startDate: "2024-01-01", endDate: "2024-01-03" }], fxPairs: [], retryOptions: { maxRetries: 0, initialDelayMs: 0 } });
+    expect(result.status).toBe("completed_with_issues");
+    expect(result.failedItems[0].reason).toMatch(/review|unverified/i);
+  });
   it.each([
     { symbol: "OTHER", market: "NASDAQ", quoteCurrency: "USD" },
     { symbol: "AAPL", market: "LSE", quoteCurrency: "USD" },
@@ -39,8 +48,8 @@ describe("executeEnrichmentPipeline", () => {
     expect(p.fetchSecurityDailyPrices).not.toHaveBeenCalled(); expect(repo.insertMissingSecurityDailyPrices).not.toHaveBeenCalled();
   });
   it.each([
-    [{ marketDate: "2026-01-04", close: 10 }], [{ marketDate: "2026-02-30", close: 10 }],
-    [{ marketDate: "2026-01-02", close: -1 }], [{ marketDate: "2026-01-02", close: Infinity }],
+    [{ marketDate: "2026-01-04", close: 10, priceBasis: "raw" as const, barStatus: "complete" as const }], [{ marketDate: "2026-02-30", close: 10, priceBasis: "raw" as const, barStatus: "complete" as const }],
+    [{ marketDate: "2026-01-02", close: -1, priceBasis: "raw" as const, barStatus: "complete" as const }], [{ marketDate: "2026-01-02", close: Infinity, priceBasis: "raw" as const, barStatus: "complete" as const }],
   ])("rejects an invalid provider price batch before repository writes: %j", async (points) => {
     const p = provider(); p.fetchSecurityDailyPrices = vi.fn().mockResolvedValue(points);
     const repo = { upsertSecurityMetadataFillMissing: vi.fn(), insertMissingSecurityDailyPrices: vi.fn(), insertMissingFxDailyRates: vi.fn() };

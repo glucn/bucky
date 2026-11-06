@@ -4,6 +4,7 @@ import type {
   SecurityDailyPricePoint,
 } from "../enrichmentProviderRegistry";
 import { parseSecurityIdentity } from "../../shared/securityMarket";
+import { exchangeCalendarDate } from "../securityPricePolicy";
 
 const toUserFriendlyProviderMessage = (value: unknown): string => {
   if (typeof value !== "string") {
@@ -14,7 +15,7 @@ const toUserFriendlyProviderMessage = (value: unknown): string => {
   return cleaned || "Unable to fetch data from provider";
 };
 
-const mapSeriesValues = (values: any[]): SecurityDailyPricePoint[] =>
+const mapSeriesValues = (values: any[]): Array<{ marketDate: string; close: number }> =>
   (values || [])
     .map((value) => ({
       marketDate: value?.datetime,
@@ -92,15 +93,18 @@ export const createTwelveDataEnrichmentProvider = (
     },
 
     async fetchSecurityDailyPrices({ symbol, market, quoteCurrency, startDate, endDate }) {
+      const requestedAt = new Date();
       const key = parseSecurityIdentity({ ticker: symbol, market });
       const url =
         `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}` +
         `&exchange=${encodeURIComponent(key.market)}&interval=1day&start_date=${encodeURIComponent(startDate)}` +
-        `&end_date=${encodeURIComponent(endDate)}&apikey=${encodeURIComponent(apiKey)}`;
+        `&end_date=${encodeURIComponent(endDate)}&adjust=none&apikey=${encodeURIComponent(apiKey)}`;
       const payload = await requestJson(url);
       if (payload?.meta?.symbol !== key.ticker || payload.meta.exchange !== key.market || payload.meta.currency !== quoteCurrency ||
         !/^[A-Z]{3}$/.test(quoteCurrency) || payload.meta.interval !== "1day") throw new Error("Provider price market identity, currency or daily interval did not match the request");
-      return mapSeriesValues(payload?.values || []);
+      const today = exchangeCalendarDate(payload.meta.exchange_timezone, requestedAt);
+      return mapSeriesValues(payload?.values || []).filter((point) => point.marketDate < today)
+        .map((point): SecurityDailyPricePoint => ({ ...point, priceBasis: "raw", barStatus: "complete" }));
     },
 
     async fetchFxDailyRates({ sourceCurrency, targetCurrency, startDate, endDate }) {

@@ -22,7 +22,7 @@ export type SecurityMetadataSnapshot = {
   quoteCurrency: string | null;
 };
 
-export type SecurityDailyPricePoint = {
+export type SecurityDailyPricePoint = import("./securityPricePolicy").SecurityPricePolicy & {
   marketDate: string;
   close: number;
 };

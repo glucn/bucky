@@ -10,6 +10,18 @@ const asJsonResponse = (payload: unknown, ok = true): Response =>
   } as unknown as Response);
 
 describe("yahooEnrichmentProvider", () => {
+  it("labels split-adjusted closes and omits the current exchange day even after UTC midnight", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2026-01-03T00:30:00Z"));
+    try {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(asJsonResponse({ chart: { result: [{
+        meta: { symbol: "ABC", fullExchangeName: "NASDAQ", currency: "USD", exchangeTimezoneName: "America/New_York", dataGranularity: "1d" },
+        timestamp: [Date.parse("2026-01-01T14:30:00Z") / 1000, Date.parse("2026-01-02T14:30:00Z") / 1000], indicators: { quote: [{ close: [100, 50] }] },
+      }] } })));
+      expect(await yahooEnrichmentProvider.fetchSecurityDailyPrices({ symbol: "ABC", market: "NASDAQ", quoteCurrency: "USD", startDate: "2026-01-01", endDate: "2026-01-03" })).toEqual([
+        { marketDate: "2026-01-01", close: 100, priceBasis: "split_adjusted", barStatus: "complete", basisAsOf: "2026-01-02" },
+      ]);
+    } finally { vi.useRealTimers(); }
+  });
   it("does not substitute another ticker or market when exact metadata is absent", async () => {
     for (const quote of [{ symbol: "OTHER", exchDisp: "NASDAQ", currency: "USD" }, { symbol: "AAPL", exchDisp: "LSE", currency: "GBP" }]) {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(asJsonResponse({ quotes: [quote] })));
@@ -30,7 +42,7 @@ describe("yahooEnrichmentProvider", () => {
       timestamp: [Date.parse("2024-01-01T23:00:00Z") / 1000], indicators: { quote: [{ close: [12] }] },
     }] } })); vi.stubGlobal("fetch", fetch);
     expect(await yahooEnrichmentProvider.fetchSecurityDailyPrices({ symbol: "ABC.AX", market: "ASX", quoteCurrency: "AUD", startDate: "2024-01-02", endDate: "2024-01-02" }))
-      .toEqual([{ marketDate: "2024-01-02", close: 12 }]);
+      .toEqual([{ marketDate: "2024-01-02", close: 12, priceBasis: "split_adjusted", barStatus: "complete", basisAsOf: expect.any(String) }]);
     const url = new URL(fetch.mock.calls[0][0]);
     expect(Number(url.searchParams.get("period2"))).toBeGreaterThan(Date.parse("2024-01-03T00:00:00Z") / 1000);
   });
@@ -138,8 +150,8 @@ describe("yahooEnrichmentProvider", () => {
     });
 
     expect(result).toEqual([
-      { marketDate: "2024-01-01", close: 187.43 },
-      { marketDate: "2024-01-02", close: 188.12 },
+      { marketDate: "2024-01-01", close: 187.43, priceBasis: "split_adjusted", barStatus: "complete", basisAsOf: expect.any(String) },
+      { marketDate: "2024-01-02", close: 188.12, priceBasis: "split_adjusted", barStatus: "complete", basisAsOf: expect.any(String) },
     ]);
   });
 

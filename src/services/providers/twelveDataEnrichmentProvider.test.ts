@@ -10,14 +10,35 @@ const asJsonResponse = (payload: unknown, ok = true): Response =>
   } as unknown as Response);
 
 describe("createTwelveDataEnrichmentProvider", () => {
+  it("uses request time for completion when a response arrives after exchange midnight", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2026-01-03T04:59:59Z"));
+    try {
+      vi.stubGlobal("fetch", vi.fn(async () => {
+        vi.setSystemTime(new Date("2026-01-03T05:00:01Z"));
+        return asJsonResponse({ meta: { symbol: "ABC", exchange: "NASDAQ", currency: "USD", interval: "1day", exchange_timezone: "America/New_York" }, values: [{ datetime: "2026-01-02", close: "50" }] });
+      }));
+      expect(await createTwelveDataEnrichmentProvider("test-key").fetchSecurityDailyPrices({ symbol: "ABC", market: "NASDAQ", quoteCurrency: "USD", startDate: "2026-01-01", endDate: "2026-01-03" })).toEqual([]);
+    } finally { vi.useRealTimers(); }
+  });
+  it("requests unadjusted daily prices and excludes the unfinished exchange-local day", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2026-01-03T00:30:00Z"));
+    try {
+      const fetch = vi.fn().mockResolvedValue(asJsonResponse({ meta: { symbol: "ABC", exchange: "NASDAQ", currency: "USD", interval: "1day", exchange_timezone: "America/New_York" }, values: [
+        { datetime: "2026-01-01", close: "100" }, { datetime: "2026-01-02", close: "50" },
+      ] })); vi.stubGlobal("fetch", fetch);
+      const points = await createTwelveDataEnrichmentProvider("test-key").fetchSecurityDailyPrices({ symbol: "ABC", market: "NASDAQ", quoteCurrency: "USD", startDate: "2026-01-01", endDate: "2026-01-03" });
+      expect(new URL(fetch.mock.calls[0][0]).searchParams.get("adjust")).toBe("none");
+      expect(points).toEqual([{ marketDate: "2026-01-01", close: 100, priceBasis: "raw", barStatus: "complete" }]);
+    } finally { vi.useRealTimers(); }
+  });
   it("qualifies security requests by exchange and rejects a response from another listing", async () => {
-    const fetch = vi.fn().mockResolvedValue(asJsonResponse({ meta: { symbol: "ABC", exchange: "LSE", currency: "GBP", interval: "1day" }, values: [{ datetime: "2024-01-02", close: "12" }] }));
+    const fetch = vi.fn().mockResolvedValue(asJsonResponse({ meta: { symbol: "ABC", exchange: "LSE", currency: "GBP", interval: "1day", exchange_timezone: "America/New_York" }, values: [{ datetime: "2024-01-02", close: "12" }] }));
     vi.stubGlobal("fetch", fetch); const provider = createTwelveDataEnrichmentProvider("test-key");
     await expect(provider.fetchSecurityDailyPrices({ symbol: "ABC", market: "NASDAQ", quoteCurrency: "USD", startDate: "2024-01-01", endDate: "2024-01-02" })).rejects.toThrow(/market|identity|currency/i);
     expect(new URL(fetch.mock.calls[0][0]).searchParams.get("exchange")).toBe("NASDAQ");
   });
   it("rejects partially numeric prices rather than truncating provider strings", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(asJsonResponse({ meta: { symbol: "ABC", exchange: "NASDAQ", currency: "USD", interval: "1day" }, values: [{ datetime: "2024-01-02", close: "12garbage" }] })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(asJsonResponse({ meta: { symbol: "ABC", exchange: "NASDAQ", currency: "USD", interval: "1day", exchange_timezone: "America/New_York" }, values: [{ datetime: "2024-01-02", close: "12garbage" }] })));
     await expect(createTwelveDataEnrichmentProvider("test-key").fetchSecurityDailyPrices({ symbol: "ABC", market: "NASDAQ", quoteCurrency: "USD", startDate: "2024-01-01", endDate: "2024-01-02" })).rejects.toThrow(/price|number/i);
   });
   afterEach(() => {
@@ -98,7 +119,7 @@ describe("createTwelveDataEnrichmentProvider", () => {
       "fetch",
       vi.fn().mockResolvedValue(
         asJsonResponse({
-          meta: { symbol: "AAPL", exchange: "NASDAQ", currency: "USD", interval: "1day" },
+          meta: { symbol: "AAPL", exchange: "NASDAQ", currency: "USD", interval: "1day", exchange_timezone: "America/New_York" },
           values: [
             { datetime: "2024-01-02", close: "188.12" },
             { datetime: "2024-01-01", close: "187.43" },
@@ -116,8 +137,8 @@ describe("createTwelveDataEnrichmentProvider", () => {
     });
 
     expect(result).toEqual([
-      { marketDate: "2024-01-01", close: 187.43 },
-      { marketDate: "2024-01-02", close: 188.12 },
+      { marketDate: "2024-01-01", close: 187.43, priceBasis: "raw", barStatus: "complete" },
+      { marketDate: "2024-01-02", close: 188.12, priceBasis: "raw", barStatus: "complete" },
     ]);
   });
 

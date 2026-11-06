@@ -2,6 +2,7 @@ import { databaseService } from "./database";
 import { Prisma } from "@prisma/client";
 import { securityMarketData } from "./securityMarketData";
 import { parseSecurityIdentity } from "../shared/securityMarket";
+import type { SecurityDailyPricePoint } from "./enrichmentProviderRegistry";
 
 type SecurityKey = {
   ticker: string;
@@ -46,13 +47,18 @@ class EnrichmentRepository {
 
   async insertMissingSecurityDailyPrices(
     key: SecurityKey,
-    points: Array<{ marketDate: string; close: number }>
+    points: SecurityDailyPricePoint[]
   ) {
     if (points.length === 0) {
-      return;
+      return { unavailable: 0 };
     }
 
-    await securityMarketData.write({ identity: key, points: points.map((point) => ({ date: point.marketDate, price: point.close })), mode: "fill", source: "provider" });
+    await securityMarketData.write({ identity: key, points: points.map((point) => ({ ...point, date: point.marketDate, price: point.close })), mode: "fill", source: "provider" });
+    const unavailable = await databaseService.prismaClient.securityDailyPrice.count({ where: {
+      ...parseSecurityIdentity(key), marketDate: { in: points.map((point) => point.marketDate) },
+      OR: [{ priceBasis: { not: "raw" } }, { barStatus: { not: "complete" } }],
+    } });
+    return { unavailable };
   }
 
   async insertMissingFxDailyRates(
@@ -88,6 +94,8 @@ class EnrichmentRepository {
         ticker: key.ticker,
         market: key.market,
         source: "provider",
+        priceBasis: "raw",
+        barStatus: "complete",
         marketDate: { lte: new Date().toISOString().slice(0, 10) },
       },
       orderBy: {
@@ -128,6 +136,7 @@ class EnrichmentRepository {
         _max: { lastFetchedAt: true },
       }),
       databaseService.prismaClient.securityDailyPrice.aggregate({
+        where: { priceBasis: "raw", barStatus: "complete" },
         _max: { fetchedAt: true },
       }),
       databaseService.prismaClient.fxDailyRate.aggregate({

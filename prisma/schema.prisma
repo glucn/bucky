@@ -377,6 +377,9 @@ model SecurityDailyPrice {
   marketDate String
   close      Float
   source     String   @default("provider") // provider, manual, or import; refresh only fills missing dates
+  priceBasis String   @default("unknown") // raw, split_adjusted, or unknown; valuation requires raw
+  barStatus  String   @default("unknown") // complete or unknown; old/current-session bars are unverified
+  basisAsOf  String?  // adjustment reference date for provider-adjusted series
   fetchedAt  DateTime @default(now())
   createdAt  DateTime @default(now())
 

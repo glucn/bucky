@@ -4,6 +4,7 @@ import type {
   SecurityDailyPricePoint,
 } from "../enrichmentProviderRegistry";
 import { parseSecurityIdentity } from "../../shared/securityMarket";
+import { exchangeCalendarDate } from "../securityPricePolicy";
 
 const formatUnixDate = (timestamp: number): string =>
   new Date(timestamp * 1000).toISOString().slice(0, 10);
@@ -38,12 +39,12 @@ const requestJson = async (url: string): Promise<any> => {
   return payload;
 };
 
-const mapChartSeries = (payload: any, dateForTimestamp = formatUnixDate): SecurityDailyPricePoint[] => {
+const mapChartSeries = (payload: any, dateForTimestamp = formatUnixDate): Array<{ marketDate: string; close: number }> => {
   const result = payload?.chart?.result?.[0];
   const timestamps: number[] = result?.timestamp || [];
   const closes: Array<number | null> = result?.indicators?.quote?.[0]?.close || [];
 
-  const points: SecurityDailyPricePoint[] = [];
+  const points: Array<{ marketDate: string; close: number }> = [];
   for (let index = 0; index < timestamps.length; index += 1) {
     const close = closes[index];
     if (close === null || close === undefined) continue;
@@ -103,6 +104,7 @@ export const yahooEnrichmentProvider: EnrichmentProviderAdapter = {
   },
 
   async fetchSecurityDailyPrices({ symbol, market, quoteCurrency, startDate, endDate }) {
+    const requestedAt = new Date();
     const key = parseSecurityIdentity({ ticker: symbol, market });
     const url =
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
@@ -113,10 +115,13 @@ export const yahooEnrichmentProvider: EnrichmentProviderAdapter = {
       !/^[A-Z]{3}$/.test(quoteCurrency) || meta.currency !== quoteCurrency || meta.dataGranularity !== "1d" ||
       typeof meta.exchangeTimezoneName !== "string") throw new Error("Provider chart identity, market, currency or daily interval could not be verified");
     const formatter = new Intl.DateTimeFormat("en", { timeZone: meta.exchangeTimezoneName, year: "numeric", month: "2-digit", day: "2-digit" });
+    const today = exchangeCalendarDate(meta.exchangeTimezoneName, requestedAt);
     return mapChartSeries(payload, (timestamp) => {
       const parts = new Map(formatter.formatToParts(new Date(timestamp * 1000)).map((part) => [part.type, part.value]));
       return `${parts.get("year")}-${parts.get("month")}-${parts.get("day")}`;
-    }).filter((point) => point.marketDate >= startDate && point.marketDate <= endDate).sort((a, b) => a.marketDate.localeCompare(b.marketDate));
+    }).filter((point) => point.marketDate >= startDate && point.marketDate <= endDate && point.marketDate < today)
+      .sort((a, b) => a.marketDate.localeCompare(b.marketDate))
+      .map((point): SecurityDailyPricePoint => ({ ...point, priceBasis: "split_adjusted", barStatus: "complete", basisAsOf: today }));
   },
 
   async fetchFxDailyRates({ sourceCurrency, targetCurrency, startDate, endDate }) {

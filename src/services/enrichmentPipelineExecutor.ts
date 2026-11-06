@@ -1,5 +1,6 @@
 import type { EnrichmentRunScope } from "./enrichmentRunCoordinator";
-import type { EnrichmentProviderAdapter } from "./enrichmentProviderRegistry";
+import type { EnrichmentProviderAdapter, SecurityDailyPricePoint } from "./enrichmentProviderRegistry";
+import { verifyPricePolicy } from "./securityPricePolicy";
 import { withTransientRetry } from "./enrichmentRetry";
 import { parseSecurityIdentity } from "../shared/securityMarket";
 import { isValidStandardDate } from "../shared/dateUtils";
@@ -30,8 +31,8 @@ type RepositoryContract = {
   }): Promise<unknown>;
   insertMissingSecurityDailyPrices(
     key: { ticker: string; market: string },
-    points: Array<{ marketDate: string; close: number }>
-  ): Promise<unknown>;
+    points: SecurityDailyPricePoint[]
+  ): Promise<{ unavailable: number } | void>;
   insertMissingFxDailyRates(
     key: { sourceCurrency: string; targetCurrency: string },
     points: Array<{ marketDate: string; rate: number }>
@@ -203,13 +204,15 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
           point.marketDate > security.endDate || typeof point.close !== "number" || !Number.isFinite(point.close) || point.close < 0)) {
           throw new Error("Provider returned an invalid or out-of-range security price batch");
         }
-        await input.repository.insertMissingSecurityDailyPrices(
+        for (const point of points) verifyPricePolicy(point);
+        const stored = await input.repository.insertMissingSecurityDailyPrices(
           {
             ticker: security.ticker,
             market: security.market,
           },
           points
         );
+        if (stored?.unavailable || points.some((point) => point.priceBasis !== "raw")) throw new Error("Unverified or split-adjusted prices were retained for review and cannot value dated holdings. Use verified unadjusted prices or explicitly correct the retained records.");
       } catch (error) {
         const failedItem = {
           category: "securityPrices" as const,

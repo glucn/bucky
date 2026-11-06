@@ -23,6 +23,26 @@ falls back to another market or the legacy table. Zero prices are valid; negativ
 prices and invalid dates are refused. It does not round quotes to two decimals. Storage still
 uses binary floating point; this is not completion of BL-031's exact-decimal work.
 
+Canonical valuation reads now require `priceBasis=raw` and `barStatus=complete`. The additive
+policy migration marks retained rows `unknown` for both fields without changing their prices.
+Unknown and split-adjusted records remain stored but are excluded from valuation, history,
+provider coverage and price freshness. Fill still retains those records; only explicit manual
+or import correction can replace them with an attested raw completed close. New writes require
+explicit policy. Refresh reports retained unusable records as issues instead of claiming usable
+price coverage.
+
+Twelve Data security requests explicitly set `adjust=none`; the documented default is `splits`.
+Daily data uses the exchange-local calendar. Both adapters require a valid exchange time zone
+and retain only dates earlier than the exchange date when the request began. This deliberately
+waits until the next local day, even after market close, and prevents a response crossing midnight
+from freezing a partial candle. It does not promise that providers never revise older closes.
+Yahoo's [historical Close series](https://finance.yahoo.com/quote/CASK/history/) is split-adjusted;
+the adapter labels it `split_adjusted` with its request-date adjustment reference. Such prices
+are retained for review and reported as unusable for dated holdings. There is no verified raw
+Yahoo conversion in this implementation; choose verified raw manual/import prices or a provider
+with an explicit unadjusted contract. Adjusted prices from different retrieval dates must not
+be combined as an equivalent raw series.
+
 Manual/import batches require explicit `fill` or `correct` policy and a manual/import source.
 Fill retains existing daily points unchanged. Correction explicitly replaces a point and records
 the new source; provider refresh remains insert-missing-only and cannot overwrite it. Batches
@@ -54,13 +74,11 @@ Remaining required integration:
 - Migrate manual price and CSV controls to the canonical service with visible fill/correction
   choice. Offer explicit reviewed promotion of retained legacy prices to a selected market;
   never infer an exchange during schema migration.
-- Define and persist price adjustment basis and completed-bar policy before valuation cutover.
+- Carry the implemented basis/completion policy into price controls and valuation cutover.
+  Offer explicit review/correction for quarantined records. Verified raw Yahoo reconstruction
+  remains unsupported; never relabel its historical split-adjusted closes as raw.
   [Twelve Data's time-series contract](https://twelvedata.com/docs/market-data/time-series)
-  defaults to split adjustment; changing requests to unadjusted without identifying existing
-  rows would mix incompatible series. Existing rows have no verified adjustment basis. Provider
-  daily responses can include unfinished current-session bars; insert-missing-only storage must
-  not freeze an intraday quote as a final close. Verify actual provider contracts and quarantine
-  unknown basis/finality rather than silently treating stored prices as comparable.
+  defines the explicit unadjusted request and exchange-local daily dates used by its adapter.
 - Structured [dated activity](F-007-investment-account-management/dated-investment-activity.md)
   now records chronological trades, held-security distributions and splits atomically. Dated
   position reads retain pre-sale/split quantities and basis, with chain/journal verification.

@@ -9,6 +9,30 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 30 — Price basis and completed daily bars (2026-11-06)
+
+- Added explicit adjustment/completion policy to canonical security prices. Upgrade preserves
+  all retained prices as unverified; canonical reads, price freshness and provider coverage
+  exclude unknown or adjusted records. New writes require explicit policy, and fill cannot
+  silently relabel old values. Explicit raw correction clears the old adjustment reference.
+- Twelve Data requests unadjusted closes. Yahoo historical closes are labelled split-adjusted
+  with a request-date reference and cannot value dated positions. Refresh reports these and
+  retained unverified prices as issues. A verified raw Yahoo series remains an open requirement.
+- Both security adapters exclude the current exchange-local day, using the request-start clock
+  so a partial response crossing midnight cannot become a completed close. Missing/invalid
+  exchange timezone fails verification. Completion deliberately waits until the next local day;
+  it does not guarantee that a provider never corrects older data.
+- The initial three policy regressions failed against the old implementation. Two further
+  regressions exposed falsely successful refresh results for retained unverified data, and a
+  midnight-response regression failed before the request clock was fixed. Native/encrypted
+  upgrade fixtures verify preserved prices and unknown policy defaults.
+- See the [canonical price contract](BL-021-canonical-security-prices.md). Price-control and
+  valuation cutover, legacy review/corrections, exact decimals, verification and personal
+  acceptance remain open; this batch does not establish investment readiness.
+- **983 tests across 116 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking, Apple Silicon packaging and all **13 packaged acceptance cases**.
+  The six enrichment/FX-refresh development E2E cases passed three repetitions (**18 checks**).
+
 ### Batch 29 — Durable investment reimports and reachable statement review (2026-11-06)
 
 - Replaced description/first-line duplicate signatures with persisted portfolio-scoped broker

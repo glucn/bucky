@@ -74,6 +74,8 @@ describe("Personal database lifecycle", () => {
       .toEqual([{ market: null, quantity: 3 }]);
     expect(await sql("SELECT close,source FROM SecurityDailyPrice WHERE id='canonical-price'"))
       .toEqual([{ close: 12.345678, source: "provider" }]);
+    expect(await sql("SELECT priceBasis,barStatus,basisAsOf FROM SecurityDailyPrice WHERE id='canonical-price'"))
+      .toEqual([{ priceBasis: "unknown", barStatus: "unknown", basisAsOf: null }]);
     expect(await sql("SELECT price,source FROM SecurityPriceHistory WHERE id='legacy-price'"))
       .toEqual([{ price: 999, source: "manual" }]);
     expect(await sql("SELECT quantity FROM InvestmentProperties WHERE id='legacy-holding'", result.backupPath!))

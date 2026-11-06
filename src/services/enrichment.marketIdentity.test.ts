@@ -23,7 +23,7 @@ it("refreshes two real same-ticker holdings independently, reports ambiguity, an
     { symbol: "AMB", market: "NYSE", quoteCurrency: "USD", displayName: null },
   ]);
   const metadata = vi.fn(async ({ symbol, market }) => ({ symbol, market, quoteCurrency: market === "LSE" ? "GBP" : "USD", displayName: null, assetType: null }));
-  const prices = vi.fn(async ({ market }) => [{ marketDate: "2026-01-02", close: market === "LSE" ? 23 : 12 }]);
+  const prices = vi.fn(async ({ market }) => [{ marketDate: "2026-01-02", close: market === "LSE" ? 23 : 12, priceBasis: "raw" as const, barStatus: "complete" as const }]);
   const coordinator = createEnrichmentRunCoordinator();
   const runtime = createEnrichmentRuntimeService({ coordinator, getBaseCurrency: async () => "USD", resolveProvider: () => ({ ok: true, provider: {
     id: "yahoo", capabilities: { supportsSecurityMetadata: true, supportsSecurityDailyPrices: true, supportsFxDailyRates: false, supportsBatchRequests: false },
@@ -41,7 +41,7 @@ it("refreshes two real same-ticker holdings independently, reports ambiguity, an
   expect(await securityMarketData.latest({ ticker: "ABC", market: "LSE" }, "2026-01-02")).toMatchObject({ price: 23, source: "provider" });
   expect(metadata.mock.calls.every(([input]) => input.symbol === "ABC")).toBe(true);
   expect((await databaseService.prismaClient.investmentProperties.findUniqueOrThrow({ where: { accountId: unresolved.id } })).market).toBeNull();
-  await securityMarketData.write({ identity: { ticker: "ABC", market: "NASDAQ" }, points: [{ date: "2026-01-02", price: 15 }], mode: "correct", source: "manual" });
+  await securityMarketData.write({ identity: { ticker: "ABC", market: "NASDAQ" }, points: [{ date: "2026-01-02", price: 15, priceBasis: "raw" as const, barStatus: "complete" as const }], mode: "correct", source: "manual" });
   await refresh();
   expect(await securityMarketData.latest({ ticker: "ABC", market: "NASDAQ" }, "2026-01-02")).toMatchObject({ price: 15, source: "manual" });
   expect(await databaseService.prismaClient.securityPriceHistory.count()).toBe(0);

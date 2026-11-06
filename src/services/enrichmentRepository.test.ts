@@ -5,10 +5,16 @@ import { enrichmentRepository } from "./enrichmentRepository";
 import { securityMarketData } from "./securityMarketData";
 
 describe("enrichmentRepository", () => {
+  it("reports retained unverified prices so provider fill cannot claim valuation readiness", async () => {
+    const key = { ticker: "ABC", market: "NASDAQ" };
+    await databaseService.prismaClient.securityDailyPrice.create({ data: { ...key, marketDate: "2024-01-02", close: 50 } });
+    expect(await enrichmentRepository.insertMissingSecurityDailyPrices(key, [{ marketDate: "2024-01-02", close: 100, priceBasis: "raw", barStatus: "complete" }])).toMatchObject({ unavailable: 1 });
+    expect((await databaseService.prismaClient.securityDailyPrice.findFirstOrThrow()).close).toBe(50);
+  });
   it("does not advance provider refresh coverage with manual points or future provider dates", async () => {
     const key = { ticker: "ABC", market: "NASDAQ" };
-    await enrichmentRepository.insertMissingSecurityDailyPrices(key, [{ marketDate: "2024-01-02", close: 10 }]);
-    await securityMarketData.write({ identity: key, points: [{ date: "2024-01-05", price: 12 }], mode: "fill", source: "manual" });
+    await enrichmentRepository.insertMissingSecurityDailyPrices(key, [{ marketDate: "2024-01-02", close: 10, priceBasis: "raw" as const, barStatus: "complete" as const }]);
+    await securityMarketData.write({ identity: key, points: [{ date: "2024-01-05", price: 12, priceBasis: "raw" as const, barStatus: "complete" as const }], mode: "fill", source: "manual" });
     await databaseService.prismaClient.securityDailyPrice.create({ data: { ...key, marketDate: "2999-01-01", close: 999, source: "provider" } });
     expect(await enrichmentRepository.getLatestSecurityPriceDate(key)).toBe("2024-01-02");
   });
@@ -17,7 +23,7 @@ describe("enrichmentRepository", () => {
       WHEN NEW.marketDate = '2024-01-03' BEGIN SELECT RAISE(ABORT, 'synthetic provider storage failure'); END`);
     try {
       await expect(enrichmentRepository.insertMissingSecurityDailyPrices({ ticker: "ABC", market: "NASDAQ" }, [
-        { marketDate: "2024-01-02", close: 10 }, { marketDate: "2024-01-03", close: 11 },
+        { marketDate: "2024-01-02", close: 10, priceBasis: "raw" as const, barStatus: "complete" as const }, { marketDate: "2024-01-03", close: 11, priceBasis: "raw" as const, barStatus: "complete" as const },
       ])).rejects.toThrow();
       expect(await databaseService.prismaClient.securityDailyPrice.count()).toBe(0);
     } finally { await databaseService.prismaClient.$executeRawUnsafe("DROP TRIGGER fail_provider_point"); }
@@ -67,16 +73,16 @@ describe("enrichmentRepository", () => {
     await enrichmentRepository.insertMissingSecurityDailyPrices(
       { ticker: "AAPL", market: "NASDAQ" },
       [
-        { marketDate: "2024-01-01", close: 100 },
-        { marketDate: "2024-01-02", close: 101 },
+        { marketDate: "2024-01-01", close: 100, priceBasis: "raw" as const, barStatus: "complete" as const },
+        { marketDate: "2024-01-02", close: 101, priceBasis: "raw" as const, barStatus: "complete" as const },
       ]
     );
 
     await enrichmentRepository.insertMissingSecurityDailyPrices(
       { ticker: "AAPL", market: "NASDAQ" },
       [
-        { marketDate: "2024-01-02", close: 999 },
-        { marketDate: "2024-01-03", close: 102 },
+        { marketDate: "2024-01-02", close: 999, priceBasis: "raw" as const, barStatus: "complete" as const },
+        { marketDate: "2024-01-03", close: 102, priceBasis: "raw" as const, barStatus: "complete" as const },
       ]
     );
 
@@ -142,7 +148,7 @@ describe("enrichmentRepository", () => {
 
     await enrichmentRepository.insertMissingSecurityDailyPrices(
       { ticker: "AAPL", market: "NASDAQ" },
-      [{ marketDate: "2024-01-04", close: 190 }]
+      [{ marketDate: "2024-01-04", close: 190, priceBasis: "raw" as const, barStatus: "complete" as const }]
     );
 
     await enrichmentRepository.insertMissingFxDailyRates(

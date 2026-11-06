@@ -70,6 +70,7 @@ describe("encrypted personal database lifecycle", () => {
     expect((await query("SELECT market FROM InvestmentProperties WHERE id='legacy-holding'"))[0].market).toBeNull();
     expect((await query("SELECT quantity FROM InvestmentProperties WHERE id='legacy-holding'"))[0].quantity).toBe(3);
     expect((await query("SELECT close,source FROM SecurityDailyPrice WHERE id='canonical-price'"))[0]).toMatchObject({ close: 12.345678, source: "provider" });
+    expect((await query("SELECT priceBasis,barStatus,basisAsOf FROM SecurityDailyPrice WHERE id='canonical-price'"))[0]).toEqual({ priceBasis: "unknown", barStatus: "unknown", basisAsOf: null });
     expect((await query("SELECT price,source FROM SecurityPriceHistory WHERE id='legacy-price'"))[0]).toMatchObject({ price: 999, source: "manual" });
     expect((await query("SELECT quantity FROM InvestmentProperties WHERE id='legacy-holding'", result.backupPath!))[0].quantity).toBe(3);
     expect((await query("SELECT hasCompleteActivityHistory FROM InvestmentProperties WHERE id='legacy-holding'"))[0].hasCompleteActivityHistory).toBe(0);
