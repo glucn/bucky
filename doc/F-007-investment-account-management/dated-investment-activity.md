@@ -40,9 +40,9 @@ Development reset deletes links/activity along with the rest of the book in one 
 Posting a date before the account's latest activity is refused until replay can recompute later
 lot consumption and realized gains. Statement imports sort normalized dates ascending while
 retaining same-day source order and original error row numbers. Importing older activity into an
-already populated book still needs replay. Investment import duplicate detection also still uses
-legacy description signatures and needs durable origin/identity before representative reimport
-acceptance; the dated ledger alone does not resolve that gap.
+already populated book still needs replay. [Durable investment import origins](import-origins.md)
+now replace description signatures for reimports and expose explicit additional-row review.
+Reviewed legacy association and representative reimport acceptance remain required.
 
 Quantities and amounts still use Float with existing cent/unit policies. Exact-decimal migration,
 canonical market valuation, identity-based income/gain reports, legacy baseline review and full

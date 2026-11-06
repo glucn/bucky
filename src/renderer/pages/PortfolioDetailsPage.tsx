@@ -5,6 +5,7 @@ import { useAccounts } from "../context/AccountsContext";
 import { formatMultiCurrencyBalances } from "../utils/currencyUtils";
 import { formatValuationAmount } from "../utils/valuationFormatting";
 import { SUPPORTED_CURRENCY_OPTIONS } from "../../shared/currencies";
+const InvestmentImportWizard = React.lazy(() => import("../components/InvestmentImportWizard").then((module) => ({ default: module.InvestmentImportWizard })));
 
 interface Position {
   tickerSymbol: string;
@@ -43,6 +44,7 @@ export const PortfolioDetailsPage: React.FC = () => {
   const [dividendIncome, setDividendIncome] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [selectedTransactionType, setSelectedTransactionType] = useState<TransactionType>('buy');
   const [showAddCashModal, setShowAddCashModal] = useState(false);
   const [newCashCurrency, setNewCashCurrency] = useState("USD");
@@ -368,7 +370,8 @@ export const PortfolioDetailsPage: React.FC = () => {
       {/* Quick Actions */}
       <div className="bg-white shadow rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <button data-testid="import-investments-button" onClick={() => setShowImport(true)} className="px-4 py-3 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Import statement</button>
           <button
             onClick={() => {
               setSelectedTransactionType('buy');
@@ -417,6 +420,9 @@ export const PortfolioDetailsPage: React.FC = () => {
       </div>
 
       {/* Transaction Modal */}
+      {showImport ? <React.Suspense fallback={<p role="status">Loading import…</p>}>
+        <InvestmentImportWizard isOpen portfolioId={portfolioId!} onClose={() => setShowImport(false)} onImportComplete={() => { void handleTransactionCreated(); }} />
+      </React.Suspense> : null}
       <TransactionEntryModal
         isOpen={showTransactionModal}
         onClose={() => setShowTransactionModal(false)}

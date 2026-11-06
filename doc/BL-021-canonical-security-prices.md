@@ -64,8 +64,9 @@ Remaining required integration:
 - Structured [dated activity](F-007-investment-account-management/dated-investment-activity.md)
   now records chronological trades, held-security distributions and splits atomically. Dated
   position reads retain pre-sale/split quantities and basis, with chain/journal verification.
-  Backdated replay, reviewed legacy baselines, dedicated corrections and durable investment
-  import identity remain required. Existing current quantities/lots and descriptions are never
+  Backdated replay, reviewed legacy baselines and dedicated corrections remain required.
+  Durable import IDs/fingerprints now support reviewed reimports; legacy association/restoration
+  still needs its own workflow. Existing current quantities/lots and descriptions are never
   sufficient to reconstruct missing legacy history; that history remains explicitly unavailable.
 - Verify upgrade/recovery of old books, current and historical valuation, same-ticker market
   isolation, manual correction/refresh behavior and packaged controls before closing BL-021.

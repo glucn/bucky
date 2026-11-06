@@ -1,5 +1,6 @@
 import type { IpcRegistrar } from "./ipcSecurity";
 import { investmentService } from "../services/investmentService";
+import { previewInvestmentImport } from "../services/investmentImport";
 
 export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
   console.log("Registering investment IPC handlers...");
@@ -454,10 +455,10 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
   );
 
   // Import
-  ipcMain.handle("validate-import-data", async (_, { csvData, mapping }) => {
+  ipcMain.handle("validate-import-data", async (_, { portfolioId, csvData, mapping, options }) => {
     console.log("Handling validate-import-data request");
     try {
-      const validation = await investmentService.validateImportData(csvData, mapping);
+      const validation = portfolioId ? await previewInvestmentImport(portfolioId, csvData, mapping, options) : await investmentService.validateImportData(csvData, mapping, options);
       return { success: true, validation };
     } catch (error) {
       console.error("Error validating import data:", error);
@@ -470,10 +471,10 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
 
   ipcMain.handle(
     "import-investment-transactions",
-    async (_, { portfolioId, csvData, mapping }) => {
+    async (_, { portfolioId, csvData, mapping, options }) => {
       console.log("Handling import-investment-transactions request");
       try {
-        const result = await investmentService.importInvestmentTransactions(portfolioId, csvData, mapping);
+        const result = await investmentService.importInvestmentTransactions(portfolioId, csvData, mapping, options);
         return { success: true, ...result };
       } catch (error) {
         console.error("Error importing investment transactions:", error);

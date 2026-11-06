@@ -797,9 +797,14 @@ This file tracks deferred product improvements that are intentionally out of cur
 
 - **ID**: BL-034
 - **Title**: Preserve transaction origin and immutable before/after revisions
-- **Status**: planned
+- **Status**: in-progress
 - **Priority**: high
 - **Related Docs**: `doc/text-based-accounting-research.md`, `doc/F-008-offline-import-foundation/design.md`, `doc/F-010-placeholder-cleanup/design.md`
+- **Implementation update (2026-11-06)**: Investment imports retain transactional broker IDs,
+  normalized original financial fingerprints/data, journal links and deletion tombstones, with
+  explicit review for ambiguous additional transactions. See
+  `doc/F-007-investment-account-management/import-origins.md`. General transaction attribution,
+  immutable before/after revisions and history UI remain required; this does not close BL-034.
 - **Context (What / Why)**:
   - Journal entries currently retain creation/update timestamps but edits overwrite prior postings and
     cannot fully explain how a transaction entered or changed within the system.

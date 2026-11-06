@@ -9,6 +9,43 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 29 — Durable investment reimports and reachable statement review (2026-11-06)
+
+- Replaced description/first-line duplicate signatures with persisted portfolio-scoped broker
+  IDs and normalized financial fingerprints. Origin, journal, activity and holding changes
+  share a per-row transaction. Failed origin writes and concurrent imports cannot leave an
+  acknowledged duplicate or orphan holding. Reimports are checked before dated-posting gates.
+- Distinct broker IDs preserve identical trades; descriptions may change without new postings.
+  Conflicting IDs report review errors. No-ID matching, changed same-day financial data and
+  manual/legacy candidates are exposed for explicit review instead of silently changing the book.
+  Additional no-ID transactions use a stable review identity for retry. Removed cash entries
+  retain origins so old statements do not resurrect them.
+- Replaced ad-hoc CSV parsing with strict shared parsing, physical source row references,
+  commission-aware gross/net validation and bounded input. Partial/non-finite numbers,
+  impossible dates and mismatched consideration are refused. Mixed ID/blank-ID records,
+  multiline/quoted descriptions and leading-zero IDs are preserved appropriately.
+- Connected the previously unreachable investment wizard to the portfolio page. Preview shows
+  financial effects, broker IDs and explicit additional-row choices; commission/description/ID
+  mapping is available. Errors remain visible after partial import, with retry retaining review
+  identity. Portfolio refresh happens when the outcome is closed so it cannot discard the errors.
+- Cash-account selection is explicit when needed. Matching includes established currency, keeping
+  equal USD/CAD cash amounts separate and refusing a reused broker ID with a changed currency.
+  Per-row preview shows the currency and cash effect; standalone cash rows do not infer currency
+  from a coincidentally matching stock ticker.
+- Initial **eight service regressions and two renderer regressions failed against the old
+  implementation**. Further failing cases drove amended no-ID review, negative net-sale and
+  mixed-ID policies and physical row accuracy. Real packaged flows exercise broker-ID overlaps
+  across restart and explicit identical trades with partial failures/retry; their previews were
+  visually inspected.
+- See the [origin/review contract](F-007-investment-account-management/import-origins.md).
+  Legacy association/restoration and full revisions, dated replay/corrections, canonical valuation,
+  exact decimals, verification and representative personal acceptance remain open.
+- **975 tests across 116 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging with the origin migration/generated client.
+  Both packaged import cases passed three repetitions (**six checks**), and all **13 packaged
+  acceptance cases passed** together. All 25 development/browser E2E cases also passed three
+  repetitions (**75 checks**).
+
 ### Batch 28 — Structured dated investment quantities and basis (2026-11-06)
 
 - Added per-account ordered activity and journal links in an additive migration. New empty
