@@ -60,12 +60,24 @@ describe("Personal database lifecycle", () => {
     await initializePersonalDatabase(filename, partial);
     await sql(`INSERT INTO Account (id,name,type,subtype,currency,updatedAt)
       VALUES ('keep','Keep through upgrade','user','asset','CAD',CURRENT_TIMESTAMP)`);
+    await sql(`INSERT INTO InvestmentProperties (id,accountId,tickerSymbol,quantity,costBasisMethod,lots,updatedAt)
+      VALUES ('legacy-holding','keep','ABC',3,'FIFO','[]',CURRENT_TIMESTAMP)`);
+    await sql(`INSERT INTO SecurityPriceHistory (id,tickerSymbol,date,price,source) VALUES ('legacy-price','ABC','2026-01-02',999,'manual')`);
+    await sql(`INSERT INTO SecurityDailyPrice (id,ticker,market,marketDate,close) VALUES ('canonical-price','ABC','NASDAQ','2026-01-02',12.345678)`);
     const result = await initializePersonalDatabase(filename, migrations);
     expect(result.backupPath).toBeTruthy();
     expect(await sql("SELECT name FROM Account WHERE id='keep'"))
       .toEqual([{ name: "Keep through upgrade" }]);
     expect(await sql("SELECT name FROM Account WHERE id='keep'", result.backupPath!))
       .toEqual([{ name: "Keep through upgrade" }]);
+    expect(await sql("SELECT market,quantity FROM InvestmentProperties WHERE id='legacy-holding'"))
+      .toEqual([{ market: null, quantity: 3 }]);
+    expect(await sql("SELECT close,source FROM SecurityDailyPrice WHERE id='canonical-price'"))
+      .toEqual([{ close: 12.345678, source: "provider" }]);
+    expect(await sql("SELECT price,source FROM SecurityPriceHistory WHERE id='legacy-price'"))
+      .toEqual([{ price: 999, source: "manual" }]);
+    expect(await sql("SELECT quantity FROM InvestmentProperties WHERE id='legacy-holding'", result.backupPath!))
+      .toEqual([{ quantity: 3 }]);
   });
 
   it("rolls back an unsuccessful migration and leaves a recoverable pre-upgrade snapshot", async () => {

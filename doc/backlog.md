@@ -468,9 +468,13 @@ This file tracks deferred product improvements that are intentionally out of cur
 
 - **ID**: BL-021
 - **Title**: Migrate valuation paths from `SecurityPriceHistory` to `SecurityDailyPrice`
-- **Status**: planned
+- **Status**: in-progress
 - **Priority**: high
 - **Related Docs**: `doc/F-017-data-enrichment-mvp/design.md`, `prisma/schema.prisma`
+- **Implementation update (2026-11-05)**: Additive persisted market identity and canonical
+  price/binding services are implemented with explicit fill/correction policy and retained legacy
+  rows. See `doc/BL-021-canonical-security-prices.md`. Valuation/UI/provider targeting and
+  historical quantity integration remain required; this is not completion of BL-021.
 - **Context (What / Why)**:
   - Current valuation flows still depend on legacy `SecurityPriceHistory` keyed by `tickerSymbol + date`.
   - F-017 introduced canonical market-data storage in `SecurityDailyPrice` keyed by `ticker + market + marketDate`.

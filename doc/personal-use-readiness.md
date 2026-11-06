@@ -9,6 +9,27 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 24 — Persist market identity and define canonical price operations (2026-11-05)
+
+- Added nullable holding market identity and canonical price provenance through an additive
+  migration. Legacy holdings remain unresolved; quantities/lots/currencies/postings and both
+  old price stores are preserved. No exchange is guessed and no ticker-only price is promoted.
+- Added explicit market binding with stale-binding, quote-currency, historical-lot and duplicate
+  identity safeguards. Canonical reads use only `SecurityDailyPrice` for the exact market/date,
+  exclude future prices, preserve quote precision and support zero values. Binary Float storage
+  remains; exact decimals are a separate gate.
+- Canonical manual/import writes distinguish retaining existing dates from explicit correction.
+  Provider refresh cannot overwrite corrected points. Whole-batch validation and real SQLite
+  failure regressions verify rollback of earlier prices and binding metadata.
+- Initial 15 regressions failed before implementation; additional lot/identity and migration
+  checks cover native/encrypted preservation. **850 tests across 108 files passed in each native
+  and encrypted storage mode**, plus TypeScript and Apple Silicon packaging. All **nine packaged
+  acceptance cases passed** with the new migration and generated client.
+- Existing valuation/price UI and refresh targeting still use legacy or ambiguous ticker paths.
+  Historical quantity reconstruction also needs structured dated activity. The
+  [canonical price contract and remaining integration](BL-021-canonical-security-prices.md)
+  records these gaps; this batch does not complete investment readiness.
+
 ### Batch 23 — Fresh isolated E2E execution and onboarding/reset acceptance (2026-11-04)
 
 - Added one validated development origin shared by runtime sender checks, Forge, Webpack and

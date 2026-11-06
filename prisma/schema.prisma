@@ -244,6 +244,7 @@ model InvestmentProperties {
   
   // Security identification
   tickerSymbol    String   // e.g., "AAPL", "VTSAX"
+  market          String?  // Explicit canonical market; legacy ticker-only holdings remain unresolved
   securityType    String?  // "stock", "bond", "mutual_fund", "etf", etc.
   
   // Quantity tracking (shares/units)
@@ -310,6 +311,7 @@ model SecurityDailyPrice {
   market     String
   marketDate String
   close      Float
+  source     String   @default("provider") // provider, manual, or import; refresh only fills missing dates
   fetchedAt  DateTime @default(now())
   createdAt  DateTime @default(now())
 

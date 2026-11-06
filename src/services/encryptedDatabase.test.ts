@@ -59,10 +59,19 @@ describe("encrypted personal database lifecycle", () => {
     await initializeEncryptedDatabase(filename, partial, key);
     await query(`INSERT INTO Account (id,name,type,subtype,currency,updatedAt)
       VALUES ('keep','${sentinel}','user','asset','CAD',CURRENT_TIMESTAMP)`);
+    await query(`INSERT INTO InvestmentProperties (id,accountId,tickerSymbol,quantity,costBasisMethod,lots,updatedAt)
+      VALUES ('legacy-holding','keep','ABC',3,'FIFO','[]',CURRENT_TIMESTAMP)`);
+    await query(`INSERT INTO SecurityPriceHistory (id,tickerSymbol,date,price,source) VALUES ('legacy-price','ABC','2026-01-02',999,'manual')`);
+    await query(`INSERT INTO SecurityDailyPrice (id,ticker,market,marketDate,close) VALUES ('canonical-price','ABC','NASDAQ','2026-01-02',12.345678)`);
     const result = await initializeEncryptedDatabase(filename, migrations, key);
     expect(result.backupPath).toBeTruthy();
     expect((await query("SELECT name FROM Account"))[0].name).toBe(sentinel);
     expect((await query("SELECT name FROM Account", result.backupPath!))[0].name).toBe(sentinel);
+    expect((await query("SELECT market FROM InvestmentProperties WHERE id='legacy-holding'"))[0].market).toBeNull();
+    expect((await query("SELECT quantity FROM InvestmentProperties WHERE id='legacy-holding'"))[0].quantity).toBe(3);
+    expect((await query("SELECT close,source FROM SecurityDailyPrice WHERE id='canonical-price'"))[0]).toMatchObject({ close: 12.345678, source: "provider" });
+    expect((await query("SELECT price,source FROM SecurityPriceHistory WHERE id='legacy-price'"))[0]).toMatchObject({ price: 999, source: "manual" });
+    expect((await query("SELECT quantity FROM InvestmentProperties WHERE id='legacy-holding'", result.backupPath!))[0].quantity).toBe(3);
     expect((await fs.readFile(result.backupPath!)).includes(Buffer.from(sentinel))).toBe(false);
     await expect(query("SELECT name FROM Account", result.backupPath!, randomBytes(32))).rejects.toThrow();
   });
