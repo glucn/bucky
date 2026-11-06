@@ -87,6 +87,7 @@ model Account {
   checkpoints Checkpoint[]
   liabilityProfile LiabilityProfile?
   investmentProperties InvestmentProperties?
+  investmentActivities InvestmentActivity[]
   autoCategorizationRules AutoCategorizationRule[] @relation("AutoCategorizationRuleTarget")
   group     AccountGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   
@@ -120,6 +121,7 @@ model JournalEntry {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   lines        JournalLine[]
+  investmentActivityLink InvestmentActivityJournal?
   
   @@index([displayOrder])
   @@index([entryType])
@@ -249,6 +251,7 @@ model InvestmentProperties {
   
   // Quantity tracking (shares/units)
   quantity        Float    @default(0) // Current number of shares owned
+  hasCompleteActivityHistory Boolean @default(false) // Legacy history is never inferred
   
   // Cost basis method
   costBasisMethod String   @default("FIFO") // "FIFO" or "AVERAGE_COST"
@@ -262,6 +265,44 @@ model InvestmentProperties {
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   
   @@index([tickerSymbol])
+}
+
+model InvestmentActivity {
+  id              String @id @default(uuid())
+  accountId       String
+  sequence        Int
+  date            String
+  kind            String
+  ticker          String
+  market          String?
+  currency        String
+  costBasisMethod String
+  quantityBefore  Float
+  quantityAfter   Float
+  basisBefore     Float
+  basisAfter      Float
+  lotsAfter       String?
+  units           Float?
+  price           Float?
+  fee             Float?
+  splitRatio      Float?
+  cashAmount      Float
+  createdAt       DateTime @default(now())
+  account         Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  journalLinks    InvestmentActivityJournal[]
+
+  @@unique([accountId, sequence])
+  @@index([accountId, date])
+}
+
+model InvestmentActivityJournal {
+  id         String @id @default(uuid())
+  activityId String
+  entryId    String @unique
+  activity   InvestmentActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  entry      JournalEntry @relation(fields: [entryId], references: [id], onDelete: Restrict)
+
+  @@index([activityId])
 }
 
 model SecurityPriceHistory {

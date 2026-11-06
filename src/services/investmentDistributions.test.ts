@@ -67,9 +67,9 @@ it.each([false, true])("refuses return of capital exceeding basis (reinvest=%s) 
   expect((await investmentService.getSecurityAccount(group.id, "ABC")).investmentProperties).toEqual(security.investmentProperties);
 });
 it.each([false, true])("uses the holding currency for cash dividends (returnOfCapital=%s)", async (isReturnOfCapital) => {
-  const { group, security, tradeCashAccount } = await position();
+  const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Currencies");
   const euro = await investmentService.addTradeCashAccount(group.id, "EUR");
-  await databaseService.prismaClient.account.update({ where: { id: security.id }, data: { currency: "EUR" } });
+  await investmentService.recordBuy({ portfolioId: group.id, tickerSymbol: "ABC", quantity: 10, pricePerShare: 10, date: "2026-01-02", tradeCashAccountId: euro.id });
   const entry = await investmentService.recordDividend({ portfolioId: group.id, tickerSymbol: "ABC", amount: 10, date: dividend.date, isReturnOfCapital });
   expect(entry.lines.every((line: any) => line.currency === "EUR")).toBe(true);
   expect(entry.lines.find((line: any) => line.accountId === euro.id)?.amount).toBe(10);

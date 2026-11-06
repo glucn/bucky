@@ -61,15 +61,12 @@ Remaining required integration:
   daily responses can include unfinished current-session bars; insert-missing-only storage must
   not freeze an intraday quote as a final close. Verify actual provider contracts and quarantine
   unknown basis/finality rather than silently treating stored prices as comparable.
-- Historical quantities/basis must reflect the requested date, including purchases, sales,
-  reinvestment and splits. Existing current quantities/lots are insufficient after sales;
-  user-editable descriptions are not an authoritative quantity ledger. Add structured dated
-  investment activity. Buy/sell posting and holding updates are now atomic with corrected fee
-  accounting; reinvestment, splits and return of capital now have atomic current-position
-  posting too. Structured historical integration remains required.
-  See the [trade policy](F-007-investment-account-management/trade-posting-policy.md).
-  Missing legacy history must be
-  explained, not reconstructed from current quantities or guessed descriptions.
+- Structured [dated activity](F-007-investment-account-management/dated-investment-activity.md)
+  now records chronological trades, held-security distributions and splits atomically. Dated
+  position reads retain pre-sale/split quantities and basis, with chain/journal verification.
+  Backdated replay, reviewed legacy baselines, dedicated corrections and durable investment
+  import identity remain required. Existing current quantities/lots and descriptions are never
+  sufficient to reconstruct missing legacy history; that history remains explicitly unavailable.
 - Verify upgrade/recovery of old books, current and historical valuation, same-ticker market
   isolation, manual correction/refresh behavior and packaged controls before closing BL-021.
 

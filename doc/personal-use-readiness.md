@@ -9,6 +9,39 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 28 — Structured dated investment quantities and basis (2026-11-06)
+
+- Added per-account ordered activity and journal links in an additive migration. New empty
+  service-created holdings establish tracking; existing holdings remain unverified with no
+  inferred activities. Native/encrypted upgrade fixtures verify that distinction and preservation.
+- Trades, held-security dividends, reinvestments and splits append activity with their journal,
+  quantity and lot writes. Failure to append or verify the activity rolls everything back.
+  Dated position reads now use verified snapshots rather than today's holdings, preserving
+  pre-sale/split/distribution values even after complete disposal. Descriptions/display ordering
+  do not determine quantity history.
+- Added chain/current-position, journal date/currency/balance, lot and linkage checks. Legacy
+  dated history is unavailable; inconsistent tracked history refuses valuation and new posting.
+  Generic journal edit/delete cannot detach investment money from quantities, including legacy
+  investment types and both reinvestment journals.
+- All initial **six historical/mutation regressions failed against the old implementation**.
+  Further tests cover corruption, activity-write rollback, related journals, and chronological
+  statement import while preserving original error row numbers. A currency fixture was corrected
+  to purchase in EUR initially instead of relabeling an existing USD trade.
+- **945 tests across 114 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging with the activity migration/generated client.
+  Both packaged investment cases passed three repetitions (**six checks**), including dated
+  quantities/basis after restart/disposal and actual IPC rejection of ordinary deletion.
+  All **11 packaged acceptance cases passed** together. After correcting the settings race
+  below, all 25 development/browser E2E cases passed three repetitions (**75 checks**).
+- Backdated replay/correction, reviewed legacy starting positions, durable investment import
+  identity/reimport, canonical prices, exact decimals and whole-book/personal acceptance remain
+  open. See the [dated activity contract](F-007-investment-account-management/dated-investment-activity.md).
+- Repeated development acceptance exposed a pre-existing settings race: currency controls were
+  usable before the saved setting loaded, allowing that late response to overwrite a selection
+  before Save. A deferred-response renderer regression failed first; selection/save now remain
+  disabled until initialization completes. No banner assertion or production reconciliation
+  check was weakened to address the timeout.
+
 ### Batch 27 — Atomic distributions, return-of-capital basis and splits (2026-11-06)
 
 - Reinvestment receipt/purchase journals, quantities/lots and implicit holdings now commit

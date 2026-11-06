@@ -1,4 +1,5 @@
 import { databaseService } from "./database";
+import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
 import { cents, readLots, resolveInvestmentAccounts } from "./investmentPosting";
 import { parseToStandardDate } from "../shared/dateUtils";
@@ -34,6 +35,7 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
   return databaseService.prismaClient.$transaction(async (tx) => {
     const { security, cash } = await resolveInvestmentAccounts(tx, input, { createSecurity: kind === "buy", requireSecurity: true });
     if (!security) throw new Error("Security account not found");
+    const history = await beginInvestmentActivity(tx, security.id, date);
     const props = security.investmentProperties!;
     if (!Number.isFinite(props.quantity) || props.quantity < 0) throw new Error("Invalid stored position quantity");
     if (!["FIFO", "AVERAGE_COST"].includes(props.costBasisMethod)) throw new Error("Invalid cost basis method");
@@ -77,6 +79,7 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
       date, description, type: kind === "buy" ? "investment_buy" : "investment_sell", displayOrder: Date.now(), lines: { create: lines },
     }, include: { lines: true } });
     await tx.investmentProperties.update({ where: { id: props.id }, data: { quantity: newQuantity, lots: lots ? JSON.stringify(lots) : null } });
+    await finishInvestmentActivity(tx, history, { kind, units: input.quantity, price: input.pricePerShare, fee: fee / 100, cashAmount: (kind === "buy" ? -consideration : consideration) / 100 }, [entry.id]);
     return entry;
   }, { timeout: 30000 });
 }

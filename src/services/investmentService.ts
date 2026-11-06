@@ -1,4 +1,6 @@
 import { databaseService } from "./database";
+import { getInvestmentSnapshot } from "./investmentActivity";
+import { parseToStandardDate } from "../shared/dateUtils";
 import { recordInvestmentTrade, type InvestmentTrade } from "./investmentTrades";
 import { recordCashDividend, recordReinvestment, recordSplit, type DividendInput, type ReinvestmentInput } from "./investmentDistributions";
 import { AccountType, AccountSubtype } from "../shared/accountTypes";
@@ -296,6 +298,7 @@ class InvestmentService {
         tickerSymbol,
         securityType,
         quantity: 0,
+        hasCompleteActivityHistory: true,
         costBasisMethod,
         lots: costBasisMethod === 'FIFO' ? JSON.stringify([]) : null,
       },
@@ -1000,19 +1003,19 @@ class InvestmentService {
     }
 
     const investmentProps = account.investmentProperties;
-
-    // Calculate cost basis from account balance
-    const costBasis = await databaseService.getAccountBalance(accountId);
-
-    // Calculate cost per share: cost basis / quantity
-    const costPerShare = investmentProps.quantity > 0 
-      ? costBasis / investmentProps.quantity 
-      : 0;
+    const effectiveDate = asOfDate === undefined ? new Date().toISOString().slice(0, 10) : parseToStandardDate(asOfDate);
+    if (!effectiveDate) throw new Error("Invalid investment history date");
+    const dated = await getInvestmentSnapshot(accountId, effectiveDate);
+    if (dated.status === "unavailable" && dated.reason === "inconsistent_history") throw new Error("Investment history does not match the recorded position. Review the account before valuing it.");
+    if (asOfDate && dated.status !== "available") throw new Error("This account predates tracked investment history. Its historical holdings need review before valuation.");
+    const quantity = dated.status === "available" ? dated.quantity : investmentProps.quantity;
+    const costBasis = dated.status === "available" ? dated.costBasis : await databaseService.getAccountBalance(accountId);
+    const costPerShare = quantity > 0 ? costBasis / quantity : 0;
 
     // Get latest market price from SecurityPriceHistory
     let marketPrice: number | null = null;
     if (asOfDate) {
-      marketPrice = await this.getMarketPrice(investmentProps.tickerSymbol, asOfDate);
+      marketPrice = await this.getMarketPrice(investmentProps.tickerSymbol, effectiveDate);
     } else {
       const latestPrice = await this.getLatestMarketPrice(investmentProps.tickerSymbol);
       marketPrice = latestPrice ? latestPrice.price : null;
@@ -1020,7 +1023,7 @@ class InvestmentService {
 
     // Calculate market value: quantity × market price
     const marketValue = marketPrice !== null 
-      ? investmentProps.quantity * marketPrice 
+      ? quantity * marketPrice
       : null;
 
     // Calculate unrealized gain: market value - cost basis
@@ -1042,7 +1045,7 @@ class InvestmentService {
 
     return {
       tickerSymbol: investmentProps.tickerSymbol,
-      quantity: investmentProps.quantity,
+      quantity,
       costBasis: fixPrecision(costBasis),
       costPerShare: fixPrecision(costPerShare),
       marketPrice: marketPrice !== null ? fixPrecision(marketPrice) : null,
@@ -2105,17 +2108,19 @@ class InvestmentService {
     let skipped = 0;
     const errors: Array<{ row: number; error: string }> = [];
 
-    // Process each row (Requirements 12.3)
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue; // Skip empty lines
-
+    // Statements commonly list newest first. Preserve same-day file order and source row
+    // numbers while posting dates chronologically so cost basis uses preceding activity.
+    const rows = lines.slice(1).map((line, index) => ({ line: line.trim(), rowNumber: index + 2 }))
+      .filter((row) => row.line);
+    const rowDate = (line: string) => parseToStandardDate(this.parseCSVLine(line)[columnIndexes.date]) || "9999-12-31";
+    rows.sort((a, b) => rowDate(a.line).localeCompare(rowDate(b.line)));
+    for (const { line, rowNumber } of rows) {
       const values = this.parseCSVLine(line);
-      const rowNumber = i + 1;
 
       try {
         // Extract values
-        const date = values[columnIndexes.date];
+        const date = parseToStandardDate(values[columnIndexes.date]);
+        if (!date) throw new Error("Invalid investment transaction date");
         const type = values[columnIndexes.type].toLowerCase();
         const ticker = values[columnIndexes.ticker].toUpperCase();
         const amount = parseFloat(values[columnIndexes.amount]);

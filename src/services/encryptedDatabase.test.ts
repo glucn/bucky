@@ -72,6 +72,8 @@ describe("encrypted personal database lifecycle", () => {
     expect((await query("SELECT close,source FROM SecurityDailyPrice WHERE id='canonical-price'"))[0]).toMatchObject({ close: 12.345678, source: "provider" });
     expect((await query("SELECT price,source FROM SecurityPriceHistory WHERE id='legacy-price'"))[0]).toMatchObject({ price: 999, source: "manual" });
     expect((await query("SELECT quantity FROM InvestmentProperties WHERE id='legacy-holding'", result.backupPath!))[0].quantity).toBe(3);
+    expect((await query("SELECT hasCompleteActivityHistory FROM InvestmentProperties WHERE id='legacy-holding'"))[0].hasCompleteActivityHistory).toBe(0);
+    expect((await query("SELECT count(*) AS count FROM InvestmentActivity"))[0].count).toBe(0);
     expect((await fs.readFile(result.backupPath!)).includes(Buffer.from(sentinel))).toBe(false);
     await expect(query("SELECT name FROM Account", result.backupPath!, randomBytes(32))).rejects.toThrow();
   });

@@ -92,6 +92,8 @@ class DatabaseService {
         }
       }
 
+      await tx.investmentActivityJournal.deleteMany({});
+      await tx.investmentActivity.deleteMany({});
       // Delete all journal lines
       await tx.journalLine.deleteMany({});
       // Delete all journal entries
@@ -1892,6 +1894,11 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       throw new Error("Journal entry not found");
     }
 
+    if (["investment_buy", "investment_sell", "dividend_reinvest", "dividend_cash", "stock_split"].includes(entry.type || "") ||
+      await prisma.investmentActivityJournal.findUnique({ where: { entryId } })) {
+      throw new Error("Investment corrections must update quantities and cost basis together; ordinary journal changes are unavailable");
+    }
+
     const isOpeningBalanceEntry =
       entry.entryType === "opening-balance" || entry.description === "Opening Balance";
 
@@ -2650,6 +2657,11 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     if (!line) throw new Error("Journal line not found");
     const entry = line.entry;
     if (!entry) throw new Error("Journal entry not found");
+
+    if (["investment_buy", "investment_sell", "dividend_reinvest", "dividend_cash", "stock_split"].includes(entry.type || "") ||
+      await prisma.investmentActivityJournal.findUnique({ where: { entryId: entry.id } })) {
+      throw new Error("Investment corrections must update quantities and cost basis together; ordinary journal changes are unavailable");
+    }
 
     // Find both lines in the entry
     const lines = entry.lines;

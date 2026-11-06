@@ -22,6 +22,8 @@ test("packaged CAD trades balance fees, reject overselling, and preserve cash an
     const input = { portfolioId: portfolio.group.id, tickerSymbol: "ABC.TO", quantity: 10, pricePerShare: 10, fee: 1, date: "2026-01-02" };
     const buy = await page.evaluate((params) => (window as any).electron.ipcRenderer.invoke("record-buy", params), input);
     expect(buy.success).toBe(true);
+    expect(await page.evaluate((entryId) => (window as any).electron.ipcRenderer.invoke("delete-transaction", entryId), buy.entry.id))
+      .toMatchObject({ success: false, error: expect.stringMatching(/investment.*correction/i) });
     expect(buy.entry.lines.every((line: any) => line.currency === "CAD")).toBe(true);
     expect(buy.entry.lines.reduce((sum: number, line: any) => sum + line.amount, 0)).toBeCloseTo(0, 10);
     const sell = await page.evaluate((params) => (window as any).electron.ipcRenderer.invoke("record-sell", params), { ...input, quantity: 5, pricePerShare: 12, date: "2026-01-03" });
@@ -38,6 +40,8 @@ test("packaged CAD trades balance fees, reject overselling, and preserve cash an
     expect(JSON.parse(security.investmentProperties.lots)).toEqual([expect.objectContaining({ quantity: 5, amount: 50.5 })]);
     expect(await page.evaluate((id) => (window as any).electron.ipcRenderer.invoke("get-account-balance", id), portfolio.tradeCashAccount.id)).toEqual({ success: true, balance: 958 });
     expect(await page.evaluate((id) => (window as any).electron.ipcRenderer.invoke("get-account-balance", id), security.id)).toEqual({ success: true, balance: 50.5 });
+    const historical = await page.evaluate((accountId) => (window as any).electron.ipcRenderer.invoke("get-position-details", { accountId, asOfDate: "2026-01-02" }), security.id);
+    expect(historical).toMatchObject({ success: true, position: { quantity: 10, costBasis: 101 } });
   } catch (error) {
     await test.info().attach("packaged-investment-trades.log", { body: app.output(), contentType: "text/plain" }); throw error;
   } finally { await app.dispose(); }
@@ -85,6 +89,14 @@ test("packaged distributions and split preserve CAD cash, lot basis and disposal
     expect((await invoke("record-sell", { ...common, quantity: security.investmentProperties.quantity, pricePerShare: 100, date: "2026-01-07" })).success).toBe(true);
     expect(await invoke("get-account-balance", securityId)).toEqual({ success: true, balance: 0 });
     expect(await invoke("get-account-balance", cashId)).toEqual({ success: true, balance: 11460 });
+    for (const [asOfDate, quantity, costBasis] of [
+      ["2026-01-03", 12, 1100], ["2026-01-04", 12, 1088], ["2026-01-05", 12.24, 1088], ["2026-01-06", 24.48, 1088],
+    ] as const) {
+      const historical = await invoke("get-position-details", { accountId: securityId, asOfDate });
+      expect(historical.success).toBe(true);
+      expect(historical.position.quantity).toBeCloseTo(quantity, 10);
+      expect(historical.position.costBasis).toBe(costBasis);
+    }
   } catch (error) {
     await test.info().attach("packaged-distributions.log", { body: app.output(), contentType: "text/plain" }); throw error;
   } finally { await app.dispose(); }

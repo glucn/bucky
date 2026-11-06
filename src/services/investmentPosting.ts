@@ -47,7 +47,7 @@ export async function resolveInvestmentAccounts(tx: Prisma.TransactionClient, in
     if (!security && options.createSecurity) {
       security = await tx.account.create({ data: {
         name: ticker, type: AccountType.User, subtype: AccountSubtype.Asset, currency: cash.currency, groupId: portfolio.id,
-        investmentProperties: { create: { tickerSymbol: ticker, quantity: 0, costBasisMethod: "FIFO", lots: "[]" } },
+        investmentProperties: { create: { tickerSymbol: ticker, quantity: 0, hasCompleteActivityHistory: true, costBasisMethod: "FIFO", lots: "[]" } },
       }, include: { investmentProperties: true } });
     }
     return { security, cash };

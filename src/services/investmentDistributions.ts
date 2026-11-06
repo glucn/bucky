@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { databaseService } from "./database";
+import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
 import { cents, readLots, resolveInvestmentAccounts, type InvestmentSelection, type Lot } from "./investmentPosting";
@@ -74,6 +75,7 @@ export async function recordCashDividend(input: DividendInput) {
   if (input.isReturnOfCapital !== undefined && typeof input.isReturnOfCapital !== "boolean") throw new Error("Select dividend classification explicitly");
   return databaseService.prismaClient.$transaction(async (tx) => {
     const { security, cash } = await resolveInvestmentAccounts(tx, input, { createSecurity: false, requireSecurity: Boolean(input.isReturnOfCapital) });
+    const history = security ? await beginInvestmentActivity(tx, security.id, date) : null;
     const description = input.description || `Dividend from ${input.tickerSymbol.trim()}${input.isReturnOfCapital ? " (Return of Capital)" : ""}`;
     let creditAccountId: string;
     if (input.isReturnOfCapital) {
@@ -81,7 +83,9 @@ export async function recordCashDividend(input: DividendInput) {
       await tx.investmentProperties.update({ where: { id: props.id }, data: { lots: lots ? JSON.stringify(lots) : null } });
       creditAccountId = security!.id;
     } else creditAccountId = (await incomeAccount(tx)).id;
-    return journal(tx, date, description, "dividend_cash", cash.currency, [{ accountId: cash.id, cents: amount }, { accountId: creditAccountId, cents: -amount }]);
+    const entry = await journal(tx, date, description, "dividend_cash", cash.currency, [{ accountId: cash.id, cents: amount }, { accountId: creditAccountId, cents: -amount }]);
+    if (history) await finishInvestmentActivity(tx, history, { kind: input.isReturnOfCapital ? "return_of_capital" : "dividend", cashAmount: amount / 100 }, [entry.id]);
+    return entry;
   }, { timeout: 30000 });
 }
 
@@ -93,13 +97,14 @@ export async function recordReinvestment(input: ReinvestmentInput) {
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("Reinvestment quantity exceeds supported precision");
   return databaseService.prismaClient.$transaction(async (tx) => {
     const { security, cash } = await resolveInvestmentAccounts(tx, input, { createSecurity: input.recordAsIncome, requireSecurity: true });
+    const history = await beginInvestmentActivity(tx, security!.id, date);
     const props = security!.investmentProperties!;
     let lots = positionLots(props);
     const description = input.description || `Reinvested dividend from ${input.tickerSymbol.trim()}`;
     let sourceAccountId: string;
     if (input.recordAsIncome) sourceAccountId = (await incomeAccount(tx)).id;
     else { lots = await reducedBasis(tx, security!.id, lots, amount); sourceAccountId = security!.id; }
-    await journal(tx, date, `${description} - ${input.recordAsIncome ? "Income" : "Return of Capital"}`, "dividend_cash", cash.currency,
+    const receipt = await journal(tx, date, `${description} - ${input.recordAsIncome ? "Income" : "Return of Capital"}`, "dividend_cash", cash.currency,
       [{ accountId: cash.id, cents: amount }, { accountId: sourceAccountId, cents: -amount }]);
     const entry = await journal(tx, date, `${description} - Purchase${input.recordAsIncome ? "" : " (Cost Basis Reduction)"}`, "dividend_reinvest", cash.currency,
       [{ accountId: security!.id, cents: amount }, { accountId: cash.id, cents: -amount }]);
@@ -107,6 +112,7 @@ export async function recordReinvestment(input: ReinvestmentInput) {
     if (!Number.isFinite(newQuantity)) throw new Error("Reinvestment quantity exceeds supported precision");
     lots?.push({ date, quantity, pricePerShare: input.reinvestmentPrice, amount: amount / 100 });
     await tx.investmentProperties.update({ where: { id: props.id }, data: { quantity: newQuantity, lots: lots ? JSON.stringify(lots) : null } });
+    await finishInvestmentActivity(tx, history, { kind: input.recordAsIncome ? "income_reinvestment" : "capital_reinvestment", units: quantity, price: input.reinvestmentPrice, cashAmount: 0 }, [receipt.id, entry.id]);
     return entry;
   }, { timeout: 30000 });
 }
@@ -118,6 +124,7 @@ export async function recordSplit(accountId: string, splitRatio: number, inputDa
   return databaseService.prismaClient.$transaction(async (tx) => {
     const account = await tx.account.findUnique({ where: { id: accountId }, include: { investmentProperties: true } });
     if (!account?.investmentProperties || account.isArchived) throw new Error("Security account not found or archived");
+    const history = await beginInvestmentActivity(tx, accountId, date);
     const props = account.investmentProperties, lots = positionLots(props);
     const quantity = props.quantity * splitRatio;
     const updatedLots = lots?.map((lot) => ({ ...lot, quantity: lot.quantity * splitRatio, pricePerShare: lot.pricePerShare / splitRatio }));
@@ -125,6 +132,8 @@ export async function recordSplit(accountId: string, splitRatio: number, inputDa
       throw new Error("Split result exceeds supported precision");
     }
     await tx.investmentProperties.update({ where: { id: props.id }, data: { quantity, lots: updatedLots ? JSON.stringify(updatedLots) : null } });
-    return tx.journalEntry.create({ data: { date, description: description || `Stock split ${splitRatio}:1 for ${props.tickerSymbol}`, type: "stock_split", displayOrder: Date.now() }, include: { lines: true } });
+    const entry = await tx.journalEntry.create({ data: { date, description: description || `Stock split ${splitRatio}:1 for ${props.tickerSymbol}`, type: "stock_split", displayOrder: Date.now() }, include: { lines: true } });
+    await finishInvestmentActivity(tx, history, { kind: "split", splitRatio, cashAmount: 0 }, [entry.id]);
+    return entry;
   }, { timeout: 30000 });
 }
