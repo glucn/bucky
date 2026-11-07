@@ -1,7 +1,23 @@
 import { describe, it, expect, vi } from 'vitest';
-import { parseToStandardDate, isValidStandardDate } from './dateUtils';
+import { parseToStandardDate, isValidStandardDate, localCalendarDate } from './dateUtils';
 
 describe('dateUtils', () => {
+  it.each([
+    ['America/Vancouver', '2026-01-02', '2026-01-03'],
+    ['UTC', '2026-01-03', '2026-01-03'],
+    ['Europe/Tallinn', '2026-01-03', '2026-01-03'],
+    ['Pacific/Kiritimati', '2026-01-03', '2026-01-04'],
+  ])('keeps local book days separate from UTC timestamps in %s', (zone, early, late) => {
+    vi.stubEnv('TZ', zone);
+    try {
+      expect(localCalendarDate(new Date('2026-01-03T01:00:00Z'))).toBe(early);
+      expect(localCalendarDate(new Date('2026-01-03T11:00:00Z'))).toBe(late);
+      expect(parseToStandardDate(new Date('2026-01-03T01:00:00Z'))).toBe('2026-01-03');
+    } finally { vi.unstubAllEnvs(); }
+  });
+  it('refuses an invalid Date as a local book cutoff', () => {
+    expect(() => localCalendarDate(new Date(NaN))).toThrow(/date/i);
+  });
   it.each(['Europe/Tallinn', 'Pacific/Kiritimati', 'America/Vancouver', 'UTC'])(
     'preserves calendar dates and rejects rollover in %s', (zone) => {
       vi.stubEnv('TZ', zone);

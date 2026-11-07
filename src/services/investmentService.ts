@@ -9,6 +9,33 @@ import { AccountType, AccountSubtype } from "../shared/accountTypes";
 import { appSettingsService } from "./appSettingsService";
 import { valuationConversionService } from "./valuationConversionService";
 import { securityMarketData } from "./securityMarketData";
+import { resolveValuationDate } from "./valuationDate";
+
+export type InvestmentPosition = {
+  accountId: string;
+  market: string | null;
+  priceDate: string | null;
+  tickerSymbol: string;
+  quantity: number;
+  costBasis: number;
+  costPerShare: number;
+  marketPrice: number | null;
+  marketValue: number | null;
+  unrealizedGain: number | null;
+  unrealizedGainPercent: number | null;
+};
+
+type PositionValuation = InvestmentPosition & { currency: string; costBasisBase: number | null; marketValueBase: number | null };
+type PortfolioValuation = {
+  totalCostBasis: number | null;
+  totalMarketValue: number | null;
+  totalUnrealizedGain: number | null;
+  totalUnrealizedGainPercent: number | null;
+  cashBalance: number | null;
+  cashBalancesByCurrency: Record<string, number>;
+  securityCostBasisByCurrency: Record<string, number>;
+  securityMarketValueByCurrency: Record<string, number | null>;
+};
 
 export class InvestmentHistoryUnavailableError extends Error {}
 
@@ -984,22 +1011,11 @@ class InvestmentService {
    * 
    * Requirements: 8.1, 8.2, 8.3
    */
-  public async getPositionDetails(
-    accountId: string,
-    asOfDate?: string
-  ): Promise<{
-    accountId: string;
-    market: string | null;
-    priceDate: string | null;
-    tickerSymbol: string;
-    quantity: number;
-    costBasis: number;
-    costPerShare: number;
-    marketPrice: number | null;
-    marketValue: number | null;
-    unrealizedGain: number | null;
-    unrealizedGainPercent: number | null;
-  }> {
+  public async getPositionDetails(accountId: string, asOfDate?: string): Promise<InvestmentPosition> {
+    return this.getPositionAtDate(accountId, resolveValuationDate(asOfDate), asOfDate !== undefined);
+  }
+
+  private async getPositionAtDate(accountId: string, effectiveDate: string, requireDatedHistory: boolean): Promise<InvestmentPosition> {
     // Query Security Account and InvestmentProperties
     const account = await databaseService.prismaClient.account.findUnique({
       where: { id: accountId },
@@ -1011,13 +1027,11 @@ class InvestmentService {
     }
 
     const investmentProps = account.investmentProperties;
-    const effectiveDate = asOfDate === undefined ? new Date().toISOString().slice(0, 10) : parseToStandardDate(asOfDate);
-    if (!effectiveDate) throw new Error("Invalid investment history date");
     const dated = await getInvestmentSnapshot(accountId, effectiveDate);
     if (dated.status === "unavailable" && dated.reason === "inconsistent_history") throw new Error("Investment history does not match the recorded position. Review the account before valuing it.");
-    if (asOfDate && dated.status !== "available") throw new InvestmentHistoryUnavailableError("This account predates tracked investment history. Its historical holdings need review before valuation.");
+    if (requireDatedHistory && dated.status !== "available") throw new InvestmentHistoryUnavailableError("This account predates tracked investment history. Its historical holdings need review before valuation.");
     const quantity = dated.status === "available" ? dated.quantity : investmentProps.quantity;
-    const costBasis = dated.status === "available" ? dated.costBasis : await databaseService.getAccountBalance(accountId);
+    const costBasis = dated.status === "available" ? dated.costBasis : await databaseService.getAccountBalanceAtDate(accountId, effectiveDate);
     const costPerShare = quantity > 0 ? costBasis / quantity : 0;
 
     const quote = investmentProps.market ? await securityMarketData.latest({ ticker: investmentProps.tickerSymbol, market: investmentProps.market }, effectiveDate) : null;
@@ -1069,33 +1083,20 @@ class InvestmentService {
    * 
    * Requirements: 8.1, 8.5
    */
-  public async getAllPositions(
-    portfolioId: string,
-    asOfDate?: string
-  ): Promise<Array<{
-    accountId: string;
-    market: string | null;
-    priceDate: string | null;
-    tickerSymbol: string;
-    currency: string;
-    quantity: number;
-    costBasis: number;
-    costBasisBase: number | null;
-    costPerShare: number;
-    marketPrice: number | null;
-    marketValue: number | null;
-    marketValueBase: number | null;
-    unrealizedGain: number | null;
-    unrealizedGainPercent: number | null;
-  }>> {
+  public async getAllPositions(portfolioId: string, asOfDate?: string): Promise<PositionValuation[]> {
+    const cutoff = resolveValuationDate(asOfDate);
     const reportingCurrency = (await appSettingsService.getBaseCurrency()) || "USD";
-    const effectiveAsOfDate = asOfDate || new Date().toISOString().slice(0, 10);
+    return this.getPositionsAtDate(portfolioId, cutoff, asOfDate !== undefined, reportingCurrency);
+  }
+
+  private async getPositionsAtDate(portfolioId: string, effectiveAsOfDate: string, requireDatedHistory: boolean, reportingCurrency: string): Promise<PositionValuation[]> {
     const conversionRateCache = new Map<string, number | null>();
 
     const convertToBaseCurrency = async (
       amount: number,
       sourceCurrency: string
     ): Promise<number | null> => {
+      if (amount === 0) return 0;
       const cacheKey = `${sourceCurrency}->${reportingCurrency}@${effectiveAsOfDate}`;
       if (!conversionRateCache.has(cacheKey)) {
         const conversion = await valuationConversionService.convertAmount({
@@ -1121,7 +1122,7 @@ class InvestmentService {
     // Call getPositionDetails for each
     const positions = [];
     for (const securityAccount of portfolioAccounts.securities) {
-      const positionDetails = await this.getPositionDetails(securityAccount.id, asOfDate);
+      const positionDetails = await this.getPositionAtDate(securityAccount.id, effectiveAsOfDate, requireDatedHistory);
       const costBasisBase = await convertToBaseCurrency(positionDetails.costBasis, securityAccount.currency);
       const marketValueBase = positionDetails.marketValue === null ? null : await convertToBaseCurrency(positionDetails.marketValue, securityAccount.currency);
       positions.push({
@@ -1143,20 +1144,13 @@ class InvestmentService {
    * 
    * Requirements: 13.2, 15.3, Multi-currency support
    */
-  public async getPortfolioValue(
-    portfolioId: string
-  ): Promise<{
-    totalCostBasis: number | null;
-    totalMarketValue: number | null;
-    totalUnrealizedGain: number | null;
-    totalUnrealizedGainPercent: number | null;
-    cashBalance: number | null;
-    cashBalancesByCurrency: Record<string, number>;
-    securityCostBasisByCurrency: Record<string, number>;
-    securityMarketValueByCurrency: Record<string, number | null>;
-  }> {
+  public async getPortfolioValue(portfolioId: string): Promise<PortfolioValuation> {
+    const cutoff = resolveValuationDate();
     const reportingCurrency = (await appSettingsService.getBaseCurrency()) || "USD";
-    const asOfDate = new Date().toISOString().slice(0, 10);
+    return this.getPortfolioAtDate(portfolioId, cutoff, reportingCurrency);
+  }
+
+  private async getPortfolioAtDate(portfolioId: string, asOfDate: string, reportingCurrency: string): Promise<PortfolioValuation> {
 
     const conversionRateCache = new Map<string, { rate: number | null; source: string; pair: string | null }>();
 
@@ -1164,6 +1158,7 @@ class InvestmentService {
       amount: number,
       sourceCurrency: string
     ): Promise<number | null> => {
+      if (amount === 0) return 0;
       const cacheKey = `${sourceCurrency}->${reportingCurrency}@${asOfDate}`;
       let conversion = conversionRateCache.get(cacheKey);
 
@@ -1198,7 +1193,7 @@ class InvestmentService {
     const cashBalancesByCurrency: Record<string, number> = {};
 
     for (const tradeCashAccount of portfolioAccounts.tradeCashAccounts) {
-      const balance = await databaseService.getAccountBalance(tradeCashAccount.id);
+      const balance = await databaseService.getAccountBalanceAtDate(tradeCashAccount.id, asOfDate);
       const convertedBalance = await convertToBaseCurrency(balance, tradeCashAccount.currency);
       if (convertedBalance === null) {
         cashSummaryUnavailable = true;
@@ -1217,7 +1212,7 @@ class InvestmentService {
     const securityMarketValueByCurrency: Record<string, number | null> = {};
 
     for (const securityAccount of portfolioAccounts.securities) {
-      const positionDetails = await this.getPositionDetails(securityAccount.id);
+      const positionDetails = await this.getPositionAtDate(securityAccount.id, asOfDate, false);
 
       const nativeMarketValue = positionDetails.marketValue;
 
@@ -1296,10 +1291,12 @@ class InvestmentService {
     percentOfPortfolio: number | null;
   }>> {
     // Get all positions with market values
-    const positions = await this.getAllPositions(portfolioId);
+    const cutoff = resolveValuationDate();
+    const reportingCurrency = (await appSettingsService.getBaseCurrency()) || "USD";
+    const positions = await this.getPositionsAtDate(portfolioId, cutoff, false, reportingCurrency);
 
     // Calculate total portfolio value
-    const portfolioValue = await this.getPortfolioValue(portfolioId);
+    const portfolioValue = await this.getPortfolioAtDate(portfolioId, cutoff, reportingCurrency);
     const totalValue = portfolioValue.totalMarketValue === null || portfolioValue.cashBalance === null ? null : portfolioValue.totalMarketValue + portfolioValue.cashBalance;
 
     // Calculate each position as percentage of total

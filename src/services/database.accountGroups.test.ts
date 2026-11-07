@@ -1,3 +1,4 @@
+import { localCalendarDate } from "../shared/dateUtils";
 /**
  * Property-Based Tests for Account Group Database Operations
  * 
@@ -692,7 +693,7 @@ describe('Account Group Database Operations - Property-Based Tests', () => {
           // Create transactions for account1
           for (const txData of transactionsData) {
             await databaseService.createJournalEntry({
-              date: new Date().toISOString().slice(0, 10),
+              date: localCalendarDate(),
               description: txData.description,
               fromAccountId: account1.id,
               toAccountId: account2.id,
@@ -787,7 +788,7 @@ describe('Account Group Database Operations - Property-Based Tests', () => {
               });
 
               await databaseService.createJournalEntry({
-                date: new Date().toISOString().slice(0, 10),
+                date: localCalendarDate(),
                 description: 'Initial balance',
                 fromAccountId: accountData.balance > 0 ? systemAccount.id : account.id,
                 toAccountId: accountData.balance > 0 ? account.id : systemAccount.id,
@@ -878,7 +879,7 @@ describe('Account Group Database Operations - Property-Based Tests', () => {
               });
 
               await databaseService.createJournalEntry({
-                date: new Date().toISOString().slice(0, 10),
+                date: localCalendarDate(),
                 description: 'Initial balance',
                 fromAccountId: accountData.balance > 0 ? systemAccount.id : account.id,
                 toAccountId: accountData.balance > 0 ? account.id : systemAccount.id,

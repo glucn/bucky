@@ -2,6 +2,12 @@
  * Date utility functions for parsing and formatting dates
  */
 
+/** Date-input defaults and current book cutoffs use the user's local calendar, not UTC. */
+export function localCalendarDate(now = new Date()): string {
+  if (!Number.isFinite(now.getTime())) throw new Error("Invalid calendar date");
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
 /**
  * Parse common date formats and convert to YYYY-MM-DD format
  * Supports:

@@ -117,7 +117,7 @@ const isInternalTransferEntry = (
 const createCurrencyConverter = (reportingCurrency: string, asOfDate: string) => {
   type CachedConversion = {
     rate: number | null;
-    source: "same_currency" | "as_of" | "latest_fallback" | "unavailable";
+    source: import("./valuationConversionService").ConversionSource;
     pair: string | null;
   };
 
@@ -126,6 +126,7 @@ const createCurrencyConverter = (reportingCurrency: string, asOfDate: string) =>
   let usedEstimatedFxRate = false;
 
   const convert = async (amount: number, sourceCurrency: string): Promise<number | null> => {
+    if (amount === 0) return 0;
     const cacheKey = `${sourceCurrency}/${reportingCurrency}@${asOfDate}`;
     let conversion = conversionRateCache.get(cacheKey);
 

@@ -4,13 +4,7 @@ import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { investmentService, InvestmentHistoryUnavailableError } from "./investmentService";
 import { valuationConversionService } from "./valuationConversionService";
-
-function getLocalDateString(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+import { resolveValuationDate } from "./valuationDate";
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -50,7 +44,7 @@ class OverviewService {
   }
 
   public async getOverviewDashboard(asOfDate?: string): Promise<OverviewDashboardPayload> {
-    const effectiveAsOfDate = asOfDate ?? getLocalDateString(new Date());
+    const effectiveAsOfDate = resolveValuationDate(asOfDate);
 
     const userAccounts = await databaseService.prismaClient.account.findMany({
       where: { type: AccountType.User },
@@ -71,6 +65,7 @@ class OverviewService {
       amount: number,
       fromCurrency: string
     ): Promise<number | null> => {
+      if (amount === 0) return 0;
       const cacheKey = `${fromCurrency}->${reportingCurrency}@${effectiveAsOfDate}`;
       let conversion = conversionRateCache.get(cacheKey);
 

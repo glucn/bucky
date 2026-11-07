@@ -5,7 +5,7 @@ import {
   toAccountType,
   AccountSubtype,
 } from "../shared/accountTypes";
-import { parseToStandardDate } from "../shared/dateUtils";
+import { localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
 import { autoCategorizationService } from "./autoCategorizationService";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
 import { resolveDatabaseFile } from "./localDatabase";
@@ -2395,13 +2395,15 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     date: string, // expects YYYY-MM-DD string
     tx?: TransactionClient
   ): Promise<number> {
+    const cutoff = typeof date === "string" ? parseToStandardDate(date) : null;
+    if (!cutoff) throw new Error("Invalid account balance date");
     const prisma = tx || this.prisma;
 
     // Find the most recent checkpoint before or on the given date
     const checkpoint = await prisma.checkpoint.findFirst({
       where: {
         accountId,
-        date: { lte: date },
+        date: { lte: cutoff },
       },
       orderBy: { date: "desc" },
     });
@@ -2419,7 +2421,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
           entry: {
             date: {
               gt: checkpoint.date,
-              lte: date,
+              lte: cutoff,
             },
           },
         },
@@ -2436,6 +2438,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       const lines = await prisma.journalLine.findMany({
         where: {
           accountId,
+          entry: { date: { lte: cutoff } },
         },
         include: { entry: true },
       });
@@ -2443,11 +2446,11 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       // Debug: print the raw lines array to check if l.entry is present
       console.log("[getAccountBalanceAtDate] raw lines:", lines);
 
-      // No date filter: sum all lines for the account
+      // With no checkpoint, the journal is authoritative through the same cutoff.
       balance = lines.reduce((sum: number, line: any) => sum + line.amount, 0);
 
       // Debug: print the total balance
-      console.log("[getAccountBalanceAtDate] total balance (no date filter):", balance);
+      console.log("[getAccountBalanceAtDate] total balance at cutoff:", balance);
     }
 
     return balance;
@@ -2462,8 +2465,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     tx?: TransactionClient
   ): Promise<number> {
     // Use today's date as YYYY-MM-DD string
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const todayStr = localCalendarDate();
     return this.getAccountBalanceAtDate(accountId, todayStr, tx);
   }
 

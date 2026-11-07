@@ -2,6 +2,7 @@ import { type SecurityIdentity, parseSecurityIdentity } from "../shared/security
 import { parseToStandardDate } from "../shared/dateUtils";
 import { databaseService } from "./database";
 import { verifyPricePolicy, type SecurityPricePolicy } from "./securityPricePolicy";
+import { resolveValuationDate } from "./valuationDate";
 
 export type CanonicalSecurityPrice = { date: string; price: number; source: string };
 type Write = { identity: SecurityIdentity; points: Array<{ date: string; price: number } & SecurityPricePolicy>; mode: "fill" | "correct"; source: "manual" | "import" | "provider" };
@@ -17,8 +18,8 @@ function point(row: { marketDate: string; close: number; source: string }): Cano
 
 /** SecurityDailyPrice is the only price source. Never infer a market or fall back to ticker-only history. */
 export const securityMarketData = {
-  async latest(identity: SecurityIdentity, asOfDate = parseToStandardDate(new Date())!): Promise<CanonicalSecurityPrice | null> {
-    const key = parseSecurityIdentity(identity), cutoff = date(asOfDate);
+  async latest(identity: SecurityIdentity, asOfDate?: string): Promise<CanonicalSecurityPrice | null> {
+    const key = parseSecurityIdentity(identity), cutoff = resolveValuationDate(asOfDate);
     const row = await databaseService.prismaClient.securityDailyPrice.findFirst({
       where: { ...key, priceBasis: "raw", barStatus: "complete", marketDate: { lte: cutoff } }, orderBy: { marketDate: "desc" },
     });
