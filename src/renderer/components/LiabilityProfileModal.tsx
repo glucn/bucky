@@ -1,3 +1,4 @@
+import { localCalendarDate } from "../../shared/dateUtils";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   LiabilityDueScheduleType,
@@ -82,8 +83,8 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
   const [form, setForm] = useState<LiabilityProfileInput>({
     template: initialTemplate || LiabilityTemplate.Blank,
     currentAmountOwed: initialCurrentAmountOwed,
-    asOfDate: initialAsOfDate || new Date().toISOString().slice(0, 10),
-    effectiveDate: new Date().toISOString().slice(0, 10),
+    asOfDate: initialAsOfDate || localCalendarDate(),
+    effectiveDate: localCalendarDate(),
   });
 
   const isCreditCard = form.template === LiabilityTemplate.CreditCard;
@@ -126,8 +127,8 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
           setForm({
             template: p.template || initialTemplate || LiabilityTemplate.Blank,
             currentAmountOwed: p.currentAmountOwed,
-            asOfDate: new Date().toISOString().slice(0, 10),
-            effectiveDate: new Date().toISOString().slice(0, 10),
+            asOfDate: localCalendarDate(),
+            effectiveDate: localCalendarDate(),
             counterpartyName: p.counterpartyName || undefined,
             limitOrCeiling: p.limitOrCeiling ?? undefined,
             statementClosingDay: p.statementClosingDay ?? undefined,
@@ -155,7 +156,7 @@ const LiabilityProfileModal: React.FC<LiabilityProfileModalProps> = ({
             template: initialTemplate || prev.template,
             currentAmountOwed:
               prev.currentAmountOwed !== undefined ? prev.currentAmountOwed : initialCurrentAmountOwed,
-            asOfDate: prev.asOfDate || initialAsOfDate || new Date().toISOString().slice(0, 10),
+            asOfDate: prev.asOfDate || initialAsOfDate || localCalendarDate(),
           }));
         }
 

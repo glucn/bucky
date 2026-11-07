@@ -1,3 +1,4 @@
+import { localCalendarDate } from "../../shared/dateUtils";
 import React, { useState, useEffect } from "react";
 
 interface TransactionEntryModalProps {
@@ -27,7 +28,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
   const [quantity, setQuantity] = useState('');
   const [pricePerShare, setPricePerShare] = useState('');
   const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(localCalendarDate());
   const [fee, setFee] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -179,7 +180,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
     setQuantity('');
     setPricePerShare('');
     setAmount('');
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(localCalendarDate());
     setFee('');
     setDescription('');
     setError('');

@@ -61,6 +61,20 @@ test("packaged canonical quotes, missing values and same-ticker holding actions 
     const transactionRow = page.getByRole("row").filter({ hasText: "Buy 1 shares of ABC @ 100" });
     await expect(transactionRow).toContainText(/USD\s*100\.00/);
     await expect(transactionRow).not.toContainText("CA$");
+    const dates = await page.evaluate(() => {
+      const day = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      const now = new Date(), future = new Date(now); future.setDate(future.getDate() + 1);
+      return { today: day(now), future: day(future) };
+    });
+    expect((await page.evaluate((input) => (window as any).electron.ipcRenderer.invoke("record-buy", input), {
+      portfolioId, tickerSymbol: "ABC", securityAccountId: secondId!, quantity: 1, pricePerShare: 100, date: dates.future,
+    })).success).toBe(true);
+    expect(await page.evaluate((id) => (window as any).electron.ipcRenderer.invoke("get-account-balance", id), usd.account.id)).toEqual({ success: true, balance: 400 });
+    expect((await page.evaluate((accountId) => (window as any).electron.ipcRenderer.invoke("get-position-details", { accountId }), secondId!)).position.quantity).toBe(1);
+    expect((await page.evaluate((input) => (window as any).electron.ipcRenderer.invoke("get-position-details", input), { accountId: secondId!, asOfDate: dates.future })).position.quantity).toBe(2);
+    await page.getByRole("button", { name: "Buy", exact: true }).click();
+    await expect(page.locator('input[type="date"]')).toHaveValue(dates.today);
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await page.screenshot({ path: test.info().outputPath("canonical-position.png"), fullPage: true });
   } catch (error) { await test.info().attach("canonical-valuation.log", { body: app.output(), contentType: "text/plain" }); throw error; }
   finally { await app.dispose(); }

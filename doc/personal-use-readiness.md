@@ -9,6 +9,39 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 32 — Consistent book dates and zero-value FX (2026-11-06)
+
+- Fixed a ledger defect exposed by the midnight regression: `getAccountBalanceAtDate` ignored
+  its cutoff when no checkpoint existed, so future postings affected earlier/current balances.
+  Both paths now normalize/validate the date and apply it to their journal query. Opening entries
+  remain dated; dates before an account's first posting correctly return zero.
+- Current cash, investment snapshots, canonical quotes and FX share one captured local book
+  date. Supported explicit date formats normalize before both price and FX selection. Invalid
+  dashboard/conversion dates are refused. Current legacy reads retain their existing distinction
+  from dated historical reads; no legacy activity is inferred.
+- Added a shared local-calendar helper for financial date inputs and current reporting ranges.
+  UTC timestamps, persisted calendar strings and exchange-local provider completion rules retain
+  their separate contracts. Two group-property fixtures had posted UTC tomorrow while asserting
+  local current balances; their fixtures now use the intended local day without weakening the
+  ledger cutoff. A transaction-form regression failed first, with additional timezone coverage.
+- Zero native amounts convert to known zero without requiring a rate or inventing a cross-currency
+  rate. Missing nonzero FX remains unavailable; existing estimated-latest fallback policy is
+  unchanged. Conversion validates finite inputs/currency formats and ignores invalid stored
+  dates and non-finite/nonpositive rates instead of poisoning an earlier valid canonical rate.
+- The initial eight valuation/FX regressions and two direct ledger regressions failed first.
+  Further failing cases showed allocation could mix days or reporting currencies across awaited
+  nested reads; both numerator and denominator now share the request's captured context.
+  Packaged acceptance additionally checks future trade exclusion from today's cash and holdings,
+  explicit future dated holdings, and the investment form's actual local-day default.
+- Market/price controls, full performance/return reporting, exact precision, whole-book checks
+  and personal acceptance remain open. Checkpoint balance overrides and later same-day changes
+  also need reconciliation/source-of-truth review; this batch does not establish that workflow.
+- **1,013 tests across 122 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging using the pinned Node 22 runtime. The extended
+  packaged valuation/cutoff workflow passed three repetitions, and all **14 packaged acceptance
+  cases passed** together. All 25 development/browser E2E cases also passed three repetitions
+  (**75 checks**).
+
 ### Batch 31 — Canonical valuation and stable holding identity (2026-11-06)
 
 - Switched position valuation to exact-market, raw/completed `SecurityDailyPrice` through the

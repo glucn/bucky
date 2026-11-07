@@ -1,3 +1,4 @@
+import { localCalendarDate } from "../../shared/dateUtils";
 import React, { useState, useEffect } from "react";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { SUPPORTED_CURRENCY_OPTIONS } from "../../shared/currencies";
@@ -27,7 +28,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [openingBalanceAmount, setOpeningBalanceAmount] = useState("");
   const [openingBalanceDate, setOpeningBalanceDate] = useState(
-    new Date().toISOString().split("T")[0]
+    localCalendarDate()
   );
   const [openingBalanceError, setOpeningBalanceError] = useState<string | null>(null);
   const [showLiabilitySetup, setShowLiabilitySetup] = useState(false);
@@ -58,7 +59,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
         setSelectedLiabilityTemplate(LiabilityTemplate.Blank);
         setSelectedGroupId("");
         setOpeningBalanceAmount("");
-        setOpeningBalanceDate(new Date().toISOString().split("T")[0]);
+        setOpeningBalanceDate(localCalendarDate());
         setOpeningBalanceError(null);
       };
 

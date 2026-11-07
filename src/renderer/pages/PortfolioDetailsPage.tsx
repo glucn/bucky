@@ -1,3 +1,4 @@
+import { localCalendarDate } from "../../shared/dateUtils";
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { TransactionEntryModal } from "../components/TransactionEntryModal";
@@ -100,7 +101,7 @@ export const PortfolioDetailsPage: React.FC = () => {
 
       // Fetch realized gains (all-time)
       const startDate = '1970-01-01'; // Beginning of time
-      const endDate = new Date().toISOString().split('T')[0];
+      const endDate = localCalendarDate();
       const gainsResult = await window.electron.ipcRenderer.invoke(
         "get-realized-gains",
         { portfolioId, startDate, endDate }

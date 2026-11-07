@@ -1,3 +1,4 @@
+import { localCalendarDate } from "../../shared/dateUtils";
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { formatValuationAmount } from "../utils/valuationFormatting";
@@ -54,9 +55,9 @@ export const PerformanceReportsPage: React.FC = () => {
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
     date.setFullYear(date.getFullYear() - 1);
-    return date.toISOString().split('T')[0];
+    return localCalendarDate(date);
   });
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(localCalendarDate());
 
   useEffect(() => {
     if (portfolioId) {

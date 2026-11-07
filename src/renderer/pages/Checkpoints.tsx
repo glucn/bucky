@@ -1,3 +1,4 @@
+import { localCalendarDate } from "../../shared/dateUtils";
 import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Account } from "../types";
@@ -24,7 +25,7 @@ export const Checkpoints: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newCheckpoint, setNewCheckpoint] = useState({
-    date: new Date().toISOString().split("T")[0],
+    date: localCalendarDate(),
     balance: "",
     description: "",
   });
@@ -115,7 +116,7 @@ export const Checkpoints: React.FC = () => {
       if (result.success) {
         setShowCreateForm(false);
         setNewCheckpoint({
-          date: new Date().toISOString().split("T")[0],
+          date: localCalendarDate(),
           balance: "",
           description: "",
         });

@@ -1,3 +1,4 @@
+import { localCalendarDate } from "../../shared/dateUtils";
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ManualTransactionModal } from "../components/ManualTransactionModal";
@@ -31,7 +32,7 @@ export const SetOpeningBalanceModal: React.FC<{
   );
   const [desiredBalance, setDesiredBalance] = React.useState<string>("");
   const [entryDate, setEntryDate] = React.useState(
-    new Date().toISOString().split("T")[0]
+    localCalendarDate()
   );
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -60,7 +61,7 @@ export const SetOpeningBalanceModal: React.FC<{
         } else {
           setOpeningBalance(null);
           setDesiredBalance("");
-          setEntryDate(new Date().toISOString().split("T")[0]);
+          setEntryDate(localCalendarDate());
         }
       } catch (err) {
         setError("Failed to fetch opening balance.");
@@ -212,7 +213,7 @@ const CreateCheckpointModal: React.FC<{
   onClose: () => void;
 }> = ({ accountId, onClose }) => {
   const [form, setForm] = React.useState({
-    date: new Date().toISOString().split("T")[0],
+    date: localCalendarDate(),
     balance: "",
     description: "",
   });
@@ -238,7 +239,7 @@ const CreateCheckpointModal: React.FC<{
       );
       if (result.success) {
         setForm({
-          date: new Date().toISOString().split("T")[0],
+          date: localCalendarDate(),
           balance: "",
           description: "",
         });

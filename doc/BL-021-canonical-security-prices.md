@@ -82,11 +82,12 @@ Remaining required integration:
   current valuation for a selected reporting range and requires review of opening value, dated
   flows, period-end holdings and return methodology. Nullable market totals do not fix that
   calculation or the income/gain issues below.
-- Unify valuation date boundaries: current investment/FX requests currently select a UTC date,
-  while ordinary current cash balances use a local date. Verify a single consistent cutoff at
-  midnight boundaries and normalize accepted date formats before both quote and FX lookups.
-  Also verify that zero foreign-currency amounts do not unnecessarily
-  require an FX rate or make an otherwise known zero aggregate unavailable.
+- Current valuation now captures one local calendar date and shares it through cash, position,
+  quote and FX lookups. Supported explicit dates normalize before selection. The underlying
+  no-checkpoint ledger query now excludes postings beyond the cutoff. Financial form defaults
+  also use the local book day; provider exchange-day completion remains separate. Zero native
+  amounts do not require FX, and missing nonzero conversions remain unavailable. Legacy baselines,
+  complete historical reporting and checkpoint semantics still need their own review.
 - Income/gain reports must include every trade cash currency and retain structured identity.
   Current income helpers filter by the first cash account, sum nominal amounts across currencies
   and extract ticker labels from editable descriptions. Current-position posting fixes do not
