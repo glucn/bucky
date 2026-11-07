@@ -9,6 +9,32 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 36 — Market assignment and activity-only history (2026-11-07)
+
+- An established market now remains protected when the only history is structured activity,
+  including cash dividends that leave both quantity and security-account journal lines at zero.
+  A genuinely unused listing can still be corrected. Refused relabeling creates no destination
+  metadata and changes no financial or activity records.
+- Income and gain reports use the holding's explicit resolved market, including for events
+  posted before its first assignment. A separate `recordedMarket` preserves what each event
+  originally recorded. Unassigned holdings remain unresolved even if other market metadata for
+  their ticker exists; no market is inferred from a ticker or memo.
+- Reports and dated snapshots refuse contradictory non-null recorded markets instead of
+  reporting a different listing. Initial null-to-resolved assignment remains supported without
+  rewriting historical activity, quantities, basis or journal entries.
+- TDD began with three failing regressions. After report/binding fixes, the dated-snapshot
+  assertion still failed, driving the missing snapshot identity check. Positive regressions
+  preserve unused-listing correction and explicit no-inference behavior.
+- **1,082 tests across 132 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging with pinned Node 22. The new real-UI assignment,
+  refusal and restart scenario passed three repetitions; all **18 packaged acceptance cases passed**
+  together. The visible refusal state was inspected from its screenshot.
+- Read-only review also found that `update-account` forwards currency directly to the unguarded
+  `databaseService.updateAccount`, while canonical position pricing does not compare quote-metadata
+  currency with the holding's unit. Protect these financial-unit paths next. Period returns,
+  statement targeting, baseline/correction/replay, exact decimals, whole-book verification and
+  personal/native acceptance remain open.
+
 ### Batch 35 — Currency-aware investment income and ledger gains (2026-11-07)
 
 - Replaced description parsing and first-cash filtering with journal/category financial facts,

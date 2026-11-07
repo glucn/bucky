@@ -14,9 +14,12 @@ data. It is never read by `securityMarketData` or silently assigned to a market.
 not change ticker, quantity, lots, account currency or journal lines. `bindSecurityMarket`
 requires an explicit market, matching account quote currency and the exact expected current
 binding. It fills missing quote metadata in the same transaction. Conflicting metadata currency
-is refused. An already bound holding with units, lots or journal history cannot be relabeled
+is refused. An already bound holding with units, lots, journal history or structured activity cannot be relabeled
 to another market; duplicate normalized identities in one portfolio are refused. Initial
 assignment to an unresolved holding is explicit, including when it already has history.
+Reports resolve that initial assignment from the holding while retaining each event's original
+`recordedMarket`. Contradictory non-null recorded markets are unavailable in reports and dated
+snapshots; history is not rewritten to conceal a mismatch.
 
 The canonical service reads only the exact identity and the latest date at or before the
 requested calendar date. A current read excludes future quotes. Missing identity/price never

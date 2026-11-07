@@ -52,6 +52,7 @@ async function snapshot(tx: Prisma.TransactionClient, accountId: string, date: s
     for (let index = 0; index < activities.length; index++) {
       const row = activities[index];
       if (row.sequence !== index + 1 || row.date < previousDate || row.ticker !== props.tickerSymbol || row.currency !== account.currency ||
+        (row.market !== null && row.market !== props.market) ||
         row.costBasisMethod !== props.costBasisMethod || !close(row.quantityBefore, quantity) || cents(row.basisBefore) !== cents(basis) || !validActivity(row)) return unavailable;
       quantity = row.quantityAfter; basis = row.basisAfter; lots = row.lotsAfter; previousDate = row.date;
       if (row.date <= date) selected = { status: "available", quantity, costBasis: basis, lots };

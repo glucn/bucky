@@ -22,7 +22,8 @@ export async function bindSecurityMarket(input: SecurityMarketBinding, transacti
     if (holding.market !== input.expectedMarket) throw new Error("Market binding changed; refresh the holding before assigning it");
     if (account.currency !== input.quoteCurrency) throw new Error("Quote currency must match the security account currency; existing amounts cannot be relabeled");
     const key = parseSecurityIdentity({ ticker: holding.tickerSymbol, market });
-    if (holding.market !== null && holding.market !== market && (holding.quantity !== 0 || hasLotHistory(holding.lots) || await tx.journalLine.count({ where: { accountId: account.id } }))) {
+    if (holding.market !== null && holding.market !== market && (holding.quantity !== 0 || hasLotHistory(holding.lots) ||
+      await tx.journalLine.count({ where: { accountId: account.id } }) || await tx.investmentActivity.count({ where: { accountId: account.id } }))) {
       throw new Error("An established holding or its history cannot be relabeled to another market");
     }
     const peers = await tx.investmentProperties.findMany({ where: { market,

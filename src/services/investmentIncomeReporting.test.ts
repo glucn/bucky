@@ -3,8 +3,42 @@ import { resetTestDatabase } from "./database.test.utils";
 import { databaseService } from "./database";
 import { appSettingsService } from "./appSettingsService";
 import { investmentService } from "./investmentService";
+import { bindSecurityMarket } from "./securityMarketBinding";
+import { getInvestmentSnapshot } from "./investmentActivity";
 
 beforeEach(async () => { await resetTestDatabase(); await appSettingsService.setBaseCurrency("CAD"); });
+it("uses an explicit first market assignment for earlier events without rewriting their recorded identity", async () => {
+  const portfolio = await investmentService.createInvestmentPortfolio("Resolved after posting", "CAD");
+  const holding = await investmentService.createSecurityAccount(portfolio.group.id, "ABC");
+  const common = { portfolioId: portfolio.group.id, securityAccountId: holding.id, tickerSymbol: "ABC" };
+  await investmentService.recordBuy({ ...common, quantity: 2, pricePerShare: 10, date: "2026-01-02" });
+  await investmentService.recordDividend({ ...common, amount: 2, date: "2026-01-03" });
+  await investmentService.recordSell({ ...common, quantity: 1, pricePerShare: 15, date: "2026-01-04" });
+  const before = await databaseService.prismaClient.investmentActivity.findMany({ where: { accountId: holding.id }, orderBy: { sequence: "asc" } });
+  expect(before.every((row) => row.market === null)).toBe(true);
+  await databaseService.prismaClient.securityMetadata.create({ data: { ticker: "ABC", market: "TSXV", quoteCurrency: "CAD" } });
+  expect((await investmentService.getDividendIncome(portfolio.group.id, "2026-01-01", "2026-01-04")).rows[0]).toMatchObject({ market: null, recordedMarket: null });
+  expect((await investmentService.getRealizedGains(portfolio.group.id, "2026-01-01", "2026-01-04"))[0]).toMatchObject({ market: null, recordedMarket: null });
+  await bindSecurityMarket({ accountId: holding.id, market: "TSX", quoteCurrency: "CAD", expectedMarket: null });
+  const dividends = await investmentService.getDividendIncome(portfolio.group.id, "2026-01-01", "2026-01-04");
+  expect(dividends.rows[0]).toMatchObject({ accountId: holding.id, market: "TSX", recordedMarket: null, amount: 2 });
+  expect((await investmentService.getRealizedGains(portfolio.group.id, "2026-01-01", "2026-01-04"))[0]).toMatchObject({ accountId: holding.id, market: "TSX", recordedMarket: null, quantity: 1, realizedGain: 5 });
+  expect(await databaseService.prismaClient.investmentActivity.findMany({ where: { accountId: holding.id }, orderBy: { sequence: "asc" } })).toEqual(before);
+  expect(await getInvestmentSnapshot(holding.id, "2026-01-04")).toMatchObject({ status: "available", quantity: 1, costBasis: 10 });
+});
+
+it("refuses a nonnull recorded market that contradicts the holding in reports and dated snapshots", async () => {
+  const portfolio = await investmentService.createInvestmentPortfolio("Conflicting identity");
+  const holding = await investmentService.createMarketHolding({ portfolioId: portfolio.group.id, tickerSymbol: "ABC", market: "NASDAQ", quoteCurrency: "USD", tradeCashAccountId: portfolio.tradeCashAccount.id, costBasisMethod: "FIFO" });
+  const common = { portfolioId: portfolio.group.id, securityAccountId: holding.id, tickerSymbol: "ABC" };
+  await investmentService.recordBuy({ ...common, quantity: 2, pricePerShare: 10, date: "2026-01-02" });
+  await investmentService.recordDividend({ ...common, amount: 2, date: "2026-01-03" });
+  await investmentService.recordSell({ ...common, quantity: 1, pricePerShare: 15, date: "2026-01-04" });
+  await databaseService.prismaClient.investmentProperties.update({ where: { accountId: holding.id }, data: { market: "NYSE" } });
+  await expect(investmentService.getDividendIncome(portfolio.group.id, "2026-01-01", "2026-01-04")).rejects.toThrow(/identity|market|holding/i);
+  await expect(investmentService.getRealizedGains(portfolio.group.id, "2026-01-01", "2026-01-04")).rejects.toThrow(/identity|market|holding/i);
+  expect(await getInvestmentSnapshot(holding.id, "2026-01-04")).toEqual({ status: "unavailable", reason: "inconsistent_history" });
+});
 async function listings() {
   const portfolio = await investmentService.createInvestmentPortfolio("Report listings", "CAD"), usd = await investmentService.addTradeCashAccount(portfolio.group.id, "USD");
   const common = { portfolioId: portfolio.group.id, tickerSymbol: "ABC", costBasisMethod: "FIFO" as const };

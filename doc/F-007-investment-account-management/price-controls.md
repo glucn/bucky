@@ -5,12 +5,14 @@ page. Assignment is explicit, whether the user types the exact source market or 
 provider search result. Discovery filters by exact ticker and compatible supplied currency;
 missing currency is labelled for manual verification. Discovery never assigns a listing.
 The existing binding service preserves quantity, lots, journals and account currency and
-refuses stale/conflicting or established-market relabelling.
+refuses stale/conflicting or established-market relabelling. Structured activity also establishes
+history, including dividend-only events with no units or security journal lines. A genuinely
+unused listing may still be corrected; initial assignment to an unresolved holding remains explicit.
 
 Price controls use the holding's persisted ticker/market and native currency. Quotes are shared
 by all holdings of that identity, including other portfolios; the dialog explains that scope.
 Known metadata/account currency conflicts refuse changes. This does not create a second listing
-for a ticker already held: market-aware security creation remains separate work.
+for a ticker already held; create another listing with the portfolio's separate **Add holding** action.
 
 Manual entry, `Date,Price` CSV and selected legacy records use an explicit **fill** or **correct**
 policy. Preview shows proposed and existing values, existing adjustment/completion status and

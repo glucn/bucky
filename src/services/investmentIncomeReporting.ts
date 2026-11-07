@@ -13,7 +13,11 @@ export function investmentReportRange(start: string, end: string) {
   if (!startDate || !endDate || startDate > endDate) throw new Error("Invalid investment report date range");
   return { startDate, endDate };
 }
-const include = { lines: { include: { account: { include: { investmentProperties: true } } } }, investmentActivityLink: { include: { activity: true } } } as const;
+const holdingIdentity = { select: { tickerSymbol: true, market: true } } as const;
+const include = {
+  lines: { include: { account: { select: { name: true, type: true, subtype: true, groupId: true, investmentProperties: holdingIdentity } } } },
+  investmentActivityLink: { include: { activity: { include: { account: { select: { currency: true, investmentProperties: holdingIdentity } } } } } },
+} as const;
 type Entry = Prisma.JournalEntryGetPayload<{ include: typeof include }>;
 const rounded = (value: number) => cents(value) / 100 || 0;
 async function context(portfolioId: string | null, start: string, end: string, base?: string) {
@@ -58,6 +62,9 @@ function scopes(entry: Entry, portfolioId: string | null) {
 }
 function structured(entry: Entry) {
   const activity = entry.investmentActivityLink?.activity;
+  const holding = activity?.account.investmentProperties;
+  if (activity && (!holding || holding.tickerSymbol !== activity.ticker || activity.account.currency !== activity.currency ||
+    (activity.market !== null && activity.market !== holding.market))) throw new Error("Investment report holding identity requires review");
   if (activity && (activity.date !== entry.date || entry.lines.some((line) => line.currency !== activity.currency) ||
     entry.lines.reduce((sum, line) => sum + cents(line.amount), 0) !== 0)) throw new Error("Investment report activity conflicts with its journal");
   return activity;
@@ -87,7 +94,8 @@ async function incomeFromContext(ctx: Awaited<ReturnType<typeof context>>, kind:
       const converted = await ctx.convert(amount, line.currency, entry.date);
       const ticker = activity?.ticker ?? null;
       report.rows.push({ entryId: entry.id, lineId: line.id, date: entry.date, accountId: activity?.accountId ?? null,
-        tickerSymbol: ticker, market: activity?.market ?? null, currency: line.currency, amount, ...converted });
+        tickerSymbol: ticker, market: activity?.account.investmentProperties?.market ?? null, recordedMarket: activity?.market ?? null,
+        currency: line.currency, amount, ...converted });
       report.byCurrency[line.currency] = rounded((report.byCurrency[line.currency] ?? 0) + amount);
       report.total = report.total === null || converted.amountBase === null ? null : rounded(report.total + converted.amountBase);
       if (ticker) report.byTicker[ticker] = report.byTicker[ticker] === null || converted.amountBase === null ? null : rounded((report.byTicker[ticker] ?? 0) + converted.amountBase);
@@ -144,7 +152,7 @@ async function gainsFromContext(ctx: Awaited<ReturnType<typeof context>>, portfo
     const conversion = await ctx.convert(realizedGain, currency, entry.date);
     rows.push({ entryId: entry.id, date: entry.date, accountId: security.accountId,
       tickerSymbol: activity?.ticker ?? security.account.investmentProperties!.tickerSymbol,
-      market: activity ? activity.market : security.account.investmentProperties!.market,
+      market: security.account.investmentProperties!.market, recordedMarket: activity?.market ?? null,
       currency, baseCurrency: ctx.baseCurrency, quantity: activity?.units ?? null, costBasis, saleProceeds, otherCategoryAmount, realizedGain,
       realizedGainBase: conversion.amountBase, fxSource: conversion.fxSource, fxRate: conversion.fxRate,
       holdingPeriod: activity ? holdingAge(activity, ctx.history) : "unknown" });

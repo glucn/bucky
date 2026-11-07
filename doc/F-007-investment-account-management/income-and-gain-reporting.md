@@ -8,7 +8,11 @@ remain separate readiness work.
 
 Category journal lines supply income and expense amounts. Sale journal lines supply released
 security basis, net cash proceeds and the gain/loss category amount. Account IDs and retained
-activity/journal links supply ticker, market and sale quantity. Reports never parse editable
+activity/journal links supply ticker and sale quantity. The holding's explicit binding supplies
+the resolved market, including after initial assignment to previously unresolved events.
+`recordedMarket` separately retains each event's original market (including null); assignment
+does not rewrite event history. Contradictory non-null recorded markets require review in both
+reports and dated snapshots. Reports never parse editable
 descriptions or infer disposed lots from today's remaining lots. Archived accounts/categories
 remain visible in history. Date ranges normalize and include both endpoints; invalid or reversed
 ranges fail explicitly.

@@ -39,6 +39,22 @@ it("retains a market identity even when quantity is zero but stored lots preserv
   await expect(bindSecurityMarket({ ...request(account.id), expectedMarket: "NASDAQ", market: "NYSE" })).rejects.toThrow(/holding|history/i);
 });
 
+it("retains a listing when dividend-only activity has no security journal line or units", async () => {
+  const account = await security(); await bindSecurityMarket(request(account.id));
+  await investmentService.recordDividend({ portfolioId: account.groupId!, securityAccountId: account.id, tickerSymbol: "ABC", amount: 5, date: "2026-01-02" });
+  expect(await databaseService.prismaClient.journalLine.count({ where: { accountId: account.id } })).toBe(0);
+  const before = await databaseService.prismaClient.investmentActivity.findMany({ where: { accountId: account.id } });
+  await expect(bindSecurityMarket({ ...request(account.id), expectedMarket: "NASDAQ", market: "NYSE" })).rejects.toThrow(/holding|history/i);
+  expect((await databaseService.prismaClient.investmentProperties.findUniqueOrThrow({ where: { accountId: account.id } })).market).toBe("NASDAQ");
+  expect(await databaseService.prismaClient.investmentActivity.findMany({ where: { accountId: account.id } })).toEqual(before);
+  expect(await databaseService.prismaClient.securityMetadata.count({ where: { ticker: "ABC", market: "NYSE" } })).toBe(0);
+});
+it("still allows correcting a genuinely unused listing", async () => {
+  const account = await security(); await bindSecurityMarket(request(account.id));
+  await bindSecurityMarket({ ...request(account.id), expectedMarket: "NASDAQ", market: "NYSE" });
+  expect((await databaseService.prismaClient.investmentProperties.findUniqueOrThrow({ where: { accountId: account.id } })).market).toBe("NYSE");
+});
+
 it("does not allow two normalized copies of one market identity in the same portfolio", async () => {
   const account = await security(); await bindSecurityMarket(request(account.id));
   const other = await databaseService.prismaClient.account.create({ data: { name: "Duplicate legacy ticker", type: "user", subtype: "asset", currency: "USD", groupId: account.groupId,
