@@ -9,6 +9,34 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 38 — Quote units checked at valuation and posting (2026-11-07)
+
+- Account-aware prices require the exact canonical market's metadata quote currency to match
+  the holding. Missing/empty or conflicting units leave price, quote date and nonzero market
+  value unavailable. Quantity, basis and zero-unit value remain known; portfolio totals retain
+  missing-value propagation. No implicit FX conversion or historical rewrite is performed.
+- Bound holdings refuse new activity before journals, lots or activity can change when quote
+  units need review. The central activity guard covers trades and distributions. Legacy unresolved
+  posting remains supported without guessing a market. Price preview, save and exclusion repeat
+  the same unit check; existing raw records remain retained.
+- Position and price controls explain the unit issue and direct the user to market review.
+  Missing metadata can be confirmed explicitly for the existing market, restoring compatible
+  prices without changing history. Known conflicting currency cannot be overwritten there.
+- Seven service regressions and two renderer regressions began red, covering conflicts, unknown
+  and absent metadata, zero units, posting rollback, same-market confirmation, and empty legacy
+  currency. Existing same-ticker fixtures now state their quote units instead of assuming them.
+- **1,099 tests across 134 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging with pinned Node 22. The new packaged quote-unit
+  scenario passed three repetitions; all **20 packaged acceptance cases passed** together. Its
+  visible retained trade error was inspected from the screenshot.
+- Development E2E initially found an expected fixture mismatch: an unresolved holding still
+  expected a price refresh action. The missing-price fixture now explicitly identifies its market
+  and quote currency; a separate real-UI test proves unresolved holdings open review without
+  inferring from ticker metadata. All **15 focused enrichment cases** and then all **78 development
+  E2E cases passed**, each scenario repeated three times. No assertion or product guard was weakened.
+- Dated period returns, statement holding selection, baselines/replay/corrections, exact decimals,
+  whole-book verification and personal/native acceptance remain open.
+
 ### Batch 37 — Account currency cannot relabel financial history (2026-11-07)
 
 - `updateAccount` validates currency codes and checks history in the same transaction as its

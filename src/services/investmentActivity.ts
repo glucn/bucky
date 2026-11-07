@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { databaseService } from "./database";
 import { cents, readLots } from "./investmentPosting";
 import { isValidStandardDate, parseToStandardDate } from "../shared/dateUtils";
+import { securityQuoteCurrency } from "./securityQuoteCurrency";
 
 type Kind = "buy" | "sell" | "split" | "dividend" | "return_of_capital" | "income_reinvestment" | "capital_reinvestment";
 type Details = { kind: Kind; units?: number; price?: number; fee?: number; splitRatio?: number; cashAmount: number };
@@ -77,6 +78,10 @@ export async function getInvestmentSnapshot(accountId: string, asOfDate: string)
 export async function beginInvestmentActivity(tx: Prisma.TransactionClient, accountId: string, date: string) {
   const account = await tx.account.findUniqueOrThrow({ where: { id: accountId }, include: { investmentProperties: true } });
   const props = account.investmentProperties!;
+  if (props.market) {
+    const unit = await securityQuoteCurrency(tx, props.tickerSymbol, props.market, account.currency);
+    if (unit.quoteCurrencyIssue) throw new Error(unit.quoteCurrencyIssue);
+  }
   const last = await tx.investmentActivity.findFirst({ where: { accountId }, orderBy: { sequence: "desc" } });
   if (last && date < last.date) throw new Error("Backdated investment posting requires dated replay of subsequent activity");
   const basis = (await tx.journalLine.aggregate({ where: { accountId }, _sum: { amount: true } }))._sum.amount ?? 0;

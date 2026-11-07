@@ -121,6 +121,7 @@ it("refuses ambiguous tickers and trades only the explicitly selected holding", 
     name: "ABC other exchange", groupId: group.id, type: "user", currency: "USD",
     investmentProperties: { create: { tickerSymbol: "ABC", market: "NYSE", quantity: 0, costBasisMethod: "FIFO", lots: "[]" } },
   } });
+  await databaseService.prismaClient.securityMetadata.create({ data: { ticker: "ABC", market: "NYSE", quoteCurrency: "USD" } });
   await expect(investmentService.recordBuy({ ...trade, portfolioId: group.id })).rejects.toThrow(/select.*security/i);
   await investmentService.recordBuy({ ...trade, portfolioId: group.id, securityAccountId: second.id });
   expect((await databaseService.prismaClient.investmentProperties.findUniqueOrThrow({ where: { accountId: first.id } })).quantity).toBe(0);

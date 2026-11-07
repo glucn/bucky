@@ -33,7 +33,7 @@ const runSql = async (sql: string, params: unknown[] = []) => {
   });
 };
 
-const seedPortfolioSecurityWithoutPrice = async () => {
+const seedPortfolioSecurityWithoutPrice = async (resolved = true) => {
   const portfolioId = crypto.randomUUID();
   const securityAccountId = crypto.randomUUID();
   const investmentPropsId = crypto.randomUUID();
@@ -50,9 +50,14 @@ const seedPortfolioSecurityWithoutPrice = async () => {
   );
 
   await runSql(
-    "INSERT INTO InvestmentProperties (id, accountId, tickerSymbol, securityType, quantity, costBasisMethod, lots, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [investmentPropsId, securityAccountId, "AAPL", "stock", 10, "FIFO", null, now, now]
+    "INSERT INTO InvestmentProperties (id, accountId, tickerSymbol, market, securityType, quantity, costBasisMethod, lots, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [investmentPropsId, securityAccountId, "AAPL", resolved ? "NASDAQ" : null, "stock", 10, "FIFO", null, now, now]
   );
+  await runSql(
+    "INSERT INTO SecurityMetadata (id, ticker, market, quoteCurrency, lastFetchedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(ticker, market) DO UPDATE SET quoteCurrency = excluded.quoteCurrency",
+    [crypto.randomUUID(), "AAPL", "NASDAQ", "USD", now, now, now]
+  );
+  await runSql("DELETE FROM SecurityDailyPrice WHERE ticker = ? AND market = ?", ["AAPL", "NASDAQ"]);
 
   return {
     portfolioId,
@@ -82,6 +87,25 @@ test("missing market data CTA opens refresh panel", async () => {
   } finally {
     await closeApp(app);
   }
+});
+
+test("unresolved listing opens market review without inferring its market from ticker metadata", async () => {
+  const app = await launchApp(), page = await getMainWindow(app);
+  attachDebugLogging(page, "unresolved-market-cta");
+  try {
+    const seeded = await seedPortfolioSecurityWithoutPrice(false);
+    await page.goto(`${appBaseUrl}/investments/${seeded.portfolioId}/position/${seeded.tickerSymbol}`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("missing-enrichment-cta")).toContainText("Assign this holding's market");
+    await expect(page.getByTestId("missing-enrichment-refresh-now")).toHaveCount(0);
+    await page.getByRole("button", { name: "Review market currency" }).click();
+    const dialog = page.getByTestId("security-price-dialog");
+    await expect(dialog.getByText("AAPL · Market needs review · USD", { exact: true })).toBeVisible();
+    await expect(dialog.getByLabel("Price in USD")).toHaveCount(0);
+    const accounts = await page.evaluate((portfolioId) => (window as any).electron.ipcRenderer.invoke("get-portfolio-accounts", portfolioId), seeded.portfolioId);
+    expect(accounts.accounts.securities[0].investmentProperties.market).toBeNull();
+  } catch (error) {
+    await captureScreenshot(page, "unresolved-market-cta-failure"); throw error;
+  } finally { await closeApp(app); }
 });
 
 test("completed-with-issues summary is visible in refresh panel", async () => {

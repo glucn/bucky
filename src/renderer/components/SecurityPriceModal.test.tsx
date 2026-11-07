@@ -4,7 +4,7 @@ import { expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SecurityPriceModal } from "./SecurityPriceModal";
 
-const context = { accountId: "holding", ticker: "ABC", market: "TSX", currency: "CAD", hasTrackedHistory: true, prices: [], legacyPrices: [], priceCount: 0, legacyCount: 0 };
+const context = { accountId: "holding", ticker: "ABC", market: "TSX", currency: "CAD", quoteCurrency: "CAD", quoteCurrencyIssue: null, hasTrackedHistory: true, prices: [], legacyPrices: [], priceCount: 0, legacyCount: 0 };
 it("requires explicit correction policy and raw-close confirmation, then saves the exact reviewed account and prices", async () => {
   const invoke = vi.fn(async (channel) => channel === "get-security-price-context" ? { success: true, context } : channel === "preview-security-prices" ? { success: true, preview: { rows: [{ date: "2026-01-02", price: 12, token: null, action: "insert", existing: null }] } } : { success: true, result: { inserted: 1, corrected: 0, retained: 0 } });
   Object.defineProperty(window, "electron", { configurable: true, value: { ipcRenderer: { invoke } } });
@@ -18,6 +18,24 @@ it("requires explicit correction policy and raw-close confirmation, then saves t
   fireEvent.click(screen.getByLabelText(/I verified these are unadjusted completed/)); fireEvent.click(save);
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("save-security-prices", expect.objectContaining({ accountId: "holding", expectedMarket: "TSX", mode: "correct", confirmRawClose: true, expected: [{ date: "2026-01-02", price: 12, token: null }] })));
   await screen.findByText("1 inserted · 0 corrected · 0 retained");
+});
+
+it("shows unconfirmed quote units and allows same-market confirmation before reviewing prices", async () => {
+  let confirmed = false;
+  const invoke = vi.fn(async (channel, input) => {
+    if (channel === "get-security-price-context") return { success: true, context: confirmed ? context : { ...context, quoteCurrency: null, quoteCurrencyIssue: "Quote currency is unconfirmed.", priceCount: 1 } };
+    if (channel === "bind-security-market") { confirmed = true; return { success: true }; }
+    throw new Error(`Unexpected ${channel}`);
+  });
+  Object.defineProperty(window, "electron", { configurable: true, value: { ipcRenderer: { invoke } } });
+  render(<SecurityPriceModal isOpen accountId="holding" onClose={vi.fn()} />);
+  await screen.findByText("Quote currency is unconfirmed.");
+  expect(screen.queryByLabelText("Price in CAD")).toBeNull();
+  const confirm = screen.getByRole("button", { name: "Confirm market currency" });
+  expect((confirm as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(confirm);
+  await screen.findByLabelText("Price in CAD");
+  expect(invoke).toHaveBeenCalledWith("bind-security-market", { accountId: "holding", market: "TSX", expectedMarket: "TSX", quoteCurrency: "CAD" });
 });
 it("keeps stale-review errors visible and never closes or refreshes the parent on failure", async () => {
   const close = vi.fn(), changed = vi.fn();

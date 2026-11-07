@@ -11,7 +11,12 @@ unused listing may still be corrected; initial assignment to an unresolved holdi
 
 Price controls use the holding's persisted ticker/market and native currency. Quotes are shared
 by all holdings of that identity, including other portfolios; the dialog explains that scope.
-Known metadata/account currency conflicts refuse changes. This does not create a second listing
+Missing or conflicting metadata/account quote currencies refuse price preview, save and exclusion.
+The dialog exposes the unit issue and withholds canonical price values and entry controls until
+it is resolved, retaining stored records and their count. Missing metadata (including an empty
+legacy currency) can be confirmed explicitly for the same market through **Confirm market currency**.
+Confirmation preserves prices, journals and activity. A known conflicting currency cannot be
+overwritten through this action. This does not create a second listing
 for a ticker already held; create another listing with the portfolio's separate **Add holding** action.
 
 Manual entry, `Date,Price` CSV and selected legacy records use an explicit **fill** or **correct**

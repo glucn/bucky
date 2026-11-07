@@ -79,6 +79,12 @@ Remaining required integration:
   aborting unrelated dashboard cards. Inconsistent tracked history still refuses valuation.
   Quote precision is retained before multiplying units; display/amount rounding remains the
   existing cent policy. Account IDs, market and quote date accompany position reads.
+  Account-aware valuation also requires canonical metadata quote currency to match the holding.
+  Unknown/conflicting units leave price, quote date and nonzero market values unavailable while
+  retaining known quantity/basis and an explicit unit issue. Zero-unit positions remain worth zero.
+  Bound holdings refuse new financial activity until their unit is confirmed; unresolved legacy
+  posting remains supported without inventing a market. Missing units can be confirmed explicitly
+  for the existing market; known conflicts cannot be overwritten by that action.
 - Holding links now use account IDs, and position actions retain that account selection. A
   legacy ticker-only route resolves only a unique holding; ambiguous tickers require selection
   from the portfolio. Portfolio rows label market identity. Reports join allocations by account

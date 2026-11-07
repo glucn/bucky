@@ -9,6 +9,7 @@ interface PositionDetails {
   accountId: string;
   market: string | null;
   priceDate: string | null;
+  quoteCurrencyIssue: string | null;
   tickerSymbol: string;
   quantity: number;
   costBasis: number;
@@ -170,8 +171,8 @@ export const PositionDetailsPage: React.FC = () => {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Summary</h3>
         {position.marketPrice === null ? (
           <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="missing-enrichment-cta">
-            Market data is unavailable for this position at the selected valuation point.
-            <button
+            {position.quoteCurrencyIssue || "Market data is unavailable for this position at the selected valuation point."}
+            {position.quoteCurrencyIssue ? <button type="button" className="ml-2 text-primary-700 underline" onClick={() => setShowPrices(true)}>Review market currency</button> : <button
               type="button"
               className="ml-2 text-primary-700 underline"
               onClick={() => {
@@ -180,7 +181,7 @@ export const PositionDetailsPage: React.FC = () => {
               data-testid="missing-enrichment-refresh-now"
             >
               Refresh now
-            </button>
+            </button>}
           </div>
         ) : null}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">

@@ -7,6 +7,7 @@ import type { PriceRequest, PricePreviewRow } from "../shared/securityPrices";
 import { securityMarketData } from "./securityMarketData";
 import { resolveValuationDate } from "./valuationDate";
 import { resolveConfiguredEnrichmentProvider } from "./enrichmentRuntimeService";
+import { securityQuoteCurrency } from "./securityQuoteCurrency";
 
 async function holding(tx: Prisma.TransactionClient, id: string) {
   if (typeof id !== "string" || !id || id.length > 128) throw new Error("Invalid security account");
@@ -32,6 +33,7 @@ export async function searchSecurityMarkets(accountId: string, resolve = resolve
 export async function getSecurityPriceContext(input: { accountId: string; endDate?: string }) {
   return databaseService.prismaClient.$transaction(async (tx) => {
     const account = await holding(tx, input?.accountId), props = account.investmentProperties!;
+    const quoteUnit = await securityQuoteCurrency(tx, props.tickerSymbol, props.market, account.currency);
     const end = input.endDate === undefined || input.endDate === "" ? undefined : resolveValuationDate(input.endDate);
     const where = props.market ? { ...parseSecurityIdentity({ ticker: props.tickerSymbol, market: props.market }), ...(end ? { marketDate: { lte: end } } : {}) } : null;
     const prices = where ? await tx.securityDailyPrice.findMany({ where, orderBy: { marketDate: "desc" }, take: 200 }) : [];
@@ -41,8 +43,8 @@ export async function getSecurityPriceContext(input: { accountId: string; endDat
       .map(({ id, date, price, source }) => ({ id, date, price, source, normalizedDate: parseToStandardDate(date) }))
       .filter((row) => !end || row.normalizedDate === null || row.normalizedDate <= end)
       .sort((a, b) => (b.normalizedDate || "9999-99-99").localeCompare(a.normalizedDate || "9999-99-99") || a.id.localeCompare(b.id));
-    return { accountId: account.id, ticker: props.tickerSymbol, market: props.market, currency: account.currency, hasTrackedHistory: props.hasCompleteActivityHistory,
-      prices: prices.map((row) => ({ id: row.id, date: row.marketDate, price: row.close, source: row.source, priceBasis: row.priceBasis, barStatus: row.barStatus, basisAsOf: row.basisAsOf, token: token(row) })),
+    return { accountId: account.id, ticker: props.tickerSymbol, market: props.market, currency: account.currency, ...quoteUnit, hasTrackedHistory: props.hasCompleteActivityHistory,
+      prices: quoteUnit.quoteCurrencyIssue ? [] : prices.map((row) => ({ id: row.id, date: row.marketDate, price: row.close, source: row.source, priceBasis: row.priceBasis, barStatus: row.barStatus, basisAsOf: row.basisAsOf, token: token(row) })),
       legacyPrices: legacyPrices.slice(0, 200),
       priceCount: where ? await tx.securityDailyPrice.count({ where }) : 0, legacyCount: legacyPrices.length,
     };
@@ -54,8 +56,8 @@ export async function excludeSecurityPrice(input: { accountId: string; expectedM
     const account = await holding(tx, input?.accountId), props = account.investmentProperties!;
     if (!props.market || props.market !== input.expectedMarket) throw new Error("Market changed; review the holding first");
     const identity = parseSecurityIdentity({ ticker: props.tickerSymbol, market: props.market });
-    const metadata = await tx.securityMetadata.findUnique({ where: { ticker_market: identity } });
-    if (metadata?.quoteCurrency && metadata.quoteCurrency !== account.currency) throw new Error("Market quote currency conflicts with this holding");
+    const unit = await securityQuoteCurrency(tx, identity.ticker, identity.market, account.currency);
+    if (unit.quoteCurrencyIssue) throw new Error(unit.quoteCurrencyIssue);
     if (typeof input.priceId !== "string" || typeof input.token !== "string") throw new Error("Review the stored price before excluding it");
     const point = await tx.securityDailyPrice.findFirst({ where: { id: input.priceId, ...identity } });
     if (!point || token(point) !== input.token) throw new Error("Price changed; review its current record before excluding it");
@@ -69,8 +71,8 @@ async function review(tx: Prisma.TransactionClient, input: PriceRequest) {
   const account = await holding(tx, input.accountId), props = account.investmentProperties!;
   if (!props.market || props.market !== input.expectedMarket) throw new Error("Market changed or is unresolved; review the holding's market first");
   const identity = parseSecurityIdentity({ ticker: props.tickerSymbol, market: props.market });
-  const metadata = await tx.securityMetadata.findUnique({ where: { ticker_market: identity } });
-  if (metadata?.quoteCurrency && metadata.quoteCurrency !== account.currency) throw new Error("Stored market quote currency conflicts with this holding; review its identity before changing shared prices");
+  const unit = await securityQuoteCurrency(tx, identity.ticker, identity.market, account.currency);
+  if (unit.quoteCurrencyIssue) throw new Error(unit.quoteCurrencyIssue);
   let points = input.points;
   if (input.source === "legacy") {
     if (!Array.isArray(input.legacyIds) || !input.legacyIds.length || input.legacyIds.length > 10000 || input.legacyIds.some((id) => typeof id !== "string") || new Set(input.legacyIds).size !== input.legacyIds.length) throw new Error("Select valid legacy records explicitly");

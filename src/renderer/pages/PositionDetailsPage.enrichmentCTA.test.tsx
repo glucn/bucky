@@ -123,6 +123,20 @@ describe("PositionDetailsPage missing enrichment CTA", () => {
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("get-position-details", { accountId: "security-1" }));
   });
 
+  it("directs conflicting quote units to market review instead of suggesting another price refresh", async () => {
+    const original = window.electron.ipcRenderer.invoke;
+    window.electron.ipcRenderer.invoke = vi.fn(async (channel, params) => {
+      const result = await original(channel, params);
+      return channel === "get-position-details" ? { ...result, position: { ...result.position, quoteCurrencyIssue: "Market quote currency USD conflicts with holding currency CAD." } } : result;
+    });
+    render(<MemoryRouter initialEntries={["/investments/p-1/holding/security-1"]}><Routes>
+      <Route path="/investments/:portfolioId/holding/:securityAccountId" element={<PositionDetailsPage />} />
+    </Routes></MemoryRouter>);
+    await screen.findByText("Market quote currency USD conflicts with holding currency CAD.");
+    expect(screen.getByRole("button", { name: "Review market currency" })).toBeTruthy();
+    expect(screen.queryByTestId("missing-enrichment-refresh-now")).toBeNull();
+  });
+
   it("labels transaction amounts in the journal line currency rather than the book's base currency", async () => {
     const original = window.electron.ipcRenderer.invoke;
     window.electron.ipcRenderer.invoke = vi.fn(async (channel, params) => channel === "get-transactions" ? [

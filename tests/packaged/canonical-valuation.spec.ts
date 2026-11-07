@@ -30,6 +30,10 @@ test("packaged canonical quotes, missing values and same-ticker holding actions 
     let secondId: string;
     try {
       await fixture.investmentProperties.update({ where: { accountId: firstId }, data: { market: "TSX" } });
+      await fixture.securityMetadata.createMany({ data: [
+        { ticker: "ABC", market: "TSX", quoteCurrency: "CAD" },
+        { ticker: "ABC", market: "NASDAQ", quoteCurrency: "USD" },
+      ] });
       const second = await fixture.account.create({ data: { name: "ABC US", type: "user", subtype: "asset", currency: "USD", groupId: portfolioId,
         investmentProperties: { create: { tickerSymbol: "ABC", market: "NASDAQ", quantity: 0, costBasisMethod: "FIFO", lots: "[]", hasCompleteActivityHistory: true } } } }); secondId = second.id;
       await fixture.securityDailyPrice.createMany({ data: [

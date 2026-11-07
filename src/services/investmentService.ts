@@ -13,12 +13,15 @@ import { AccountType, AccountSubtype } from "../shared/accountTypes";
 import { appSettingsService } from "./appSettingsService";
 import { valuationConversionService } from "./valuationConversionService";
 import { securityMarketData } from "./securityMarketData";
+import { securityQuoteCurrency } from "./securityQuoteCurrency";
 import { resolveValuationDate } from "./valuationDate";
 
 export type InvestmentPosition = {
   accountId: string;
   market: string | null;
   priceDate: string | null;
+  quoteCurrency: string | null;
+  quoteCurrencyIssue: string | null;
   tickerSymbol: string;
   quantity: number;
   costBasis: number;
@@ -864,7 +867,8 @@ class InvestmentService {
     const costBasis = dated.status === "available" ? dated.costBasis : await databaseService.getAccountBalanceAtDate(accountId, effectiveDate);
     const costPerShare = quantity > 0 ? costBasis / quantity : 0;
 
-    const quote = investmentProps.market ? await securityMarketData.latest({ ticker: investmentProps.tickerSymbol, market: investmentProps.market }, effectiveDate) : null;
+    const quoteUnit = await securityQuoteCurrency(databaseService.prismaClient, investmentProps.tickerSymbol, investmentProps.market, account.currency);
+    const quote = investmentProps.market && !quoteUnit.quoteCurrencyIssue ? await securityMarketData.latest({ ticker: investmentProps.tickerSymbol, market: investmentProps.market }, effectiveDate) : null;
     const marketPrice = quote?.price ?? null;
 
     // Calculate market value: quantity × market price
@@ -893,6 +897,7 @@ class InvestmentService {
       accountId,
       market: investmentProps.market,
       priceDate: quote?.date ?? null,
+      ...quoteUnit,
       tickerSymbol: investmentProps.tickerSymbol,
       quantity,
       costBasis: fixPrecision(costBasis),
