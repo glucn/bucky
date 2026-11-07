@@ -3,10 +3,11 @@ type FormatOptions = {
 };
 
 export const formatValuationAmount = (
-  amount: number,
+  amount: number | null | undefined,
   currency: string,
   options: FormatOptions = {}
 ): string => {
+  if (typeof amount !== "number" || !Number.isFinite(amount)) return "N/A";
   const threshold = 0.0001;
   const normalizedAmount = Math.abs(amount) < threshold ? 0 : amount;
 

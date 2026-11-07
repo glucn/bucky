@@ -1,5 +1,5 @@
 import { localCalendarDate } from "../../shared/dateUtils";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { TransactionEntryModal } from "../components/TransactionEntryModal";
 import { useAccounts } from "../context/AccountsContext";
@@ -44,8 +44,13 @@ export const PortfolioDetailsPage: React.FC = () => {
   const [portfolio, setPortfolio] = useState<any>(null);
   const [portfolioValue, setPortfolioValue] = useState<PortfolioValue | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
-  const [realizedGains, setRealizedGains] = useState<number>(0);
-  const [dividendIncome, setDividendIncome] = useState<number>(0);
+  const [realizedGains, setRealizedGains] = useState<number | null>(null);
+  const [gainsCurrency, setGainsCurrency] = useState("USD");
+  const [dividendCurrency, setDividendCurrency] = useState("USD");
+  const [dividendNative, setDividendNative] = useState<Record<string, number>>({});
+  const [reportError, setReportError] = useState("");
+  const generation = useRef(0);
+  const [dividendIncome, setDividendIncome] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showNewHolding, setShowNewHolding] = useState(false);
@@ -66,66 +71,46 @@ export const PortfolioDetailsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (portfolioId) {
-      fetchPortfolioData();
-    }
-    void window.electron.getBaseCurrencyImpactState().then((state) => {
-      setBaseCurrency(state.baseCurrency || "USD");
-    });
+    void fetchPortfolioData();
+    let active = true;
+    void window.electron.getBaseCurrencyImpactState().then((state) => { if (active) setBaseCurrency(state.baseCurrency || "USD"); });
+    return () => { active = false; generation.current++; };
   }, [portfolioId]);
 
   const fetchPortfolioData = async () => {
     if (!portfolioId) return;
-
-    setLoading(true);
+    const token = ++generation.current;
+    setLoading(true); setPortfolio(null); setPortfolioValue(null); setPositions([]);
+    setRealizedGains(null); setDividendIncome(null); setDividendNative({}); setReportError("");
+    const endDate = localCalendarDate(), startDate = '1970-01-01';
     try {
-      // Fetch portfolio details
-      const groupsResult = await window.electron.ipcRenderer.invoke("get-account-groups", "user");
-      if (groupsResult.success) {
-        const foundPortfolio = groupsResult.groups.find((g: any) => g.id === portfolioId);
-        setPortfolio(foundPortfolio);
+      const [groups, value, positions, gains, dividends] = await Promise.all([
+        window.electron.ipcRenderer.invoke("get-account-groups", "user"),
+        window.electron.ipcRenderer.invoke("get-portfolio-value", portfolioId),
+        window.electron.ipcRenderer.invoke("get-all-positions", { portfolioId }),
+        window.electron.ipcRenderer.invoke("get-realized-gains", { portfolioId, startDate, endDate }),
+        window.electron.ipcRenderer.invoke("get-dividend-income", { portfolioId, startDate, endDate }),
+      ]);
+      if (token !== generation.current) return;
+      if (groups.success) setPortfolio(groups.groups.find((g: any) => g.id === portfolioId) ?? null);
+      if (value.success) setPortfolioValue(value.value);
+      if (positions.success) setPositions(positions.positions);
+      if (gains.success && Array.isArray(gains.gains)) {
+        const currency = gains.baseCurrency || gains.gains[0]?.baseCurrency || baseCurrency;
+        const available = gains.gains.every((g: any) => Number.isFinite(g.realizedGainBase) && g.baseCurrency === currency);
+        setRealizedGains(available ? gains.gains.reduce((sum: number, g: any) => sum + g.realizedGainBase, 0) : null);
+        setGainsCurrency(currency);
       }
-
-      // Fetch portfolio value
-      const valueResult = await window.electron.ipcRenderer.invoke("get-portfolio-value", portfolioId);
-      if (valueResult.success) {
-        setPortfolioValue(valueResult.value);
+      if (dividends.success && dividends.income) {
+        setDividendIncome(typeof dividends.income.total === "number" ? dividends.income.total : null);
+        setDividendCurrency(dividends.income.baseCurrency || baseCurrency);
+        setDividendNative(dividends.income.byCurrency || {});
       }
-
-      // Fetch all positions
-      const positionsResult = await window.electron.ipcRenderer.invoke(
-        "get-all-positions",
-        { portfolioId }
-      );
-      if (positionsResult.success) {
-        setPositions(positionsResult.positions);
-      }
-
-      // Fetch realized gains (all-time)
-      const startDate = '1970-01-01'; // Beginning of time
-      const endDate = localCalendarDate();
-      const gainsResult = await window.electron.ipcRenderer.invoke(
-        "get-realized-gains",
-        { portfolioId, startDate, endDate }
-      );
-      if (gainsResult.success && gainsResult.gains) {
-        const totalGains = gainsResult.gains.reduce((sum: number, g: any) => sum + g.realizedGain, 0);
-        setRealizedGains(totalGains);
-      }
-
-      // Fetch dividend income (all-time)
-      const dividendResult = await window.electron.ipcRenderer.invoke(
-        "get-dividend-income",
-        { portfolioId, startDate, endDate }
-      );
-      if (dividendResult.success && dividendResult.income) {
-        setDividendIncome(dividendResult.income.total);
-      }
+      const failed = [groups, value, positions, gains, dividends].filter((result) => !result.success);
+      setReportError(failed.map((result) => result.error || "Report data is unavailable").join("; "));
     } catch (error) {
-      console.error("Error fetching portfolio data:", error);
-    } finally {
-      setLoading(false);
-    }
+      if (token === generation.current) setReportError(error instanceof Error ? error.message : "Report data is unavailable");
+    } finally { if (token === generation.current) setLoading(false); }
   };
 
   const handleTransactionCreated = async () => {
@@ -182,7 +167,7 @@ export const PortfolioDetailsPage: React.FC = () => {
   if (!portfolio) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Portfolio not found</div>
+        <div className="text-gray-500">{reportError ? <><p role="alert">{reportError}</p><button onClick={() => void fetchPortfolioData()}>Retry report data</button></> : "Portfolio not found"}</div>
       </div>
     );
   }
@@ -195,6 +180,7 @@ export const PortfolioDetailsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {reportError ? <div className="rounded border border-red-200 bg-red-50 p-3"><p role="alert">{reportError}</p><button className="underline" onClick={() => void fetchPortfolioData()}>Retry report data</button></div> : null}
       {/* Header */}
       <div className="bg-white shadow rounded-lg p-6">
         <div className="flex justify-between items-center mb-4">
@@ -273,16 +259,17 @@ export const PortfolioDetailsPage: React.FC = () => {
                 <div>
                   <p className="text-sm text-gray-500">Realized Gain/Loss</p>
                   <p className={`text-xl font-semibold ${
-                    realizedGains >= 0 ? 'text-green-600' : 'text-red-600'
+                    (realizedGains ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
-                    {formatValuationAmount(realizedGains, baseCurrency)}
+                    {formatValuationAmount(realizedGains, gainsCurrency)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Dividend Income</p>
                   <p className="text-xl font-semibold text-green-600">
-                    {formatValuationAmount(dividendIncome, baseCurrency)}
+                    {formatValuationAmount(dividendIncome, dividendCurrency)}
                   </p>
+                  {Object.keys(dividendNative).length ? <p className="text-sm text-gray-500">Native: {formatMultiCurrencyBalances(dividendNative)}</p> : null}
                 </div>
               </div>
             </div>
@@ -354,7 +341,7 @@ export const PortfolioDetailsPage: React.FC = () => {
                       (position.unrealizedGain || 0) >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
                       {position.unrealizedGain !== null
-                        ? formatValuationAmount(position.unrealizedGain, baseCurrency, { disambiguate: true })
+                        ? formatValuationAmount(position.unrealizedGain, position.currency, { disambiguate: true })
                         : '-'}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-medium ${

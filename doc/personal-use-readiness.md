@@ -9,6 +9,52 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 35 — Currency-aware investment income and ledger gains (2026-11-07)
+
+- Replaced description parsing and first-cash filtering with journal/category financial facts,
+  explicit portfolio account scope and retained activity/journal identity. Same-ticker listings
+  retain account IDs and markets. Custom memos no longer remove sales or determine quantities.
+- Income, interest, standalone fees and ledger gains convert at posting-date canonical
+  `FxDailyRate` rates. Future/latest fallback rates do not masquerade as historical rates.
+  Native amounts and currency breakdowns remain available; missing required FX makes the base
+  aggregate unavailable. Summary components share a journal/FX snapshot and reporting currency.
+- Added zero-gain disposals, consumed FIFO lot ages (including mixed ages), explicit unknown
+  legacy quantities, and checks that structured sale units/prices/fees/basis/cash agree with
+  the journal. Retained legacy sale costs remain distinct from the ledger gain and reconcile
+  to net cash proceeds. Gross income stays separate from withholding; ambiguous legacy category
+  classification or multi-portfolio attribution requires review.
+- Portfolio cards use converted gains, native holding gains keep their currency, and sale tables
+  show native and base gain separately. Income cards retain native currency amounts. Failed or
+  partially unavailable reports show N/A with visible errors/retry, not zero or no activity.
+  Guarded parallel loading prevents late responses from replacing another portfolio's report.
+  Shared monetary formatting no longer turns null into zero or renders nonfinite values.
+- TDD began with six failing service contracts and failing renderer currency/error/race tests.
+  Additional failing regressions drove formatter null handling, category-kind preservation,
+  gross-versus-net withholding, separate legacy sale costs, and allocation currency failure guards.
+  Registered IPC and renderer regressions also require currency metadata on empty/scalar reports.
+  See the [income and gain reporting contract](F-007-investment-account-management/income-and-gain-reporting.md).
+- Full packaged regression exposed a shutdown race when closing a completed statement import
+  while parallel report reads were starting. Session access now revokes immediately, queued
+  interactive callbacks cannot start after revocation, and active transactions finish/roll back
+  before driver disconnect. Two failing lifecycle tests drove this fix. Both original import
+  restart/quit cases passed three repetitions each with their five-second quit assertion unchanged.
+- **1,078 tests across 132 files passed in each native and encrypted storage mode**, including
+  the lifecycle regressions. TypeScript checking and Apple Silicon packaging passed with pinned
+  Node 22. The new reporting scenario passed three packaged repetitions; the final complete
+  packaged suite passed all **17 cases**. The report screenshot was visually inspected.
+- The first development E2E run passed 73 checks, timed out once waiting for the unrelated
+  base-currency reconciliation banner and skipped its serial companion. Six focused diagnostic
+  banner checks passed, followed by all 25 cases passing three repetitions (**75 checks**) with
+  diagnostic logging/failure traces enabled. The original timeout's cause was not established;
+  no product change or weakened assertion was used to mask it. Keep this as a verification
+  limitation if the banner failure recurs.
+- Complete period returns and cash-flow attribution, same-ticker statement selection, historical
+  baseline/correction/replay, raw Yahoo quotes, exact decimals, whole-book verification and
+  representative personal/native acceptance remain open. Converted native ledger gains do not
+  replace a complete economic return calculation in base currency.
+  Market binding also needs review against activity-only history and events posted before their
+  account's first explicit market assignment.
+
 ### Batch 34 — Atomic market-aware holding setup and cash selection (2026-11-07)
 
 - Added a lazy **Add holding** dialog on portfolios. Setup requires an explicit market, selected

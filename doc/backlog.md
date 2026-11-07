@@ -482,6 +482,9 @@ This file tracks deferred product improvements that are intentionally out of cur
   stale-save protection and reversible exclusion of unreliable quotes.
   Explicit market-aware creation now supports distinct same-ticker listings with selected cash
   currency and cost policy; transaction forms retain holding and cash IDs. Creation is atomic.
+  Income and ledger gains now retain native amounts/account identity and use historical canonical
+  FX, with missing conversions remaining unavailable. Consumed-lot ages and zero-gain sales are
+  retained; legacy classification/quantity limitations stay explicit.
   See `doc/BL-021-canonical-security-prices.md`. Verified raw Yahoo support and complete historical reporting remain required; this
   is not completion of BL-021.
 - **Context (What / Why)**:

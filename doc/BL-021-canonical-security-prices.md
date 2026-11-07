@@ -84,17 +84,20 @@ Remaining required integration:
 - Complete historical performance/return reporting. The existing performance helper still uses
   current valuation for a selected reporting range and requires review of opening value, dated
   flows, period-end holdings and return methodology. Nullable market totals do not fix that
-  calculation or the income/gain issues below.
+  calculation. Currency-aware ledger income/gains below do not establish complete period returns.
 - Current valuation now captures one local calendar date and shares it through cash, position,
   quote and FX lookups. Supported explicit dates normalize before selection. The underlying
   no-checkpoint ledger query now excludes postings beyond the cutoff. Financial form defaults
   also use the local book day; provider exchange-day completion remains separate. Zero native
   amounts do not require FX, and missing nonzero conversions remain unavailable. Legacy baselines,
   complete historical reporting and checkpoint semantics still need their own review.
-- Income/gain reports must include every trade cash currency and retain structured identity.
-  Current income helpers filter by the first cash account, sum nominal amounts across currencies
-  and extract ticker labels from editable descriptions. Current-position posting fixes do not
-  establish correctness of those reports.
+- [Income and ledger gain reports](F-007-investment-account-management/income-and-gain-reporting.md)
+  now include every portfolio cash currency, retain native facts and activity/account identity,
+  and convert at posting-date `FxDailyRate` rates. Missing historical FX makes base totals null.
+  Descriptions and current remaining lots are not reporting sources. Zero-gain sales and known
+  legacy financial facts remain visible; unknown quantities/classification require review.
+  Gross income, separate sale costs and ledger gains stay distinct. Complete period returns,
+  currency valuation changes and legacy provenance/classification still need their own work.
 - Manual/CSV controls and explicit selected legacy promotion now write the canonical service
   with visible fill/correction policy and raw-close confirmation. Originals remain retained;
   stale previews refuse writes. Unreliable stored quotes can be excluded reversibly. Immutable

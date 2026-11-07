@@ -1,16 +1,21 @@
-import { localCalendarDate } from "../../shared/dateUtils";
-import React, { useEffect, useState } from "react";
+import { localCalendarDate, formatDateString } from "../../shared/dateUtils";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { formatValuationAmount } from "../utils/valuationFormatting";
 
+import type { RealizedGainReportRow } from "../../shared/investmentReporting";
+import { formatMultiCurrencyBalances } from "../utils/currencyUtils";
+
 interface PerformanceData {
+  baseCurrency?: string;
+  incomeByCurrency?: { dividends: Record<string, number>; interest: Record<string, number>; fees: Record<string, number> };
   totalReturn: number | null;
   totalReturnPercent: number | null;
-  realizedGains: number;
+  realizedGains: number | null;
   unrealizedGains: number | null;
-  dividendIncome: number;
-  interestIncome: number;
-  fees: number;
+  dividendIncome: number | null;
+  interestIncome: number | null;
+  fees: number | null;
   deposits: number;
   withdrawals: number;
   currentValue: number | null;
@@ -34,15 +39,7 @@ interface PositionAllocationSnapshot {
   marketValueBase: number | null;
 }
 
-interface RealizedGain {
-  date: string;
-  tickerSymbol: string;
-  quantity: number;
-  costBasis: number;
-  saleProceeds: number;
-  realizedGain: number;
-  holdingPeriod: 'short' | 'long' | 'unknown';
-}
+type RealizedGain = RealizedGainReportRow;
 
 export const PerformanceReportsPage: React.FC = () => {
   const { portfolioId } = useParams<{ portfolioId: string }>();
@@ -50,6 +47,10 @@ export const PerformanceReportsPage: React.FC = () => {
   const [performance, setPerformance] = useState<PerformanceData | null>(null);
   const [assetAllocation, setAssetAllocation] = useState<AssetAllocation[]>([]);
   const [realizedGains, setRealizedGains] = useState<RealizedGain[]>([]);
+  const generation = useRef(0);
+  const [gainsAvailable, setGainsAvailable] = useState(false);
+  const [allocationAvailable, setAllocationAvailable] = useState(false);
+  const [reportError, setReportError] = useState("");
   const [loading, setLoading] = useState(true);
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [startDate, setStartDate] = useState(() => {
@@ -63,15 +64,16 @@ export const PerformanceReportsPage: React.FC = () => {
     if (portfolioId) {
       fetchReportData();
     }
-    void window.electron.getBaseCurrencyImpactState().then((state) => {
-      setBaseCurrency(state.baseCurrency || "USD");
-    });
+    let active = true;
+    void window.electron.getBaseCurrencyImpactState().then((state) => { if (active) setBaseCurrency(state.baseCurrency || "USD"); });
+    return () => { active = false; generation.current++; };
   }, [portfolioId, startDate, endDate]);
 
   const fetchReportData = async () => {
     if (!portfolioId) return;
 
-    setLoading(true);
+    const token = ++generation.current;
+    setLoading(true); setReportError(""); setPerformance(null); setAssetAllocation([]); setRealizedGains([]); setGainsAvailable(false); setAllocationAvailable(false);
     try {
       const [perfResult, allocResult, gainsResult, positionsResult] = await Promise.all([
         window.electron.ipcRenderer.invoke('get-portfolio-performance', {
@@ -90,6 +92,9 @@ export const PerformanceReportsPage: React.FC = () => {
         }),
       ]);
 
+      if (token !== generation.current) return;
+      setReportError([perfResult, allocResult, gainsResult, positionsResult].filter((r) => !r.success).map((r) => r.error || "Report data is unavailable").join("; "));
+      setGainsAvailable(Boolean(gainsResult.success)); setAllocationAvailable(Boolean(allocResult.success && positionsResult.success));
       if (perfResult.success) {
         setPerformance(perfResult.performance);
       }
@@ -130,11 +135,13 @@ export const PerformanceReportsPage: React.FC = () => {
         setRealizedGains(gainsResult.gains);
       }
     } catch (error) {
-      console.error('Error fetching report data:', error);
+      if (token === generation.current) setReportError(error instanceof Error ? error.message : "Report data is unavailable");
     } finally {
-      setLoading(false);
+      if (token === generation.current) setLoading(false);
     }
   };
+
+  const reportCurrency = performance?.baseCurrency || baseCurrency;
 
   const formatPercent = (percent: number): string => {
     return `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%`;
@@ -150,6 +157,7 @@ export const PerformanceReportsPage: React.FC = () => {
 
   return (
     <div className="space-y-6" data-testid="performance-reports-page">
+      {reportError ? <div className="rounded border border-red-200 bg-red-50 p-3"><p role="alert">{reportError}</p><button className="underline" onClick={() => void fetchReportData()}>Retry report data</button></div> : null}
       {/* Header */}
       <div className="bg-white shadow rounded-lg p-6">
         <button
@@ -204,7 +212,7 @@ export const PerformanceReportsPage: React.FC = () => {
               <p className={`text-xl font-semibold ${
                 (performance.totalReturn ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {performance.totalReturn === null ? "N/A" : formatValuationAmount(performance.totalReturn, baseCurrency)}
+                {performance.totalReturn === null ? "N/A" : formatValuationAmount(performance.totalReturn, reportCurrency)}
               </p>
               <p className={`text-sm ${
                 (performance.totalReturnPercent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
@@ -215,9 +223,9 @@ export const PerformanceReportsPage: React.FC = () => {
             <div>
               <p className="text-sm text-gray-500">Realized Gains</p>
               <p className={`text-xl font-semibold ${
-                performance.realizedGains >= 0 ? 'text-green-600' : 'text-red-600'
+                (performance.realizedGains ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {formatValuationAmount(performance.realizedGains, baseCurrency)}
+                {formatValuationAmount(performance.realizedGains, reportCurrency)}
               </p>
             </div>
             <div>
@@ -225,18 +233,19 @@ export const PerformanceReportsPage: React.FC = () => {
               <p className={`text-xl font-semibold ${
                 (performance.unrealizedGains ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {performance.unrealizedGains === null ? "N/A" : formatValuationAmount(performance.unrealizedGains, baseCurrency)}
+                {performance.unrealizedGains === null ? "N/A" : formatValuationAmount(performance.unrealizedGains, reportCurrency)}
               </p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Income</p>
               <p className="text-xl font-semibold text-gray-900">
-                {formatValuationAmount(performance.dividendIncome + performance.interestIncome, baseCurrency)}
+                {formatValuationAmount(performance.dividendIncome === null || performance.interestIncome === null ? null : performance.dividendIncome + performance.interestIncome, reportCurrency)}
               </p>
               <p className="text-xs text-gray-500">
-                Div: {formatValuationAmount(performance.dividendIncome, baseCurrency)}<br />
-                Int: {formatValuationAmount(performance.interestIncome, baseCurrency)}
+                Div: {formatValuationAmount(performance.dividendIncome, reportCurrency)}<br />
+                Int: {formatValuationAmount(performance.interestIncome, reportCurrency)}
               </p>
+              {performance.incomeByCurrency ? <p className="text-xs text-gray-500">Native div: {formatMultiCurrencyBalances(performance.incomeByCurrency.dividends)}<br />Native int: {formatMultiCurrencyBalances(performance.incomeByCurrency.interest)}</p> : null}
             </div>
           </div>
         </div>
@@ -245,7 +254,7 @@ export const PerformanceReportsPage: React.FC = () => {
       {/* Asset Allocation */}
       <div className="bg-white shadow rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Asset Allocation</h3>
-        {assetAllocation.length === 0 ? (
+        {!allocationAvailable ? <p className="text-sm text-gray-500">Allocation data is unavailable</p> : assetAllocation.length === 0 ? (
           <p className="text-sm text-gray-500">No positions</p>
         ) : (
           <div className="overflow-x-auto">
@@ -293,7 +302,8 @@ export const PerformanceReportsPage: React.FC = () => {
       {/* Realized Gains/Losses */}
       <div className="bg-white shadow rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Realized Gains/Losses</h3>
-        {realizedGains.length === 0 ? (
+        <p className="text-sm text-gray-500 mb-3">Native journal gains are converted using sale-date FX. Holding age describes consumed lots using a 365-day boundary.</p>
+        {!gainsAvailable ? <p className="text-sm text-gray-500">Realized gains are unavailable</p> : realizedGains.length === 0 ? (
           <p className="text-sm text-gray-500">No realized gains/losses in this period</p>
         ) : (
           <div className="overflow-x-auto">
@@ -303,37 +313,40 @@ export const PerformanceReportsPage: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Symbol</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Cost Basis</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Proceeds</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Gain/Loss</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Term</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Cost Basis (Native)</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Net Cash Proceeds (Native)</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Gain/Loss (Native)</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Gain/Loss (Base)</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Holding Age</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {realizedGains.map((gain, idx) => (
-                  <tr key={idx}>
+                {realizedGains.map((gain) => (
+                  <tr key={gain.entryId}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {new Date(gain.date).toLocaleDateString()}
+                      {formatDateString(gain.date)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {gain.tickerSymbol}
+                      {gain.tickerSymbol}<div className="text-xs text-gray-500">{gain.market || "Market needs review"}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      {gain.quantity.toFixed(6)}
+                      {gain.quantity === null ? "N/A" : gain.quantity.toFixed(6)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      {formatValuationAmount(gain.costBasis, baseCurrency, { disambiguate: true })}
+                      {formatValuationAmount(gain.costBasis, gain.currency, { disambiguate: true })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      {formatValuationAmount(gain.saleProceeds, baseCurrency, { disambiguate: true })}
+                      {formatValuationAmount(gain.saleProceeds, gain.currency, { disambiguate: true })}
+                      {gain.otherCategoryAmount ? <div className="text-xs text-gray-500">Other category postings: {formatValuationAmount(gain.otherCategoryAmount, gain.currency, { disambiguate: true })}</div> : null}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium text-right ${
                       gain.realizedGain >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {formatValuationAmount(gain.realizedGain, baseCurrency, { disambiguate: true })}
+                      {formatValuationAmount(gain.realizedGain, gain.currency, { disambiguate: true })}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{formatValuationAmount(gain.realizedGainBase, gain.baseCurrency, { disambiguate: true })}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
-                      {gain.holdingPeriod === 'long' ? 'Long' : gain.holdingPeriod === 'short' ? 'Short' : '-'}
+                      {gain.holdingPeriod === 'long' ? 'Long' : gain.holdingPeriod === 'short' ? 'Short' : gain.holdingPeriod === 'mixed' ? 'Mixed' : '-'}
                     </td>
                   </tr>
                 ))}
