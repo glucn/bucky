@@ -9,6 +9,39 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 33 — Reviewed market assignment and canonical price controls (2026-11-06)
+
+- Connected a lazy **Market & prices** dialog to account-ID position pages. It supports explicit
+  market assignment, optional exact-ticker provider discovery, manual closes, Date/Price CSV and
+  selected legacy promotion. Currency/market scope and shared effects across portfolios are visible.
+- Price preview shows old/new values, adjustment/completion policy and insert/retain/correct effects.
+  Users choose fill versus correction and confirm raw completed closes for the displayed listing
+  and currency. Changing inputs or requesting a fresh preview invalidates prior confirmation.
+- Added account-scoped review/save guards in the same transaction as canonical writes. A stale
+  market, changed destination, changed proposed legacy value or currency conflict refuses the whole
+  batch; injected later write failure rolls it back. Retained legacy originals remain untouched.
+- Added reversible exclusion of unreliable raw quotes, preserving their numeric value/source and
+  preventing valuation/provider coverage until a reviewed correction restores completion status.
+  Stored records show basis/status and bounded history; legacy date strings normalize for review
+  ordering/filtering without rewriting originals. Invalid legacy dates cannot be promoted.
+- Six explicit IPC channels use the ordinary authenticated data boundary. The modal preserves
+  errors and defers position refresh until closing the outcome. Tests were written before the
+  missing service/UI implementation; further failing regressions drove stale legacy-source
+  protection, currency checks, legacy date filtering, exclusion and fresh-review confirmation.
+  A stronger packaged viewport assertion failed in all three repetitions because save errors
+  could scroll out of view. The dialog header/outcomes now stay visible while scrolling; all
+  three repetitions pass with the original visibility assertion intact.
+- See the [price-control contract](F-007-investment-account-management/price-controls.md). Same-ticker
+  market-aware creation, legacy baselines/corrections, full reporting, raw Yahoo prices, exact
+  decimals, verification and representative personal acceptance remain open.
+- **1,029 tests across 124 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging using pinned Node 22.
+  The additional supported-limit test saved 10000 prices in both storage modes (about 4s native,
+  6.5s encrypted). The complete packaged price-control flow passed three repetitions, including
+  the original viewport assertion after its fix, and the final dialog was visually inspected.
+  All **15 packaged acceptance cases passed** together, and all 25 development/browser E2E
+  cases passed three repetitions (**75 checks**).
+
 ### Batch 32 — Consistent book dates and zero-value FX (2026-11-06)
 
 - Fixed a ledger defect exposed by the midnight regression: `getAccountBalanceAtDate` ignored

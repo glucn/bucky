@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { TransactionEntryModal } from "../components/TransactionEntryModal";
 import { useAccounts } from "../context/AccountsContext";
 import { formatValuationAmount } from "../utils/valuationFormatting";
+const SecurityPriceModal = React.lazy(() => import("../components/SecurityPriceModal").then((module) => ({ default: module.SecurityPriceModal })));
 
 interface PositionDetails {
   accountId: string;
@@ -46,6 +47,7 @@ export const PositionDetailsPage: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
+  const [showPrices, setShowPrices] = useState(false);
   const [selectedTransactionType, setSelectedTransactionType] = useState<TransactionType>('buy');
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [positionValuation, setPositionValuation] = useState<PositionValuationSnapshot | null>(null);
@@ -140,6 +142,7 @@ export const PositionDetailsPage: React.FC = () => {
             <p className="text-sm text-gray-500 mt-1">{position.market || "Market needs review"}{position.priceDate ? ` · Close as of ${position.priceDate}` : ""}</p>
           </div>
           <div className="flex gap-3">
+            <button data-testid="security-price-controls-button" className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium" onClick={() => setShowPrices(true)}>Market &amp; prices</button>
             <button 
               onClick={() => {
                 setSelectedTransactionType('buy');
@@ -302,6 +305,7 @@ export const PositionDetailsPage: React.FC = () => {
       </div>
 
       {/* Transaction Modal */}
+      {showPrices && accountId ? <React.Suspense fallback={<p role="status">Loading price controls…</p>}><SecurityPriceModal isOpen accountId={accountId} onClose={() => setShowPrices(false)} onChanged={() => { void handleTransactionCreated(); }} /></React.Suspense> : null}
       {portfolioId && (
         <TransactionEntryModal
           isOpen={showTransactionModal}

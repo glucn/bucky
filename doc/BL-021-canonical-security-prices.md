@@ -1,8 +1,8 @@
 # Canonical investment prices and market identity
 
 Updated 2026-11-06. BL-021 remains in progress. The persisted identity and canonical price
-services, market-aware refresh targeting and core application valuation are implemented;
-market setup/price controls and full historical report correctness remain open. This does not
+services, market-aware refresh targeting, core application valuation and existing-holding
+market/price controls are implemented; security creation and full historical reporting remain open. This does not
 establish investment readiness.
 
 `SecurityDailyPrice(ticker, market, marketDate)` is the price source of truth. Market strings
@@ -62,9 +62,10 @@ atomically. Manual/import prices and future points do not advance provider backf
 
 Remaining required integration:
 
-- Persist user/provider-selected identity through security setup and position controls. Use
-  market-aware or account-ID APIs/routes so identical tickers on different markets cannot merge.
-  Existing ticker-only creation/lookup is not sufficient.
+- Existing positions now expose [reviewed market and price controls](F-007-investment-account-management/price-controls.md),
+  including explicit assignment/discovery and account-scoped writes. Complete market-aware
+  security creation, including another listing of an already-held ticker. Ticker-only creation
+  remains insufficient even though position routes/actions retain account identity.
 - Position, portfolio and dashboard valuation now read the canonical service, using verified
   dated quantities where requested and `FxDailyRate` conversion. Missing quotes remain null
   through native/base values, currency summaries, net worth, allocations and market-dependent
@@ -92,9 +93,10 @@ Remaining required integration:
   Current income helpers filter by the first cash account, sum nominal amounts across currencies
   and extract ticker labels from editable descriptions. Current-position posting fixes do not
   establish correctness of those reports.
-- Migrate manual price and CSV controls to the canonical service with visible fill/correction
-  choice. Offer explicit reviewed promotion of retained legacy prices to a selected market;
-  never infer an exchange during schema migration.
+- Manual/CSV controls and explicit selected legacy promotion now write the canonical service
+  with visible fill/correction policy and raw-close confirmation. Originals remain retained;
+  stale previews refuse writes. Unreliable stored quotes can be excluded reversibly. Immutable
+  revision history remains separate; no exchange is inferred during migration or promotion.
 - Carry the implemented basis/completion policy into price controls and valuation cutover.
   Offer explicit review/correction for quarantined records. Verified raw Yahoo reconstruction
   remains unsupported; never relabel its historical split-adjusted closes as raw.
