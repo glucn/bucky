@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaClient, Prisma, type Account } from "@prisma/client";
 import path from "path";
 import {
   AccountType,
@@ -13,6 +13,7 @@ import { createEncryptedPrisma, initializeEncryptedDatabase } from "./encryptedD
 import { PrismaSession } from "./prismaSession";
 import { parseResetRequest, type ResetRequest } from "../shared/reset";
 import { SUPPORTED_CURRENCY_OPTIONS } from "../shared/currencies";
+import { hasLotHistory } from "./investmentLotHistory";
 
 // Type for transaction client
 type TransactionClient = Prisma.TransactionClient;
@@ -483,9 +484,42 @@ class DatabaseService {
       currency?: string;
     },
     tx?: TransactionClient
-  ) {
+  ): Promise<Account> {
+    if (data.currency !== undefined && !/^[A-Z]{3}$/.test(data.currency)) {
+      throw new Error("Currency must be a three-letter uppercase code");
+    }
+    // Keep the history check and metadata write in one transaction. Checking the
+    // current balance alone would miss fully spent funds and income-only holdings.
+    if (!tx && data.currency !== undefined) {
+      return this.prisma.$transaction((trx) => this.updateAccount(accountId, data, trx));
+    }
     const prisma = tx || this.prisma;
-    const updateData: any = {};
+    const updateData: Prisma.AccountUpdateInput = {};
+
+    if (data.currency !== undefined) {
+      const account = await prisma.account.findUniqueOrThrow({
+        where: { id: accountId },
+        include: {
+          investmentProperties: true,
+          _count: { select: { lines: true, checkpoints: true, investmentActivities: true } },
+        },
+      });
+      if (account.type === AccountType.User && account.currency !== data.currency) {
+        const properties = account.investmentProperties;
+        if (account._count.lines || account._count.checkpoints || account._count.investmentActivities ||
+          (properties && (properties.quantity !== 0 || hasLotHistory(properties.lots)))) {
+          throw new Error("Cannot change account currency after financial history exists. Create an account in the new currency instead.");
+        }
+        if (properties?.market) {
+          const metadata = await prisma.securityMetadata.findUnique({
+            where: { ticker_market: { ticker: properties.tickerSymbol, market: properties.market } },
+          });
+          if (metadata?.quoteCurrency !== data.currency) {
+            throw new Error("Account currency must match the confirmed quote currency. Review the holding's market and currency first.");
+          }
+        }
+      }
+    }
     
     if (data.name !== undefined) {
       updateData.name = data.name;

@@ -9,6 +9,25 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 37 — Account currency cannot relabel financial history (2026-11-07)
+
+- `updateAccount` validates currency codes and checks history in the same transaction as its
+  metadata write. User-account journal lines, checkpoints, structured investment activity,
+  retained quantities and lot history prevent currency changes, including zero balances and
+  dividend-only holdings. Damaged legacy lots require review rather than being treated as empty.
+- Refused edits preserve both name and currency. Same-currency renaming and unused ordinary
+  account corrections remain supported. An unused bound holding must match confirmed shared
+  quote-currency metadata. Category/system defaults retain their multi-currency semantics.
+- TDD exposed the unguarded update path, then three additional failing legacy-position cases
+  drove the retained-quantity/lot check. The existing market-binding lot-history policy is shared
+  without changing its behavior. A packaged authenticated-IPC scenario covers refusal, valid
+  rename, dividend-only history and persisted units after restart.
+- **1,090 tests across 133 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging with pinned Node 22. The new packaged case
+  passed three repetitions; all **19 packaged acceptance cases passed** together. No renderer
+  code changed in this batch. Quote-unit validation during valuation/posting remains the next
+  financial-unit gap; the wider readiness goal remains open.
+
 ### Batch 36 — Market assignment and activity-only history (2026-11-07)
 
 - An established market now remains protected when the only history is structured activity,

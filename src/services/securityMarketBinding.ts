@@ -1,12 +1,7 @@
 import { type SecurityMarketBinding, parseSecurityIdentity } from "../shared/securityMarket";
 import type { Prisma } from "@prisma/client";
 import { investmentTransaction } from "./investmentPosting";
-
-function hasLotHistory(raw: string | null): boolean {
-  if (raw === null) return false;
-  try { const value: unknown = JSON.parse(raw); return !Array.isArray(value) || value.length > 0; }
-  catch { return true; }
-}
+import { hasLotHistory } from "./investmentLotHistory";
 
 /** Explicit assignment only. Never changes journal lines, quantities, lots, or account currency. */
 export async function bindSecurityMarket(input: SecurityMarketBinding, transaction?: Prisma.TransactionClient): Promise<void> {

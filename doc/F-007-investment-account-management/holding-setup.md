@@ -15,6 +15,15 @@ no orphan account. The same ticker may have multiple resolved markets. An existi
 same-ticker holding must be assigned its market first, and duplicate listing identities are
 refused, including archived accounts. An established holding is never relabeled by creation.
 
+Account edits also preserve financial units. A user account's currency cannot change once it
+has journal lines, checkpoints, structured investment activity, retained units or lot history,
+including malformed legacy lots that need review. A zero current balance is not evidence that
+the account is unused. The check and update are atomic, so a refused currency edit also leaves
+the proposed name unchanged. Renaming in the same currency and correcting an unused ordinary
+account remain supported. An unused bound holding must match its confirmed market quote
+currency; missing metadata requires review. Category/system default currencies do not redefine
+their multi-currency journal lines. Currency edits require uppercase three-letter codes.
+
 The old service-only ticker creation helper remains compatible for a portfolio with one active
 trade cash account, derives that account's currency and creates an unresolved holding atomically.
 It refuses ambiguous cash or any existing same-ticker holding. Ticker-only lookup refuses multiple
