@@ -476,9 +476,11 @@ This file tracks deferred product improvements that are intentionally out of cur
   rows. Market-aware refresh targets and provider listing/currency validation are connected.
   Adjustment/completion policy now quarantines old unverified and Yahoo split-adjusted prices;
   Twelve Data requests raw prices, and adapters omit unfinished exchange-local daily bars.
-  See `doc/BL-021-canonical-security-prices.md`. Valuation/UI cutover, quarantined-price review,
-  verified raw Yahoo support and complete historical integration remain required; this is not
-  completion of BL-021.
+  Core position/portfolio/dashboard valuation now reads canonical prices, preserves missing
+  values, and retains account identity through holding links/actions and allocation joins.
+  See `doc/BL-021-canonical-security-prices.md`. Market setup/price controls, quarantined-price
+  review, verified raw Yahoo support and complete historical reporting remain required; this
+  is not completion of BL-021.
 - **Context (What / Why)**:
   - Current valuation flows still depend on legacy `SecurityPriceHistory` keyed by `tickerSymbol + date`.
   - F-017 introduced canonical market-data storage in `SecurityDailyPrice` keyed by `ticker + market + marketDate`.

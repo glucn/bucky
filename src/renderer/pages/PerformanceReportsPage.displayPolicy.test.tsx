@@ -31,8 +31,8 @@ describe("PerformanceReportsPage display policy", () => {
         return {
           success: true,
           allocation: [
-            { tickerSymbol: "AAPL", marketValue: 150, percentOfPortfolio: 60 },
-            { tickerSymbol: "SHOP", marketValue: 200, percentOfPortfolio: 40 },
+            { accountId: "aapl", tickerSymbol: "AAPL", marketValue: 150, percentOfPortfolio: 60 },
+            { accountId: "shop", tickerSymbol: "SHOP", marketValue: 200, percentOfPortfolio: 40 },
           ],
         };
       }
@@ -42,6 +42,7 @@ describe("PerformanceReportsPage display policy", () => {
           success: true,
           positions: [
             {
+              accountId: "aapl",
               tickerSymbol: "AAPL",
               currency: "USD",
               marketValue: 150,
@@ -49,6 +50,7 @@ describe("PerformanceReportsPage display policy", () => {
               costBasisBase: 180,
             },
             {
+              accountId: "shop",
               tickerSymbol: "SHOP",
               currency: "CAD",
               marketValue: 200,
@@ -100,7 +102,7 @@ describe("PerformanceReportsPage display policy", () => {
     expect(screen.getByText("Value (Native)")).toBeTruthy();
     expect(screen.getByText("N/A")).toBeTruthy();
     expect(
-      screen.getByText("Base totals are unavailable for one or more positions because FX conversion data is missing.")
+      screen.getByText("Base totals are unavailable for one or more positions because verified market prices or FX conversion data are missing.")
     ).toBeTruthy();
   });
 });

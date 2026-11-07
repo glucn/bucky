@@ -1,8 +1,9 @@
 # Canonical investment prices and market identity
 
 Updated 2026-11-06. BL-021 remains in progress. The persisted identity and canonical price
-services and market-aware refresh targeting are implemented; existing application valuation and
-price controls still need cutover. This foundation does not establish investment readiness.
+services, market-aware refresh targeting and core application valuation are implemented;
+market setup/price controls and full historical report correctness remain open. This does not
+establish investment readiness.
 
 `SecurityDailyPrice(ticker, market, marketDate)` is the price source of truth. Market strings
 are opaque, case-sensitive provider identities; surrounding whitespace is normalized, and
@@ -64,9 +65,28 @@ Remaining required integration:
 - Persist user/provider-selected identity through security setup and position controls. Use
   market-aware or account-ID APIs/routes so identical tickers on different markets cannot merge.
   Existing ticker-only creation/lookup is not sufficient.
-- Make position, portfolio, overview and report valuation read the canonical service. Preserve
-  currency context, use `FxDailyRate` for FX, and expose missing quotes as unavailable rather
-  than silently presenting cost basis as market value.
+- Position, portfolio and dashboard valuation now read the canonical service, using verified
+  dated quantities where requested and `FxDailyRate` conversion. Missing quotes remain null
+  through native/base values, currency summaries, net worth, allocations and market-dependent
+  performance totals. A known zero-unit position is worth zero without a quote. Legacy dated
+  holdings make dashboard totals unavailable rather than inventing a starting position or
+  aborting unrelated dashboard cards. Inconsistent tracked history still refuses valuation.
+  Quote precision is retained before multiplying units; display/amount rounding remains the
+  existing cent policy. Account IDs, market and quote date accompany position reads.
+- Holding links now use account IDs, and position actions retain that account selection. A
+  legacy ticker-only route resolves only a unique holding; ambiguous tickers require selection
+  from the portfolio. Portfolio rows label market identity. Reports join allocations by account
+  ID, use converted market values for weights and refuse a partial denominator. Market-value
+  columns and gain cards show N/A instead of cost basis or zero when unavailable.
+- Complete historical performance/return reporting. The existing performance helper still uses
+  current valuation for a selected reporting range and requires review of opening value, dated
+  flows, period-end holdings and return methodology. Nullable market totals do not fix that
+  calculation or the income/gain issues below.
+- Unify valuation date boundaries: current investment/FX requests currently select a UTC date,
+  while ordinary current cash balances use a local date. Verify a single consistent cutoff at
+  midnight boundaries and normalize accepted date formats before both quote and FX lookups.
+  Also verify that zero foreign-currency amounts do not unnecessarily
+  require an FX rate or make an otherwise known zero aggregate unavailable.
 - Income/gain reports must include every trade cash currency and retain structured identity.
   Current income helpers filter by the first cash account, sum nominal amounts across currencies
   and extract ticker labels from editable descriptions. Current-position posting fixes do not

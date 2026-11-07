@@ -57,8 +57,9 @@ describe("PositionDetailsPage missing enrichment CTA", () => {
           positions: [
             {
               tickerSymbol: "AAPL",
+              accountId: "security-1",
               currency: "USD",
-              costBasisBase: null,
+              costBasisBase: 1000,
               marketValueBase: null,
               marketValue: null,
             },
@@ -105,5 +106,33 @@ describe("PositionDetailsPage missing enrichment CTA", () => {
 
     fireEvent.click(screen.getByTestId("missing-enrichment-refresh-now"));
     expect(dispatchSpy).toHaveBeenCalled();
+    expect(screen.getByText("Market Value").parentElement?.textContent).toContain("N/A");
+    expect(screen.getByText("Market Value").parentElement?.textContent).not.toContain("1,000");
+  });
+
+  it("selects the account named by the holding route even when another market has the same ticker", async () => {
+    const original = window.electron.ipcRenderer.invoke;
+    const invoke = vi.fn(async (channel, params) => channel === "get-portfolio-accounts" ? { success: true, accounts: { securities: [
+      { id: "security-other", investmentProperties: { tickerSymbol: "AAPL", market: "LSE" } },
+      { id: "security-1", investmentProperties: { tickerSymbol: "AAPL", market: "NASDAQ" } },
+    ] } } : original(channel, params));
+    window.electron.ipcRenderer.invoke = invoke;
+    render(<MemoryRouter initialEntries={["/investments/p-1/holding/security-1"]}><Routes>
+      <Route path="/investments/:portfolioId/holding/:securityAccountId" element={<PositionDetailsPage />} />
+    </Routes></MemoryRouter>);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("get-position-details", { accountId: "security-1" }));
+  });
+
+  it("labels transaction amounts in the journal line currency rather than the book's base currency", async () => {
+    const original = window.electron.ipcRenderer.invoke;
+    window.electron.ipcRenderer.invoke = vi.fn(async (channel, params) => channel === "get-transactions" ? [
+      { amount: 100, currency: "USD", entry: { id: "buy", date: "2026-01-02", type: "investment_buy", description: "Synthetic USD purchase" } },
+    ] : original(channel, params));
+    render(<MemoryRouter initialEntries={["/investments/p-1/position/AAPL"]}><Routes>
+      <Route path="/investments/:portfolioId/position/:tickerSymbol" element={<PositionDetailsPage />} />
+    </Routes></MemoryRouter>);
+    const row = (await screen.findByText("Synthetic USD purchase")).closest("tr")!;
+    expect(row.textContent).toMatch(/USD\s*100\.00/);
+    expect(row.textContent).not.toContain("CA$");
   });
 });

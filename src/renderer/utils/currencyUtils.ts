@@ -149,7 +149,7 @@ function formatCurrencyAmountWithPreset(
  * @returns Formatted string like "$1,234.56, €500.00, 1,000.00 JPY"
  */
 export function formatMultiCurrencyBalances(
-  balances: Record<string, number>,
+  balances: Record<string, number | null>,
   options: {
     separator?: string;
     sortCurrencies?: boolean;
@@ -177,7 +177,7 @@ export function formatMultiCurrencyBalances(
 
   // Format each currency balance
   const formattedBalances = entries.map(([currency, amount]) =>
-    formatCurrencyAmountWithPreset(amount, currency, preset, decimals)
+    amount === null ? `${currency} N/A` : formatCurrencyAmountWithPreset(amount, currency, preset, decimals)
   );
 
   return formattedBalances.join(separator);

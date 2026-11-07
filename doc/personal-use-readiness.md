@@ -9,6 +9,42 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 31 — Canonical valuation and stable holding identity (2026-11-06)
+
+- Switched position valuation to exact-market, raw/completed `SecurityDailyPrice` through the
+  canonical service. Quote precision is retained before multiplication, and position responses
+  include account ID, market and quote date. Legacy prices, unresolved markets and quarantined
+  points cannot supply market value. Known zero-unit positions remain worth zero without quotes.
+- Removed cost-basis and zero substitutions from position/base values, portfolio currency
+  summaries, dashboard net worth/allocation and market-dependent performance totals. Missing
+  required prices/FX produce unavailable aggregates, never partial denominators. Allocation
+  weights use converted values. Legacy dated history leaves dashboard totals unavailable while
+  preserving other cards; inconsistent tracked history still refuses valuation.
+- Added account-ID holding routes and market labels. Position lookups, report joins and position
+  actions retain the selected account rather than merging same-ticker holdings. Old ticker routes
+  resolve only a unique holding. Position loading suppresses stale results and preserves errors;
+  independent position/valuation/transaction requests run together after account resolution.
+- The initial six service and two renderer regressions failed first. Further failing tests covered
+  unavailable performance totals, legacy dashboard history, dropped account selection and remaining
+  portfolio-card/row substitutions. Existing valuation fixtures now seed explicit canonical prices;
+  retained legacy price API tests remain separate.
+- Packaged visual inspection exposed an existing transaction-history currency error: a USD
+  holding's entries were labelled with the CAD book currency. A further regression failed first;
+  history now formats the persisted journal-line currency. All three position renderer tests
+  pass in both storage configurations after that final correction.
+- Market assignment and canonical manual/import/review controls remain to be connected. Complete
+  period performance/return methodology, multi-currency income/gain reporting, legacy correction,
+  exact decimals, whole-book verification and personal acceptance remain open. See the
+  [canonical valuation contract](BL-021-canonical-security-prices.md).
+- **994 tests across 120 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging. The first encrypted run was incomplete after
+  the host Homebrew Node installation lost a required dylib; the complete rerun used pinned
+  Node 22, with no product-code workaround or reduced test scope.
+  The final canonical/same-ticker packaged workflow passed three repetitions, including the
+  corrected currency label, and all **14 packaged acceptance cases passed** together. The
+  final position page was visually inspected. All 25 development/browser E2E cases passed three
+  repetitions (**75 checks**).
+
 ### Batch 30 — Price basis and completed daily bars (2026-11-06)
 
 - Added explicit adjustment/completion policy to canonical security prices. Upgrade preserves

@@ -7,6 +7,7 @@ interface TransactionEntryModalProps {
   onTransactionCreated?: () => void;
   initialTransactionType?: TransactionType;
   initialTickerSymbol?: string;
+  initialSecurityAccountId?: string;
 }
 
 type TransactionType = 'buy' | 'sell' | 'dividend' | 'dividend_reinvest' | 'interest' | 'fee' | 'cash_deposit' | 'cash_withdrawal';
@@ -18,6 +19,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
   onTransactionCreated,
   initialTransactionType = 'buy',
   initialTickerSymbol,
+  initialSecurityAccountId,
 }) => {
   const [transactionType, setTransactionType] = useState<TransactionType>(initialTransactionType);
   const [tickerSymbol, setTickerSymbol] = useState('');
@@ -81,6 +83,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           result = await window.electron.ipcRenderer.invoke('record-buy', {
             portfolioId,
             tickerSymbol,
+            securityAccountId: tickerSymbol === initialTickerSymbol ? initialSecurityAccountId : undefined,
             quantity: parseFloat(quantity),
             pricePerShare: parseFloat(pricePerShare),
             date,
@@ -93,6 +96,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           result = await window.electron.ipcRenderer.invoke('record-sell', {
             portfolioId,
             tickerSymbol,
+            securityAccountId: tickerSymbol === initialTickerSymbol ? initialSecurityAccountId : undefined,
             quantity: parseFloat(quantity),
             pricePerShare: parseFloat(pricePerShare),
             date,
@@ -105,6 +109,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           result = await window.electron.ipcRenderer.invoke('record-dividend', {
             portfolioId,
             tickerSymbol,
+            securityAccountId: tickerSymbol === initialTickerSymbol ? initialSecurityAccountId : undefined,
             amount: parseFloat(amount),
             date,
             isReturnOfCapital: false,
@@ -116,6 +121,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           result = await window.electron.ipcRenderer.invoke('record-reinvested-dividend', {
             portfolioId,
             tickerSymbol,
+            securityAccountId: tickerSymbol === initialTickerSymbol ? initialSecurityAccountId : undefined,
             dividendAmount: parseFloat(amount),
             reinvestmentPrice: parseFloat(pricePerShare),
             date,

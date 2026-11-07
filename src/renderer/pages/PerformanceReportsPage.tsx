@@ -3,27 +3,29 @@ import { useParams, useNavigate } from "react-router-dom";
 import { formatValuationAmount } from "../utils/valuationFormatting";
 
 interface PerformanceData {
-  totalReturn: number;
-  totalReturnPercent: number;
+  totalReturn: number | null;
+  totalReturnPercent: number | null;
   realizedGains: number;
-  unrealizedGains: number;
+  unrealizedGains: number | null;
   dividendIncome: number;
   interestIncome: number;
   fees: number;
   deposits: number;
   withdrawals: number;
-  currentValue: number;
+  currentValue: number | null;
 }
 
 interface AssetAllocation {
+  accountId: string;
   tickerSymbol: string;
   marketValueBase: number | null;
-  marketValueNative: number;
+  marketValueNative: number | null;
   currency: string;
-  percentOfPortfolio: number;
+  percentOfPortfolio: number | null;
 }
 
 interface PositionAllocationSnapshot {
+  accountId: string;
   tickerSymbol: string;
   currency: string;
   costBasisBase: number | null;
@@ -94,25 +96,26 @@ export const PerformanceReportsPage: React.FC = () => {
       if (allocResult.success) {
         const positionEntries: Array<[string, PositionAllocationSnapshot]> = Array.isArray(positionsResult.positions)
           ? positionsResult.positions.map((position: PositionAllocationSnapshot) => [
-              position.tickerSymbol,
+              position.accountId,
               position,
             ])
           : [];
-        const positionsByTicker = new Map<string, PositionAllocationSnapshot>(positionEntries);
+        const positionsById = new Map<string, PositionAllocationSnapshot>(positionEntries);
 
         const mergedAllocation: AssetAllocation[] = allocResult.allocation.map((allocation: any) => {
-          const position = positionsByTicker.get(allocation.tickerSymbol);
+          const position = positionsById.get(allocation.accountId);
           const marketValueNative =
             position?.marketValue !== null && position?.marketValue !== undefined
               ? position.marketValue
               : allocation.marketValue;
 
           return {
+            accountId: allocation.accountId,
             tickerSymbol: allocation.tickerSymbol,
             marketValueBase:
               position?.marketValueBase !== null && position?.marketValueBase !== undefined
                 ? position.marketValueBase
-                : position?.costBasisBase ?? null,
+                : null,
             marketValueNative,
             currency: position?.currency || baseCurrency,
             percentOfPortfolio: allocation.percentOfPortfolio,
@@ -198,14 +201,14 @@ export const PerformanceReportsPage: React.FC = () => {
             <div>
               <p className="text-sm text-gray-500">Total Return</p>
               <p className={`text-xl font-semibold ${
-                performance.totalReturn >= 0 ? 'text-green-600' : 'text-red-600'
+                (performance.totalReturn ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {formatValuationAmount(performance.totalReturn, baseCurrency)}
+                {performance.totalReturn === null ? "N/A" : formatValuationAmount(performance.totalReturn, baseCurrency)}
               </p>
               <p className={`text-sm ${
-                performance.totalReturnPercent >= 0 ? 'text-green-600' : 'text-red-600'
+                (performance.totalReturnPercent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {formatPercent(performance.totalReturnPercent)}
+                {performance.totalReturnPercent === null ? "N/A" : formatPercent(performance.totalReturnPercent)}
               </p>
             </div>
             <div>
@@ -219,9 +222,9 @@ export const PerformanceReportsPage: React.FC = () => {
             <div>
               <p className="text-sm text-gray-500">Unrealized Gains</p>
               <p className={`text-xl font-semibold ${
-                performance.unrealizedGains >= 0 ? 'text-green-600' : 'text-red-600'
+                (performance.unrealizedGains ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {formatValuationAmount(performance.unrealizedGains, baseCurrency)}
+                {performance.unrealizedGains === null ? "N/A" : formatValuationAmount(performance.unrealizedGains, baseCurrency)}
               </p>
             </div>
             <div>
@@ -256,12 +259,12 @@ export const PerformanceReportsPage: React.FC = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {assetAllocation.map((allocation) => (
-                  <tr key={allocation.tickerSymbol}>
+                  <tr key={allocation.accountId}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {allocation.tickerSymbol}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
-                      {allocation.percentOfPortfolio.toFixed(2)}%
+                      {allocation.percentOfPortfolio === null ? "N/A" : `${allocation.percentOfPortfolio.toFixed(2)}%`}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
                       {allocation.marketValueBase !== null
@@ -269,7 +272,7 @@ export const PerformanceReportsPage: React.FC = () => {
                         : "N/A"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      {formatValuationAmount(allocation.marketValueNative, allocation.currency, {
+                      {allocation.marketValueNative === null ? "N/A" : formatValuationAmount(allocation.marketValueNative, allocation.currency, {
                         disambiguate: true,
                       })}
                     </td>
@@ -279,7 +282,7 @@ export const PerformanceReportsPage: React.FC = () => {
             </table>
             {assetAllocation.some((allocation) => allocation.marketValueBase === null) ? (
               <p className="mt-3 text-xs text-amber-700">
-                Base totals are unavailable for one or more positions because FX conversion data is missing.
+                Base totals are unavailable for one or more positions because verified market prices or FX conversion data are missing.
               </p>
             ) : null}
           </div>

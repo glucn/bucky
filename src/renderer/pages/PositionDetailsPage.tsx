@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { TransactionEntryModal } from "../components/TransactionEntryModal";
 import { useAccounts } from "../context/AccountsContext";
 import { formatValuationAmount } from "../utils/valuationFormatting";
 
 interface PositionDetails {
+  accountId: string;
+  market: string | null;
+  priceDate: string | null;
   tickerSymbol: string;
   quantity: number;
   costBasis: number;
@@ -27,14 +30,17 @@ interface Transaction {
   type: string;
   description: string;
   amount: number;
+  currency: string;
 }
 
 type TransactionType = 'buy' | 'sell' | 'dividend' | 'dividend_reinvest' | 'interest' | 'fee' | 'cash_deposit' | 'cash_withdrawal';
 
 export const PositionDetailsPage: React.FC = () => {
-  const { portfolioId, tickerSymbol } = useParams<{ portfolioId: string; tickerSymbol: string }>();
+  const { portfolioId, tickerSymbol, securityAccountId } = useParams<{ portfolioId: string; tickerSymbol: string; securityAccountId: string }>();
   const navigate = useNavigate();
   const { refreshAccounts } = useAccounts();
+  const generation = useRef(0);
+  const [error, setError] = useState("");
   const [position, setPosition] = useState<PositionDetails | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -45,93 +51,43 @@ export const PositionDetailsPage: React.FC = () => {
   const [positionValuation, setPositionValuation] = useState<PositionValuationSnapshot | null>(null);
 
   useEffect(() => {
-    if (portfolioId && tickerSymbol) {
-      fetchPositionData();
-    }
+    void fetchPositionData();
+    let disposed = false;
     void window.electron.getBaseCurrencyImpactState().then((state) => {
-      setBaseCurrency(state.baseCurrency || "USD");
+      if (!disposed) setBaseCurrency(state.baseCurrency || "USD");
     });
-  }, [portfolioId, tickerSymbol]);
+    return () => { disposed = true; generation.current++; };
+  }, [portfolioId, tickerSymbol, securityAccountId]);
 
   const fetchPositionData = async () => {
-    if (!portfolioId || !tickerSymbol) return;
-
-    setLoading(true);
+    if (!portfolioId || (!tickerSymbol && !securityAccountId)) return;
+    const token = ++generation.current;
+    setLoading(true); setError(""); setPosition(null); setPositionValuation(null); setAccountId(null); setTransactions([]);
     try {
-      // Get portfolio accounts to find the security account
-      const accountsResult = await window.electron.ipcRenderer.invoke(
-        "get-portfolio-accounts",
-        portfolioId
-      );
-      
-      if (accountsResult.success) {
-        const securityAccount = accountsResult.accounts.securities.find(
-          (s: any) => s.investmentProperties?.tickerSymbol === tickerSymbol
-        );
-        
-        if (securityAccount) {
-          setAccountId(securityAccount.id);
-          
-          // Get position details
-          const positionResult = await window.electron.ipcRenderer.invoke(
-            "get-position-details",
-            { accountId: securityAccount.id }
-          );
-          
-          if (positionResult.success) {
-            setPosition(positionResult.position);
-          }
-
-          const allPositionsResult = await window.electron.ipcRenderer.invoke(
-            "get-all-positions",
-            { portfolioId }
-          );
-
-          if (allPositionsResult.success && Array.isArray(allPositionsResult.positions)) {
-            const matchedPosition = allPositionsResult.positions.find(
-              (entry: any) => entry.tickerSymbol === tickerSymbol
-            );
-
-            if (matchedPosition) {
-              setPositionValuation({
-                currency: matchedPosition.currency,
-                costBasisBase: matchedPosition.costBasisBase,
-                marketValueBase: matchedPosition.marketValueBase,
-              });
-            }
-          }
-
-          // Get transaction history for this security
-          // For now, we only show transactions that directly affect the security account
-          // (buy, sell, reinvested dividends, stock splits)
-          // Cash dividends don't affect the security account, so they won't appear here
-          // TODO: Add a way to link dividend transactions to specific securities
-          // (perhaps by adding a tickerSymbol field to JournalEntry)
-          
-          const securityTxns = await window.electron.ipcRenderer.invoke(
-            "get-transactions",
-            securityAccount.id
-          );
-          
-          if (securityTxns && Array.isArray(securityTxns)) {
-            const txns = securityTxns.map((entry: any) => ({
-              id: entry.entry.id,
-              date: entry.entry.date,
-              type: entry.entry.type || 'unknown',
-              description: entry.entry.description || '',
-              amount: entry.amount,
-            }));
-            // Sort by date descending (most recent first)
-            txns.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            setTransactions(txns);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching position data:", error);
-    } finally {
-      setLoading(false);
-    }
+      const accountsResult = await window.electron.ipcRenderer.invoke("get-portfolio-accounts", portfolioId);
+      if (token !== generation.current) return;
+      if (!accountsResult.success) throw new Error(accountsResult.error || "Unable to load portfolio");
+      const matches = accountsResult.accounts.securities.filter((account: any) => securityAccountId ? account.id === securityAccountId : account.investmentProperties?.tickerSymbol === tickerSymbol);
+      if (matches.length > 1) throw new Error("This ticker has multiple holdings. Open the position from its portfolio to select the correct market.");
+      const securityAccount = matches[0];
+      if (!securityAccount) throw new Error("Position not found in this portfolio");
+      const [positionResult, allPositionsResult, securityTxns] = await Promise.all([
+        window.electron.ipcRenderer.invoke("get-position-details", { accountId: securityAccount.id }),
+        window.electron.ipcRenderer.invoke("get-all-positions", { portfolioId }),
+        window.electron.ipcRenderer.invoke("get-transactions", securityAccount.id),
+      ]);
+      if (token !== generation.current) return;
+      if (!positionResult.success) throw new Error(positionResult.error || "Unable to load position");
+      setAccountId(securityAccount.id); setPosition(positionResult.position);
+      const matched = allPositionsResult.success && allPositionsResult.positions?.find((entry: any) => entry.accountId === securityAccount.id);
+      if (matched) setPositionValuation({ currency: matched.currency, costBasisBase: matched.costBasisBase, marketValueBase: matched.marketValueBase });
+      else setPositionValuation({ currency: securityAccount.currency, costBasisBase: null, marketValueBase: null });
+      if (Array.isArray(securityTxns)) setTransactions(securityTxns.map((entry: any) => ({
+        id: entry.entry.id, date: entry.entry.date, type: entry.entry.type || "unknown", description: entry.entry.description || "", amount: entry.amount, currency: entry.currency,
+      })).sort((a, b) => b.date.localeCompare(a.date)));
+    } catch (failure) {
+      if (token === generation.current) setError(failure instanceof Error ? failure.message : "Unable to load position");
+    } finally { if (token === generation.current) setLoading(false); }
   };
 
   const handleTransactionCreated = async () => {
@@ -147,7 +103,7 @@ export const PositionDetailsPage: React.FC = () => {
   const nativeCurrency = positionValuation?.currency || baseCurrency;
   const costBasisBase = positionValuation?.costBasisBase ?? null;
   const marketValueBase = positionValuation?.marketValueBase ?? null;
-  const nativeMarketValue = position?.marketValue ?? position?.costBasis ?? 0;
+  const nativeMarketValue = position?.marketValue ?? null;
   const unrealizedGainBase =
     costBasisBase !== null && marketValueBase !== null ? marketValueBase - costBasisBase : null;
 
@@ -162,7 +118,7 @@ export const PositionDetailsPage: React.FC = () => {
   if (!position) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Position not found</div>
+        <div role="alert" className="text-gray-500">{error || "Position not found"}</div>
       </div>
     );
   }
@@ -181,7 +137,7 @@ export const PositionDetailsPage: React.FC = () => {
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-3xl font-bold text-gray-900">{position.tickerSymbol}</h2>
-            <p className="text-sm text-gray-500 mt-1">Position Details</p>
+            <p className="text-sm text-gray-500 mt-1">{position.market || "Market needs review"}{position.priceDate ? ` · Close as of ${position.priceDate}` : ""}</p>
           </div>
           <div className="flex gap-3">
             <button 
@@ -245,12 +201,10 @@ export const PositionDetailsPage: React.FC = () => {
             <p className="text-xl font-semibold text-gray-900">
               {marketValueBase !== null
                 ? formatValuationAmount(marketValueBase, baseCurrency)
-                : position.marketValue === null && costBasisBase !== null
-                  ? formatValuationAmount(costBasisBase, baseCurrency)
-                  : "N/A"}
+                : "N/A"}
             </p>
             <p className="text-sm text-gray-500">
-              Native: {formatValuationAmount(nativeMarketValue, nativeCurrency, { disambiguate: true })}
+              Native: {nativeMarketValue === null ? "N/A" : formatValuationAmount(nativeMarketValue, nativeCurrency, { disambiguate: true })}
             </p>
             {position.marketPrice !== null && (
               <p className="text-sm text-gray-500">
@@ -327,7 +281,7 @@ export const PositionDetailsPage: React.FC = () => {
                     <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-medium ${
                       txn.amount >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
-                      {formatValuationAmount(Math.abs(txn.amount), baseCurrency)}
+                      {formatValuationAmount(Math.abs(txn.amount), txn.currency, { disambiguate: true })}
                       {txn.amount >= 0 ? ' (debit)' : ' (credit)'}
                     </td>
                   </tr>
@@ -355,7 +309,8 @@ export const PositionDetailsPage: React.FC = () => {
           portfolioId={portfolioId}
           onTransactionCreated={handleTransactionCreated}
           initialTransactionType={selectedTransactionType}
-          initialTickerSymbol={tickerSymbol}
+          initialTickerSymbol={position.tickerSymbol}
+          initialSecurityAccountId={accountId || undefined}
         />
       )}
     </div>

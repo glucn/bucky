@@ -8,6 +8,8 @@ import { SUPPORTED_CURRENCY_OPTIONS } from "../../shared/currencies";
 const InvestmentImportWizard = React.lazy(() => import("../components/InvestmentImportWizard").then((module) => ({ default: module.InvestmentImportWizard })));
 
 interface Position {
+  accountId: string;
+  market: string | null;
   tickerSymbol: string;
   currency: string;
   quantity: number;
@@ -28,7 +30,7 @@ interface PortfolioValue {
   totalUnrealizedGainPercent: number | null;
   cashBalance: number | null;
   cashBalancesByCurrency: Record<string, number>;
-  securityMarketValueByCurrency: Record<string, number>;
+  securityMarketValueByCurrency: Record<string, number | null>;
 }
 
 type TransactionType = 'buy' | 'sell' | 'dividend' | 'dividend_reinvest' | 'interest' | 'fee' | 'cash_deposit' | 'cash_withdrawal';
@@ -321,14 +323,16 @@ export const PortfolioDetailsPage: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {positions.map((position) => (
                   <tr
-                    key={position.tickerSymbol}
+                    key={position.accountId}
+                    data-testid={`position-${position.accountId}`}
                     className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => navigate(`/investments/${portfolioId}/position/${encodeURIComponent(position.tickerSymbol)}`)}
+                    onClick={() => navigate(`/investments/${portfolioId}/holding/${encodeURIComponent(position.accountId)}`)}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         {position.tickerSymbol}
                       </div>
+                      <div className="text-xs text-gray-500">{position.market || "Market needs review"}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
                       {position.quantity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -336,14 +340,12 @@ export const PortfolioDetailsPage: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
                       {position.marketValueBase !== null
                         ? formatValuationAmount(position.marketValueBase, baseCurrency, { disambiguate: true })
-                        : position.costBasisBase !== null
-                          ? formatValuationAmount(position.costBasisBase, baseCurrency, { disambiguate: true })
-                          : 'N/A'}
+                        : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
                       {position.marketValue !== null
                         ? formatValuationAmount(position.marketValue, position.currency, { disambiguate: true })
-                        : formatValuationAmount(position.costBasis, position.currency, { disambiguate: true })}
+                        : "N/A"}
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-medium ${
                       (position.unrealizedGain || 0) >= 0 ? 'text-green-600' : 'text-red-600'

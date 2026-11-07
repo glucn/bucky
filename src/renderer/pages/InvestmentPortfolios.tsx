@@ -165,8 +165,8 @@ export const InvestmentPortfolios: React.FC = () => {
                 ? hasIncompleteSummary
                   ? null
                   : (value.totalMarketValue ?? 0) + (value.cashBalance ?? 0)
-                : 0;
-              const unrealizedGain = value?.totalUnrealizedGain ?? 0;
+                : null;
+              const unrealizedGain = value?.totalUnrealizedGain ?? null;
               const unrealizedGainPercent = value?.totalUnrealizedGainPercent;
 
               return (
@@ -190,9 +190,9 @@ export const InvestmentPortfolios: React.FC = () => {
                     <div>
                       <p className="text-sm text-gray-500">Unrealized Gain/Loss</p>
                       <p className={`text-lg font-semibold ${
-                        unrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
+                        unrealizedGain === null ? 'text-gray-600' : unrealizedGain >= 0 ? 'text-green-600' : 'text-red-600'
                       }`}>
-                        {formatSummaryValue(value?.totalUnrealizedGain ?? 0)}
+                        {formatSummaryValue(unrealizedGain)}
                         {unrealizedGainPercent !== null && unrealizedGainPercent !== undefined
                           ? ` (${formatPercent(unrealizedGainPercent)})`
                           : ""}
