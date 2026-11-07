@@ -1,3 +1,5 @@
+import { bindSecurityMarket } from "./securityMarketBinding";
+import { securityMarketData } from "./securityMarketData";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { appSettingsService } from "./appSettingsService";
@@ -5,6 +7,12 @@ import { databaseService } from "./database";
 import { resetTestDatabase } from "./database.test.utils";
 import { investmentService } from "./investmentService";
 import { overviewService } from "./overviewService";
+
+async function recordCanonicalTestPrice(ticker: string, price: number, date: string, _source: string) {
+  const holdings = await databaseService.prismaClient.investmentProperties.findMany({ where: { tickerSymbol: ticker } });
+  for (const holding of holdings) await bindSecurityMarket({ accountId: holding.accountId, market: "NASDAQ", quoteCurrency: "USD", expectedMarket: holding.market });
+  await securityMarketData.write({ identity: { ticker, market: "NASDAQ" }, points: [{ date, price, priceBasis: "raw", barStatus: "complete" }], source: "manual", mode: "correct" });
+}
 
 function dateOffset(days: number): string {
   const date = new Date();
@@ -201,7 +209,7 @@ describe("overviewService", () => {
       date: dateOffset(-8),
     });
 
-    await investmentService.recordMarketPrice("VTI", 15, asOfDate, "manual");
+    await recordCanonicalTestPrice("VTI", 15, asOfDate, "manual");
 
     const payload = await overviewService.getOverviewDashboard(asOfDate);
 
@@ -313,7 +321,7 @@ describe("overviewService", () => {
       date: dateOffset(-8),
     });
 
-    await investmentService.recordMarketPrice("VTI", 55, asOfDate, "manual");
+    await recordCanonicalTestPrice("VTI", 55, asOfDate, "manual");
 
     const payload = await overviewService.getOverviewDashboard(asOfDate);
 

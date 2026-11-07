@@ -1,9 +1,17 @@
+import { bindSecurityMarket } from "./securityMarketBinding";
+import { securityMarketData } from "./securityMarketData";
 import { describe, it, expect, beforeEach } from 'vitest';
 import { AccountSubtype, AccountType } from '../shared/accountTypes';
 import { appSettingsService } from './appSettingsService';
 import { databaseService } from './database';
 import { investmentService } from './investmentService';
 import { resetTestDatabase } from './database.test.utils';
+
+async function recordCanonicalTestPrice(ticker: string, price: number, date: string, _source: string) {
+  const holdings = await databaseService.prismaClient.investmentProperties.findMany({ where: { tickerSymbol: ticker } });
+  for (const holding of holdings) await bindSecurityMarket({ accountId: holding.accountId, market: "NASDAQ", quoteCurrency: "USD", expectedMarket: holding.market });
+  await securityMarketData.write({ identity: { ticker, market: "NASDAQ" }, points: [{ date, price, priceBasis: "raw", barStatus: "complete" }], source: "manual", mode: "correct" });
+}
 
 async function seedFxRate(
   sourceCurrency: string,
@@ -284,7 +292,7 @@ describe('InvestmentService - Multi-Currency Support', () => {
         date: '2025-01-17',
       });
 
-      await investmentService.recordMarketPrice('VTI', 12, '2025-01-18', 'manual');
+      await recordCanonicalTestPrice('VTI', 12, '2025-01-18', 'manual');
 
       const positions = await investmentService.getAllPositions(portfolio.group.id, '2025-01-18');
 
@@ -331,7 +339,7 @@ describe('InvestmentService - Multi-Currency Support', () => {
         date: '2025-01-17',
       });
 
-      await investmentService.recordMarketPrice('VTI', 12, '2025-01-18', 'manual');
+      await recordCanonicalTestPrice('VTI', 12, '2025-01-18', 'manual');
 
       const positions = await investmentService.getAllPositions(portfolio.group.id, '2025-01-18');
 

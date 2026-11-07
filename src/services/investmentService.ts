@@ -8,6 +8,9 @@ import { recordCashDividend, recordReinvestment, recordSplit, type DividendInput
 import { AccountType, AccountSubtype } from "../shared/accountTypes";
 import { appSettingsService } from "./appSettingsService";
 import { valuationConversionService } from "./valuationConversionService";
+import { securityMarketData } from "./securityMarketData";
+
+export class InvestmentHistoryUnavailableError extends Error {}
 
 /**
  * Investment transaction types enum
@@ -985,6 +988,9 @@ class InvestmentService {
     accountId: string,
     asOfDate?: string
   ): Promise<{
+    accountId: string;
+    market: string | null;
+    priceDate: string | null;
     tickerSymbol: string;
     quantity: number;
     costBasis: number;
@@ -1009,22 +1015,16 @@ class InvestmentService {
     if (!effectiveDate) throw new Error("Invalid investment history date");
     const dated = await getInvestmentSnapshot(accountId, effectiveDate);
     if (dated.status === "unavailable" && dated.reason === "inconsistent_history") throw new Error("Investment history does not match the recorded position. Review the account before valuing it.");
-    if (asOfDate && dated.status !== "available") throw new Error("This account predates tracked investment history. Its historical holdings need review before valuation.");
+    if (asOfDate && dated.status !== "available") throw new InvestmentHistoryUnavailableError("This account predates tracked investment history. Its historical holdings need review before valuation.");
     const quantity = dated.status === "available" ? dated.quantity : investmentProps.quantity;
     const costBasis = dated.status === "available" ? dated.costBasis : await databaseService.getAccountBalance(accountId);
     const costPerShare = quantity > 0 ? costBasis / quantity : 0;
 
-    // Get latest market price from SecurityPriceHistory
-    let marketPrice: number | null = null;
-    if (asOfDate) {
-      marketPrice = await this.getMarketPrice(investmentProps.tickerSymbol, effectiveDate);
-    } else {
-      const latestPrice = await this.getLatestMarketPrice(investmentProps.tickerSymbol);
-      marketPrice = latestPrice ? latestPrice.price : null;
-    }
+    const quote = investmentProps.market ? await securityMarketData.latest({ ticker: investmentProps.tickerSymbol, market: investmentProps.market }, effectiveDate) : null;
+    const marketPrice = quote?.price ?? null;
 
     // Calculate market value: quantity × market price
-    const marketValue = marketPrice !== null 
+    const marketValue = quantity === 0 ? 0 : marketPrice !== null
       ? quantity * marketPrice
       : null;
 
@@ -1046,11 +1046,14 @@ class InvestmentService {
     };
 
     return {
+      accountId,
+      market: investmentProps.market,
+      priceDate: quote?.date ?? null,
       tickerSymbol: investmentProps.tickerSymbol,
       quantity,
       costBasis: fixPrecision(costBasis),
       costPerShare: fixPrecision(costPerShare),
-      marketPrice: marketPrice !== null ? fixPrecision(marketPrice) : null,
+      marketPrice,
       marketValue: marketValue !== null ? fixPrecision(marketValue) : null,
       unrealizedGain: unrealizedGain !== null ? fixPrecision(unrealizedGain) : null,
       unrealizedGainPercent: unrealizedGainPercent !== null ? fixPrecision(unrealizedGainPercent) : null,
@@ -1070,6 +1073,9 @@ class InvestmentService {
     portfolioId: string,
     asOfDate?: string
   ): Promise<Array<{
+    accountId: string;
+    market: string | null;
+    priceDate: string | null;
     tickerSymbol: string;
     currency: string;
     quantity: number;
@@ -1116,9 +1122,8 @@ class InvestmentService {
     const positions = [];
     for (const securityAccount of portfolioAccounts.securities) {
       const positionDetails = await this.getPositionDetails(securityAccount.id, asOfDate);
-      const marketValue = positionDetails.marketValue ?? positionDetails.costBasis;
       const costBasisBase = await convertToBaseCurrency(positionDetails.costBasis, securityAccount.currency);
-      const marketValueBase = await convertToBaseCurrency(marketValue, securityAccount.currency);
+      const marketValueBase = positionDetails.marketValue === null ? null : await convertToBaseCurrency(positionDetails.marketValue, securityAccount.currency);
       positions.push({
         ...positionDetails,
         currency: securityAccount.currency,
@@ -1148,7 +1153,7 @@ class InvestmentService {
     cashBalance: number | null;
     cashBalancesByCurrency: Record<string, number>;
     securityCostBasisByCurrency: Record<string, number>;
-    securityMarketValueByCurrency: Record<string, number>;
+    securityMarketValueByCurrency: Record<string, number | null>;
   }> {
     const reportingCurrency = (await appSettingsService.getBaseCurrency()) || "USD";
     const asOfDate = new Date().toISOString().slice(0, 10);
@@ -1209,19 +1214,18 @@ class InvestmentService {
     let costBasisSummaryUnavailable = false;
     let marketValueSummaryUnavailable = false;
     const securityCostBasisByCurrency: Record<string, number> = {};
-    const securityMarketValueByCurrency: Record<string, number> = {};
+    const securityMarketValueByCurrency: Record<string, number | null> = {};
 
     for (const securityAccount of portfolioAccounts.securities) {
       const positionDetails = await this.getPositionDetails(securityAccount.id);
 
-      const nativeMarketValue = positionDetails.marketValue !== null
-        ? positionDetails.marketValue
-        : positionDetails.costBasis;
+      const nativeMarketValue = positionDetails.marketValue;
 
       securityCostBasisByCurrency[securityAccount.currency] =
         (securityCostBasisByCurrency[securityAccount.currency] || 0) + positionDetails.costBasis;
       securityMarketValueByCurrency[securityAccount.currency] =
-        (securityMarketValueByCurrency[securityAccount.currency] || 0) + nativeMarketValue;
+        nativeMarketValue === null || securityMarketValueByCurrency[securityAccount.currency] === null ? null :
+          (securityMarketValueByCurrency[securityAccount.currency] || 0) + nativeMarketValue;
 
       const convertedCostBasis = await convertToBaseCurrency(positionDetails.costBasis, securityAccount.currency);
       if (convertedCostBasis === null) {
@@ -1230,7 +1234,7 @@ class InvestmentService {
         totalCostBasis += convertedCostBasis;
       }
 
-      const convertedMarketValue = await convertToBaseCurrency(nativeMarketValue, securityAccount.currency);
+      const convertedMarketValue = nativeMarketValue === null ? null : await convertToBaseCurrency(nativeMarketValue, securityAccount.currency);
       if (convertedMarketValue === null) {
         marketValueSummaryUnavailable = true;
       } else {
@@ -1286,26 +1290,28 @@ class InvestmentService {
   public async getAssetAllocation(
     portfolioId: string
   ): Promise<Array<{
+    accountId: string;
     tickerSymbol: string;
-    marketValue: number;
-    percentOfPortfolio: number;
+    marketValue: number | null;
+    percentOfPortfolio: number | null;
   }>> {
     // Get all positions with market values
     const positions = await this.getAllPositions(portfolioId);
 
     // Calculate total portfolio value
     const portfolioValue = await this.getPortfolioValue(portfolioId);
-    const totalValue = (portfolioValue.totalMarketValue ?? 0) + (portfolioValue.cashBalance ?? 0);
+    const totalValue = portfolioValue.totalMarketValue === null || portfolioValue.cashBalance === null ? null : portfolioValue.totalMarketValue + portfolioValue.cashBalance;
 
     // Calculate each position as percentage of total
     const allocations = positions.map((position) => {
-      const marketValue = position.marketValue !== null ? position.marketValue : position.costBasis;
-      const percentOfPortfolio = totalValue > 0 ? (marketValue / totalValue) * 100 : 0;
+      const marketValue = position.marketValue;
+      const percentOfPortfolio = totalValue === null || position.marketValueBase === null ? null : totalValue > 0 ? (position.marketValueBase / totalValue) * 100 : 0;
 
       return {
+        accountId: position.accountId,
         tickerSymbol: position.tickerSymbol,
-        marketValue: Math.round(marketValue * 100) / 100,
-        percentOfPortfolio: Math.round(percentOfPortfolio * 100) / 100,
+        marketValue: marketValue === null ? null : Math.round(marketValue * 100) / 100,
+        percentOfPortfolio: percentOfPortfolio === null ? null : Math.round(percentOfPortfolio * 100) / 100,
       };
     });
 
@@ -1643,20 +1649,20 @@ class InvestmentService {
     startDate: string,
     endDate: string
   ): Promise<{
-    totalReturn: number;
-    totalReturnPercent: number;
+    totalReturn: number | null;
+    totalReturnPercent: number | null;
     realizedGains: number;
-    unrealizedGains: number;
+    unrealizedGains: number | null;
     dividendIncome: number;
     interestIncome: number;
     fees: number;
     deposits: number;
     withdrawals: number;
-    currentValue: number;
+    currentValue: number | null;
   }> {
     // Get current portfolio value
     const portfolioValue = await this.getPortfolioValue(portfolioId);
-    const currentValue = (portfolioValue.totalMarketValue ?? 0) + (portfolioValue.cashBalance ?? 0);
+    const currentValue = portfolioValue.totalMarketValue === null || portfolioValue.cashBalance === null ? null : portfolioValue.totalMarketValue + portfolioValue.cashBalance;
 
     // Calculate deposits (cash deposits to portfolio)
     const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
@@ -1724,7 +1730,7 @@ class InvestmentService {
     const realizedGains = realizedGainsData.reduce((sum, rg) => sum + rg.realizedGain, 0);
 
     // Get unrealized gains
-    const unrealizedGains = portfolioValue.totalUnrealizedGain ?? 0;
+    const unrealizedGains = portfolioValue.totalUnrealizedGain;
 
     // Get dividend income
     const dividendIncomeData = await this.getDividendIncome(portfolioId, startDate, endDate);
@@ -1774,25 +1780,25 @@ class InvestmentService {
     }
 
     // Calculate total return: (current value + withdrawals - deposits) / deposits
-    const totalReturn = deposits > 0 
+    const totalReturn = currentValue === null ? null : deposits > 0
       ? currentValue + withdrawals - deposits 
       : 0;
     
-    const totalReturnPercent = deposits > 0 
+    const totalReturnPercent = totalReturn === null ? null : deposits > 0
       ? (totalReturn / deposits) * 100 
       : 0;
 
     return {
-      totalReturn: Math.round(totalReturn * 100) / 100,
-      totalReturnPercent: Math.round(totalReturnPercent * 100) / 100,
+      totalReturn: totalReturn === null ? null : Math.round(totalReturn * 100) / 100,
+      totalReturnPercent: totalReturnPercent === null ? null : Math.round(totalReturnPercent * 100) / 100,
       realizedGains: Math.round(realizedGains * 100) / 100,
-      unrealizedGains: Math.round(unrealizedGains * 100) / 100,
+      unrealizedGains: unrealizedGains === null ? null : Math.round(unrealizedGains * 100) / 100,
       dividendIncome: Math.round(dividendIncome * 100) / 100,
       interestIncome: Math.round(interestIncome * 100) / 100,
       fees: Math.round(fees * 100) / 100,
       deposits: Math.round(deposits * 100) / 100,
       withdrawals: Math.round(withdrawals * 100) / 100,
-      currentValue: Math.round(currentValue * 100) / 100,
+      currentValue: currentValue === null ? null : Math.round(currentValue * 100) / 100,
     };
   }
 

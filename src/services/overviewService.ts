@@ -2,7 +2,7 @@ import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { OverviewDashboardPayload } from "../shared/overview";
 import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
-import { investmentService } from "./investmentService";
+import { investmentService, InvestmentHistoryUnavailableError } from "./investmentService";
 import { valuationConversionService } from "./valuationConversionService";
 
 function getLocalDateString(date: Date): string {
@@ -29,6 +29,10 @@ function getRecentMonthKeys(asOfDate: string, count: number): string[] {
 }
 
 class OverviewService {
+  private async securityValue(accountId: string, date: string): Promise<number | null> {
+    try { return (await investmentService.getPositionDetails(accountId, date)).marketValue; }
+    catch (error) { if (error instanceof InvestmentHistoryUnavailableError) return null; throw error; }
+  }
   private async getBalanceAsOfDate(accountId: string, asOfDate: string): Promise<number> {
     const lines = await databaseService.prismaClient.journalLine.findMany({
       where: {
@@ -104,11 +108,9 @@ class OverviewService {
       let balance = await this.getBalanceAsOfDate(account.id, effectiveAsOfDate);
 
       if (account.investmentProperties) {
-        const positionDetails = await investmentService.getPositionDetails(
-          account.id,
-          effectiveAsOfDate
-        );
-        balance = positionDetails.marketValue ?? positionDetails.costBasis;
+        const value = await this.securityValue(account.id, effectiveAsOfDate);
+        if (value === null) { netWorthUnavailable = true; continue; }
+        balance = value;
       }
 
       const convertedBalance = await convertToReportingCurrency(balance, account.currency);
@@ -209,11 +211,8 @@ class OverviewService {
       }
 
       for (const securityAccount of portfolioAccounts.securities) {
-        const positionDetails = await investmentService.getPositionDetails(
-          securityAccount.id,
-          effectiveAsOfDate
-        );
-        const rawAmount = positionDetails.marketValue ?? positionDetails.costBasis;
+        const rawAmount = await this.securityValue(securityAccount.id, effectiveAsOfDate);
+        if (rawAmount === null) { hasMissingConversion = true; continue; }
         const convertedAmount = await convertToReportingCurrency(rawAmount, securityAccount.currency);
         if (convertedAmount === null) {
           hasMissingConversion = true;
