@@ -1,3 +1,4 @@
+import { recordInvestmentCash } from "./investmentCash";
 import { createHash } from "crypto";
 import type { Prisma } from "@prisma/client";
 import { databaseService } from "./database";
@@ -104,13 +105,8 @@ async function post(tx: Prisma.TransactionClient, portfolioId: string, row: Inve
   } })).filter((account) => account.name.includes("Trade Cash"));
   if (cashAccounts.length !== 1) throw new Error("Select one active trade cash account for this statement");
   const cash = cashAccounts[0];
-  const categoryName = row.type === "fee" ? "Investment Expenses" : "Interest Income";
-  const category = await tx.account.findFirst({ where: { name: categoryName, type: AccountType.Category, isArchived: false } });
-  if (!category) throw new Error(`${categoryName} category account not found`);
-  const amount = cents(row.amount) / 100 * (row.type === "fee" ? -1 : 1), description = row.description || `${row.type === "fee" ? "Investment fee" : "Interest income"} - ${row.ticker}`;
-  return tx.journalEntry.create({ data: { date: row.date, description, type: row.type === "fee" ? "investment_fee" : "interest_income", displayOrder: Date.now(), lines: { create: [
-    { accountId: cash.id, amount, currency: cash.currency, description }, { accountId: category.id, amount: -amount, currency: cash.currency, description },
-  ] } }, include: { lines: true } });
+  return recordInvestmentCash({ portfolioId, kind: row.type, amount: row.amount, date: row.date,
+    tradeCashAccountId: cash.id, description: row.description || `${row.type === "fee" ? "Investment fee" : "Interest income"} - ${row.ticker}` }, tx);
 }
 
 export async function importInvestments(portfolioId: string, csv: string, mapping: InvestmentImportMapping, options: InvestmentImportOptions = {}) {

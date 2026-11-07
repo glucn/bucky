@@ -1,4 +1,7 @@
 import { databaseService } from "./database";
+import { createHolding } from "./securityHolding";
+import type { NewHoldingInput } from "../shared/securityHolding";
+import { recordInvestmentCash } from "./investmentCash";
 import { importInvestments } from "./investmentImport";
 import { parseInvestmentImport, type InvestmentImportMapping, type InvestmentImportOptions } from "../shared/investmentImport";
 import { getInvestmentSnapshot } from "./investmentActivity";
@@ -300,47 +303,12 @@ class InvestmentService {
     securityType?: string,
     costBasisMethod: 'FIFO' | 'AVERAGE_COST' = 'FIFO'
   ): Promise<any> {
-    // Validate that the portfolio exists
-    const portfolio = await databaseService.getAccountGroupById(portfolioId);
-    if (!portfolio) {
-      throw new Error("Portfolio not found");
-    }
+    return createHolding({ portfolioId, tickerSymbol, securityType, costBasisMethod });
+  }
 
-    // Check if a security account for this ticker already exists in the portfolio
-    const existingAccount = await this.getSecurityAccount(portfolioId, tickerSymbol);
-    if (existingAccount) {
-      throw new Error(`Security account for ${tickerSymbol} already exists in this portfolio`);
-    }
-
-    // Create the Account with type "user", subtype "asset"
-    const account = await databaseService.createAccount({
-      name: `${tickerSymbol}`,
-      type: AccountType.User,
-      subtype: AccountSubtype.Asset,
-      currency: "USD", // Securities are typically tracked in USD
-    });
-
-    // Link the account to the portfolio AccountGroup
-    await databaseService.addAccountToGroup(account.id, portfolioId);
-
-    // Create InvestmentProperties record
-    const investmentProperties = await databaseService.prismaClient.investmentProperties.create({
-      data: {
-        accountId: account.id,
-        tickerSymbol,
-        securityType,
-        quantity: 0,
-        hasCompleteActivityHistory: true,
-        costBasisMethod,
-        lots: costBasisMethod === 'FIFO' ? JSON.stringify([]) : null,
-      },
-    });
-
-    // Return the account with investment properties
-    return {
-      ...account,
-      investmentProperties,
-    };
+  public async createMarketHolding(input: NewHoldingInput) {
+    if (!input || typeof input.market !== "string") throw new Error("An explicit resolved market is required");
+    return createHolding(input);
   }
 
   /**
@@ -364,22 +332,12 @@ class InvestmentService {
       throw new Error("Portfolio not found");
     }
 
-    // Search through the portfolio's accounts for one with matching ticker symbol
-    for (const account of portfolio.accounts) {
-      const accountWithProps = await databaseService.prismaClient.account.findUnique({
-        where: { id: account.id },
-        include: { investmentProperties: true },
-      });
-
-      if (
-        accountWithProps?.investmentProperties &&
-        accountWithProps.investmentProperties.tickerSymbol === tickerSymbol
-      ) {
-        return accountWithProps;
-      }
-    }
-
-    return null;
+    const matches = await databaseService.prismaClient.account.findMany({
+      where: { groupId: portfolio.id, investmentProperties: { tickerSymbol: tickerSymbol.trim() } },
+      include: { investmentProperties: true },
+    });
+    if (matches.length > 1) throw new Error("Ambiguous ticker; select an explicit security account");
+    return matches[0] ?? null;
   }
 
   /**
@@ -619,73 +577,8 @@ class InvestmentService {
    * 
    * Requirements: 11.1, 11.2, 11.4, 11.5
    */
-  public async recordFee(
-    portfolioId: string,
-    amount: number,
-    description: string,
-    date: string
-  ): Promise<any> {
-    // Validate required fields (Requirements 11.1)
-    if (!portfolioId) {
-      throw new Error("Portfolio ID is required");
-    }
-    if (typeof amount !== "number" || amount <= 0) {
-      throw new Error("Amount must be a positive number");
-    }
-    if (!description || description.trim() === "") {
-      throw new Error("Description is required");
-    }
-    if (!date || date.trim() === "") {
-      throw new Error("Transaction date is required");
-    }
-
-    const roundedAmount = Math.round(amount * 100) / 100;
-
-    // Get the portfolio to find the trade cash account
-    const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
-    if (!portfolioAccounts.tradeCash) {
-      throw new Error("Trade cash account not found in portfolio");
-    }
-
-    // Get the Investment Expense Category account (Requirements 11.2)
-    const investmentExpenseAccount = await databaseService.prismaClient.account.findFirst({
-      where: { name: "Investment Expenses", type: AccountType.Category },
-    });
-    if (!investmentExpenseAccount) {
-      throw new Error("Investment Expenses category account not found");
-    }
-
-    // Create journal entry debiting Investment Expense Category, crediting Trade Cash Account (Requirements 11.2)
-    const journalLines = [
-      {
-        accountId: investmentExpenseAccount.id,
-        amount: roundedAmount, // Positive for debit (expense increase)
-        currency: portfolioAccounts.tradeCash.currency,
-        description: description,
-      },
-      {
-        accountId: portfolioAccounts.tradeCash.id,
-        amount: -roundedAmount, // Negative for credit (asset decrease)
-        currency: portfolioAccounts.tradeCash.currency,
-        description: description,
-      },
-    ];
-
-    // Store fee description in journal entry metadata (Requirements 11.4, 11.5)
-    const journalEntry = await databaseService.prismaClient.journalEntry.create({
-      data: {
-        date: date,
-        description: description,
-        type: InvestmentTransactionType.FEE,
-        displayOrder: Date.now(),
-        lines: {
-          create: journalLines,
-        },
-      },
-      include: { lines: true },
-    });
-
-    return journalEntry;
+  public async recordFee(portfolioId: string, amount: number, description: string, date: string, tradeCashAccountId?: string): Promise<any> {
+    return recordInvestmentCash({ portfolioId, amount, description, date, tradeCashAccountId, kind: "fee" });
   }
 
   /**
@@ -701,72 +594,8 @@ class InvestmentService {
    * 
    * Requirements: 14.1, 14.2, 14.3
    */
-  public async recordInterest(
-    portfolioId: string,
-    amount: number,
-    date: string,
-    description?: string
-  ): Promise<any> {
-    // Validate required fields (Requirements 14.1)
-    if (!portfolioId) {
-      throw new Error("Portfolio ID is required");
-    }
-    if (typeof amount !== "number" || amount <= 0) {
-      throw new Error("Amount must be a positive number");
-    }
-    if (!date || date.trim() === "") {
-      throw new Error("Transaction date is required");
-    }
-
-    const roundedAmount = Math.round(amount * 100) / 100;
-
-    // Get the portfolio to find the trade cash account
-    const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
-    if (!portfolioAccounts.tradeCash) {
-      throw new Error("Trade cash account not found in portfolio");
-    }
-
-    // Get the Interest Income Category account (Requirements 14.2)
-    const interestIncomeAccount = await databaseService.prismaClient.account.findFirst({
-      where: { name: "Interest Income", type: AccountType.Category },
-    });
-    if (!interestIncomeAccount) {
-      throw new Error("Interest Income category account not found");
-    }
-
-    // Create journal entry debiting Trade Cash Account, crediting Interest Income Category (Requirements 14.2)
-    const desc = description || "Interest income";
-    
-    const journalLines = [
-      {
-        accountId: portfolioAccounts.tradeCash.id,
-        amount: roundedAmount, // Positive for debit (asset increase)
-        currency: portfolioAccounts.tradeCash.currency,
-        description: desc,
-      },
-      {
-        accountId: interestIncomeAccount.id,
-        amount: -roundedAmount, // Negative for credit (income increase)
-        currency: portfolioAccounts.tradeCash.currency,
-        description: desc,
-      },
-    ];
-
-    // Store optional ticker symbol in description (Requirements 14.3)
-    const journalEntry = await databaseService.prismaClient.journalEntry.create({
-      data: {
-        date: date,
-        description: desc,
-        type: InvestmentTransactionType.INTEREST,
-        displayOrder: Date.now(),
-        lines: {
-          create: journalLines,
-        },
-      },
-      include: { lines: true },
-    });
-
-    return journalEntry;
+  public async recordInterest(portfolioId: string, amount: number, date: string, description?: string, tradeCashAccountId?: string): Promise<any> {
+    return recordInvestmentCash({ portfolioId, amount, description, date, tradeCashAccountId, kind: "interest" });
   }
 
   /**

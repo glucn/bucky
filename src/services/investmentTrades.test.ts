@@ -67,8 +67,7 @@ it("rolls back implicit security creation when posting fails", async () => {
 it("uses matching-currency cash instead of the first cash account", async () => {
   const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Currencies");
   const euro = await investmentService.addTradeCashAccount(group.id, "EUR");
-  const holding = await investmentService.createSecurityAccount(group.id, "ABC");
-  await databaseService.prismaClient.account.update({ where: { id: holding.id }, data: { currency: "EUR" } });
+  await investmentService.createMarketHolding({ portfolioId: group.id, tickerSymbol: "ABC", market: "XETRA", quoteCurrency: "EUR", tradeCashAccountId: euro.id, costBasisMethod: "FIFO" });
   const entry = await investmentService.recordBuy({ ...trade, portfolioId: group.id });
   expect(entry.lines.every((line: any) => line.currency === "EUR")).toBe(true);
   expect(cashTotal(entry, euro.id)).toBe(-100);

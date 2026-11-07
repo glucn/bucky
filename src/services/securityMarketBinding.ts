@@ -1,5 +1,6 @@
 import { type SecurityMarketBinding, parseSecurityIdentity } from "../shared/securityMarket";
-import { databaseService } from "./database";
+import type { Prisma } from "@prisma/client";
+import { investmentTransaction } from "./investmentPosting";
 
 function hasLotHistory(raw: string | null): boolean {
   if (raw === null) return false;
@@ -8,13 +9,13 @@ function hasLotHistory(raw: string | null): boolean {
 }
 
 /** Explicit assignment only. Never changes journal lines, quantities, lots, or account currency. */
-export async function bindSecurityMarket(input: SecurityMarketBinding): Promise<void> {
+export async function bindSecurityMarket(input: SecurityMarketBinding, transaction?: Prisma.TransactionClient): Promise<void> {
   if (!input || typeof input.accountId !== "string" || !input.accountId ||
     typeof input.quoteCurrency !== "string" || !/^[A-Z]{3}$/.test(input.quoteCurrency) ||
     !(input.expectedMarket === null || typeof input.expectedMarket === "string")) throw new Error("Invalid market binding or quote currency");
   // Validate market before connecting; the real ticker is taken from the persisted holding.
   const { market } = parseSecurityIdentity({ ticker: "validation", market: input.market });
-  await databaseService.prismaClient.$transaction(async (tx) => {
+  await investmentTransaction(async (tx) => {
     const account = await tx.account.findUnique({ where: { id: input.accountId }, include: { investmentProperties: true } });
     const holding = account?.investmentProperties;
     if (!account || !holding || !account.groupId) throw new Error("Portfolio security account not found");
@@ -32,5 +33,5 @@ export async function bindSecurityMarket(input: SecurityMarketBinding): Promise<
     if (!metadata) await tx.securityMetadata.create({ data: { ...key, quoteCurrency: input.quoteCurrency } });
     else if (!metadata.quoteCurrency) await tx.securityMetadata.update({ where: { ticker_market: key }, data: { quoteCurrency: input.quoteCurrency } });
     if (holding.market !== market) await tx.investmentProperties.update({ where: { accountId: account.id }, data: { market } });
-  });
+  }, transaction);
 }

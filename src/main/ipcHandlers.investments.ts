@@ -6,6 +6,11 @@ import { bindSecurityMarket } from "../services/securityMarketBinding";
 
 export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
   console.log("Registering investment IPC handlers...");
+  ipcMain.removeHandler("create-market-holding");
+  ipcMain.handle("create-market-holding", async (_, input) => {
+    try { return { success: true, account: await investmentService.createMarketHolding(input) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to create holding" }; }
+  });
   ipcMain.removeHandler("get-security-price-context");
   ipcMain.removeHandler("search-security-markets");
   ipcMain.removeHandler("bind-security-market");
@@ -227,7 +232,8 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
         params.portfolioId,
         params.amount,
         params.date,
-        params.description
+        params.description,
+        params.tradeCashAccountId
       );
       return { success: true, entry };
     } catch (error) {
@@ -246,7 +252,8 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
         params.portfolioId,
         params.amount,
         params.description,
-        params.date
+        params.date,
+        params.tradeCashAccountId
       );
       return { success: true, entry };
     } catch (error) {

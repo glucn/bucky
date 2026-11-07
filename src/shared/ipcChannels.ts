@@ -28,6 +28,7 @@ export const APP_IPC_CHANNELS = [
   "create-account-group",
   "create-checkpoint",
   "create-investment-portfolio",
+  "create-market-holding",
   "create-opening-balance-entry",
   "create-personal-backup",
   "delete-account",
