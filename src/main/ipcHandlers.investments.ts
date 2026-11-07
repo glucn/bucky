@@ -3,6 +3,7 @@ import { investmentService } from "../services/investmentService";
 import { previewInvestmentImport } from "../services/investmentImport";
 import { getSecurityPriceContext, previewSecurityPrices, saveSecurityPrices, searchSecurityMarkets, excludeSecurityPrice } from "../services/securityPriceControls";
 import { bindSecurityMarket } from "../services/securityMarketBinding";
+import { appSettingsService } from "../services/appSettingsService";
 
 export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
   console.log("Registering investment IPC handlers...");
@@ -447,8 +448,9 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
     async (_, { portfolioId, startDate, endDate }: { portfolioId: string | null; startDate: string; endDate: string }) => {
       console.log("Handling get-interest-income request:", { portfolioId, startDate, endDate });
       try {
-        const income = await investmentService.getInterestIncome(portfolioId, startDate, endDate);
-        return { success: true, income };
+        const baseCurrency = (await appSettingsService.getBaseCurrency()) || "USD";
+        const income = await investmentService.getInterestIncome(portfolioId, startDate, endDate, baseCurrency);
+        return { success: true, income, baseCurrency };
       } catch (error) {
         console.error("Error getting interest income:", error);
         return {
@@ -464,8 +466,9 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
     async (_, { portfolioId, startDate, endDate }: { portfolioId: string; startDate: string; endDate: string }) => {
       console.log("Handling get-realized-gains request:", { portfolioId, startDate, endDate });
       try {
-        const gains = await investmentService.getRealizedGains(portfolioId, startDate, endDate);
-        return { success: true, gains };
+        const baseCurrency = (await appSettingsService.getBaseCurrency()) || "USD";
+        const gains = await investmentService.getRealizedGains(portfolioId, startDate, endDate, baseCurrency);
+        return { success: true, gains, baseCurrency };
       } catch (error) {
         console.error("Error getting realized gains:", error);
         return {

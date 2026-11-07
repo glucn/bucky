@@ -2,6 +2,7 @@ import { databaseService } from "./database";
 import { createHolding } from "./securityHolding";
 import type { NewHoldingInput } from "../shared/securityHolding";
 import { recordInvestmentCash } from "./investmentCash";
+import { investmentIncomeReport, realizedGainReport, investmentReportingBundle } from "./investmentIncomeReporting";
 import { importInvestments } from "./investmentImport";
 import { parseInvestmentImport, type InvestmentImportMapping, type InvestmentImportOptions } from "../shared/investmentImport";
 import { getInvestmentSnapshot } from "./investmentActivity";
@@ -1155,89 +1156,8 @@ class InvestmentService {
    * 
    * Requirements: 13.4
    */
-  public async getDividendIncome(
-    portfolioId: string | null,
-    startDate: string,
-    endDate: string
-  ): Promise<{
-    total: number;
-    byTicker: Record<string, number>;
-  }> {
-    // Get the Dividend Income Category account
-    const dividendIncomeAccount = await databaseService.prismaClient.account.findFirst({
-      where: { name: "Dividend Income", type: AccountType.Category },
-    });
-
-    if (!dividendIncomeAccount) {
-      throw new Error("Dividend Income category account not found");
-    }
-
-    // Query journal entries to Dividend Income Category for date range
-    const journalLines = await databaseService.prismaClient.journalLine.findMany({
-      where: {
-        accountId: dividendIncomeAccount.id,
-        entry: {
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
-        },
-      },
-      include: {
-        entry: true,
-      },
-    });
-
-    // Filter by portfolio if specified
-    let filteredLines = journalLines;
-    if (portfolioId) {
-      const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
-      const portfolioAccountIds = new Set([
-        portfolioAccounts.tradeCash?.id,
-        ...portfolioAccounts.securities.map(s => s.id),
-      ].filter(Boolean));
-
-      // Filter to only include entries that involve portfolio accounts
-      filteredLines = [];
-      for (const line of journalLines) {
-        const entryLines = await databaseService.prismaClient.journalLine.findMany({
-          where: { entryId: line.entryId },
-        });
-        
-        const involvesPortfolio = entryLines.some(l => portfolioAccountIds.has(l.accountId));
-        if (involvesPortfolio) {
-          filteredLines.push(line);
-        }
-      }
-    }
-
-    // Sum amounts and group by ticker
-    let total = 0;
-    const byTicker: Record<string, number> = {};
-
-    for (const line of filteredLines) {
-      // Amount is negative for credits to income account, so negate it
-      const amount = -line.amount;
-      total += amount;
-
-      // Extract ticker from description
-      const description = line.entry.description || "";
-      const tickerMatch = description.match(/from ([A-Z]+)/);
-      if (tickerMatch) {
-        const ticker = tickerMatch[1];
-        byTicker[ticker] = (byTicker[ticker] || 0) + amount;
-      }
-    }
-
-    return {
-      total: Math.round(total * 100) / 100,
-      byTicker: Object.fromEntries(
-        Object.entries(byTicker).map(([ticker, amount]) => [
-          ticker,
-          Math.round(amount * 100) / 100,
-        ])
-      ),
-    };
+  public async getDividendIncome(portfolioId: string | null, startDate: string, endDate: string, baseCurrency?: string) {
+    return investmentIncomeReport("dividend", portfolioId, startDate, endDate, baseCurrency);
   }
 
   /**
@@ -1251,67 +1171,8 @@ class InvestmentService {
    * 
    * Requirements: 14.4, 14.5
    */
-  public async getInterestIncome(
-    portfolioId: string | null,
-    startDate: string,
-    endDate: string
-  ): Promise<number> {
-    // Get the Interest Income Category account
-    const interestIncomeAccount = await databaseService.prismaClient.account.findFirst({
-      where: { name: "Interest Income", type: AccountType.Category },
-    });
-
-    if (!interestIncomeAccount) {
-      throw new Error("Interest Income category account not found");
-    }
-
-    // Query journal entries to Interest Income Category for date range
-    const journalLines = await databaseService.prismaClient.journalLine.findMany({
-      where: {
-        accountId: interestIncomeAccount.id,
-        entry: {
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
-        },
-      },
-      include: {
-        entry: true,
-      },
-    });
-
-    // Filter by portfolio if specified
-    let filteredLines = journalLines;
-    if (portfolioId) {
-      const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
-      const portfolioAccountIds = new Set([
-        portfolioAccounts.tradeCash?.id,
-        ...portfolioAccounts.securities.map(s => s.id),
-      ].filter(Boolean));
-
-      // Filter to only include entries that involve portfolio accounts
-      filteredLines = [];
-      for (const line of journalLines) {
-        const entryLines = await databaseService.prismaClient.journalLine.findMany({
-          where: { entryId: line.entryId },
-        });
-        
-        const involvesPortfolio = entryLines.some(l => portfolioAccountIds.has(l.accountId));
-        if (involvesPortfolio) {
-          filteredLines.push(line);
-        }
-      }
-    }
-
-    // Sum amounts
-    let total = 0;
-    for (const line of filteredLines) {
-      // Amount is negative for credits to income account, so negate it
-      total += -line.amount;
-    }
-
-    return Math.round(total * 100) / 100;
+  public async getInterestIncome(portfolioId: string | null, startDate: string, endDate: string, baseCurrency?: string) {
+    return (await investmentIncomeReport("interest", portfolioId, startDate, endDate, baseCurrency)).total;
   }
 
   /**
@@ -1325,138 +1186,8 @@ class InvestmentService {
    * 
    * Requirements: 9.1, 9.2, 9.3, 9.4, 9.5
    */
-  public async getRealizedGains(
-    portfolioId: string,
-    startDate: string,
-    endDate: string
-  ): Promise<Array<{
-    date: string;
-    tickerSymbol: string;
-    quantity: number;
-    costBasis: number;
-    saleProceeds: number;
-    realizedGain: number;
-    holdingPeriod: 'short' | 'long' | 'unknown';
-  }>> {
-    // Get the Realized Gain/Loss Category account
-    const realizedGainLossAccount = await databaseService.prismaClient.account.findFirst({
-      where: { name: "Realized Gains/Losses", type: AccountType.Category },
-    });
-
-    if (!realizedGainLossAccount) {
-      throw new Error("Realized Gains/Losses category account not found");
-    }
-
-    // Query journal entries to Realized Gain/Loss Category for date range
-    const journalLines = await databaseService.prismaClient.journalLine.findMany({
-      where: {
-        accountId: realizedGainLossAccount.id,
-        entry: {
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
-          type: InvestmentTransactionType.SELL,
-        },
-      },
-      include: {
-        entry: {
-          include: {
-            lines: true,
-          },
-        },
-      },
-    });
-
-    // Get portfolio accounts to filter
-    const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
-    const portfolioAccountIds = new Set([
-      portfolioAccounts.tradeCash?.id,
-      ...portfolioAccounts.securities.map(s => s.id),
-    ].filter(Boolean));
-
-    const realizedGains = [];
-
-    for (const line of journalLines) {
-      const entry = line.entry;
-      
-      // Check if this entry involves portfolio accounts
-      const involvesPortfolio = entry.lines.some(l => portfolioAccountIds.has(l.accountId));
-      if (!involvesPortfolio) {
-        continue;
-      }
-
-      // Parse transaction details from description
-      const description = entry.description || "";
-      const tickerMatch = description.match(/of ([A-Z]+)/);
-      const quantityMatch = description.match(/Sell ([\d.]+) shares/);
-      const priceMatch = description.match(/@ ([\d.]+)/);
-
-      if (!tickerMatch || !quantityMatch || !priceMatch) {
-        continue;
-      }
-
-      const tickerSymbol = tickerMatch[1];
-      const quantity = parseFloat(quantityMatch[1]);
-      const pricePerShare = parseFloat(priceMatch[1]);
-
-      // Find the security account line to get cost basis
-      const securityLine = entry.lines.find(l => 
-        l.accountId !== realizedGainLossAccount.id &&
-        l.accountId !== portfolioAccounts.tradeCash?.id &&
-        l.amount < 0 // Credit to security account
-      );
-
-      const costBasis = securityLine ? -securityLine.amount : 0;
-
-      // Find the trade cash line to get sale proceeds
-      const cashLine = entry.lines.find(l => 
-        l.accountId === portfolioAccounts.tradeCash?.id &&
-        l.amount > 0 // Debit to cash
-      );
-
-      const saleProceeds = cashLine ? cashLine.amount : quantity * pricePerShare;
-
-      // Realized gain is negative of the amount in the gain/loss account
-      // (negative amount = credit = gain, positive amount = debit = loss)
-      const realizedGain = -line.amount;
-
-      // For FIFO portfolios, calculate holding period from lot purchase dates
-      let holdingPeriod: 'short' | 'long' | 'unknown' = 'unknown';
-      
-      const securityAccount = portfolioAccounts.securities.find(s => 
-        s.investmentProperties?.tickerSymbol === tickerSymbol
-      );
-
-      if (securityAccount?.investmentProperties?.costBasisMethod === 'FIFO') {
-        const lots = securityAccount.investmentProperties.lots 
-          ? JSON.parse(securityAccount.investmentProperties.lots) 
-          : [];
-        
-        if (lots.length > 0) {
-          // Use the oldest lot's purchase date
-          const oldestLot = lots[0];
-          const purchaseDate = new Date(oldestLot.date);
-          const saleDate = new Date(entry.date);
-          const daysDiff = (saleDate.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24);
-          
-          // Classify as short-term (< 1 year) or long-term (≥ 1 year)
-          holdingPeriod = daysDiff >= 365 ? 'long' : 'short';
-        }
-      }
-
-      realizedGains.push({
-        date: entry.date,
-        tickerSymbol,
-        quantity: Math.round(quantity * 1000000) / 1000000,
-        costBasis: Math.round(costBasis * 100) / 100,
-        saleProceeds: Math.round(saleProceeds * 100) / 100,
-        realizedGain: Math.round(realizedGain * 100) / 100,
-        holdingPeriod,
-      });
-    }
-
-    return realizedGains;
+  public async getRealizedGains(portfolioId: string, startDate: string, endDate: string, baseCurrency?: string) {
+    return realizedGainReport(portfolioId, startDate, endDate, baseCurrency);
   }
 
   /**
@@ -1475,19 +1206,22 @@ class InvestmentService {
     startDate: string,
     endDate: string
   ): Promise<{
+    baseCurrency: string;
+    incomeByCurrency: { dividends: Record<string, number>; interest: Record<string, number>; fees: Record<string, number> };
     totalReturn: number | null;
     totalReturnPercent: number | null;
-    realizedGains: number;
+    realizedGains: number | null;
     unrealizedGains: number | null;
-    dividendIncome: number;
-    interestIncome: number;
-    fees: number;
+    dividendIncome: number | null;
+    interestIncome: number | null;
+    fees: number | null;
     deposits: number;
     withdrawals: number;
     currentValue: number | null;
   }> {
-    // Get current portfolio value
-    const portfolioValue = await this.getPortfolioValue(portfolioId);
+    const baseCurrency = (await appSettingsService.getBaseCurrency()) || "USD";
+    // Capture reporting currency and the current valuation cutoff once per request.
+    const portfolioValue = await this.getPortfolioAtDate(portfolioId, resolveValuationDate(), baseCurrency);
     const currentValue = portfolioValue.totalMarketValue === null || portfolioValue.cashBalance === null ? null : portfolioValue.totalMarketValue + portfolioValue.cashBalance;
 
     // Calculate deposits (cash deposits to portfolio)
@@ -1551,59 +1285,10 @@ class InvestmentService {
       }
     }
 
-    // Get realized gains
-    const realizedGainsData = await this.getRealizedGains(portfolioId, startDate, endDate);
-    const realizedGains = realizedGainsData.reduce((sum, rg) => sum + rg.realizedGain, 0);
-
-    // Get unrealized gains
+    const income = await investmentReportingBundle(portfolioId, startDate, endDate, baseCurrency);
+    const realizedGains = income.gains.reduce<number | null>((sum, row) => sum === null || row.realizedGainBase === null ? null : sum + row.realizedGainBase, 0);
     const unrealizedGains = portfolioValue.totalUnrealizedGain;
-
-    // Get dividend income
-    const dividendIncomeData = await this.getDividendIncome(portfolioId, startDate, endDate);
-    const dividendIncome = dividendIncomeData.total;
-
-    // Get interest income
-    const interestIncome = await this.getInterestIncome(portfolioId, startDate, endDate);
-
-    // Get fees
-    const investmentExpenseAccount = await databaseService.prismaClient.account.findFirst({
-      where: { name: "Investment Expenses", type: AccountType.Category },
-    });
-
-    let fees = 0;
-    if (investmentExpenseAccount) {
-      const feeLines = await databaseService.prismaClient.journalLine.findMany({
-        where: {
-          accountId: investmentExpenseAccount.id,
-          entry: {
-            date: {
-              gte: startDate,
-              lte: endDate,
-            },
-          },
-        },
-        include: {
-          entry: {
-            include: {
-              lines: true,
-            },
-          },
-        },
-      });
-
-      // Filter by portfolio
-      const portfolioAccountIds = new Set([
-        tradeCashId,
-        ...portfolioAccounts.securities.map(s => s.id),
-      ].filter(Boolean));
-
-      for (const line of feeLines) {
-        const involvesPortfolio = line.entry.lines.some(l => portfolioAccountIds.has(l.accountId));
-        if (involvesPortfolio) {
-          fees += line.amount; // Positive for debit (expense)
-        }
-      }
-    }
+    const dividendIncome = income.dividends.total, interestIncome = income.interest.total, fees = income.fees.total;
 
     // Calculate total return: (current value + withdrawals - deposits) / deposits
     const totalReturn = currentValue === null ? null : deposits > 0
@@ -1615,13 +1300,15 @@ class InvestmentService {
       : 0;
 
     return {
+      baseCurrency,
+      incomeByCurrency: { dividends: income.dividends.byCurrency, interest: income.interest.byCurrency, fees: income.fees.byCurrency },
       totalReturn: totalReturn === null ? null : Math.round(totalReturn * 100) / 100,
       totalReturnPercent: totalReturnPercent === null ? null : Math.round(totalReturnPercent * 100) / 100,
-      realizedGains: Math.round(realizedGains * 100) / 100,
+      realizedGains: realizedGains === null ? null : Math.round(realizedGains * 100) / 100,
       unrealizedGains: unrealizedGains === null ? null : Math.round(unrealizedGains * 100) / 100,
-      dividendIncome: Math.round(dividendIncome * 100) / 100,
-      interestIncome: Math.round(interestIncome * 100) / 100,
-      fees: Math.round(fees * 100) / 100,
+      dividendIncome: dividendIncome === null ? null : Math.round(dividendIncome * 100) / 100,
+      interestIncome: interestIncome === null ? null : Math.round(interestIncome * 100) / 100,
+      fees: fees === null ? null : Math.round(fees * 100) / 100,
       deposits: Math.round(deposits * 100) / 100,
       withdrawals: Math.round(withdrawals * 100) / 100,
       currentValue: currentValue === null ? null : Math.round(currentValue * 100) / 100,
