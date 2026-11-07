@@ -1576,7 +1576,7 @@ class DatabaseService {
               {
                 accountId: equityAccount.id,
                 amount: Math.round(-rawAmount * 100) / 100,
-                currency: equityAccount.currency || account.currency,
+                currency: account.currency,
                 description: "Opening Balance",
               },
             ],
@@ -1619,7 +1619,7 @@ class DatabaseService {
       where: { id: equityLine.id },
       data: {
         amount: Math.round(-rawAmount * 100) / 100,
-        currency: equityAccount.currency || account.currency,
+        currency: account.currency,
         description: "Opening Balance",
       },
     });

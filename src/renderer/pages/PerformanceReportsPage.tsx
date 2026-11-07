@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { formatValuationAmount } from "../utils/valuationFormatting";
 
-import type { RealizedGainReportRow } from "../../shared/investmentReporting";
+import type { InvestmentCashFlows, RealizedGainReportRow } from "../../shared/investmentReporting";
 import { formatMultiCurrencyBalances } from "../utils/currencyUtils";
 
 interface PerformanceData {
@@ -16,8 +16,9 @@ interface PerformanceData {
   dividendIncome: number | null;
   interestIncome: number | null;
   fees: number | null;
-  deposits: number;
-  withdrawals: number;
+  deposits: number | null;
+  withdrawals: number | null;
+  cashFlows?: InvestmentCashFlows;
   currentValue: number | null;
 }
 
@@ -250,6 +251,20 @@ export const PerformanceReportsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {performance?.cashFlows ? <section className="bg-white shadow rounded-lg p-6" data-testid="portfolio-cash-flows">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">Cash flows in selected period</h3>
+        <p className="text-sm text-gray-600 mb-3">External funding across all portfolio cash accounts, including opening contributions. Internal transfers, trades, income and fees are excluded. Base amounts use each flow's posting-date FX; totals round after aggregating full-precision conversions.</p>
+        <div className="flex flex-wrap gap-8 mb-4">
+          <div><p className="text-sm text-gray-500">Deposits</p><p>{formatValuationAmount(performance.deposits, reportCurrency, { disambiguate: true })}</p>
+            <p className="text-xs text-gray-500">Native: {formatMultiCurrencyBalances(performance.cashFlows.depositsByCurrency)}</p></div>
+          <div><p className="text-sm text-gray-500">Withdrawals</p><p>{formatValuationAmount(performance.withdrawals, reportCurrency, { disambiguate: true })}</p>
+            <p className="text-xs text-gray-500">Native: {formatMultiCurrencyBalances(performance.cashFlows.withdrawalsByCurrency)}</p></div>
+        </div>
+        {performance.cashFlows.rows.length ? <div className="overflow-x-auto"><table className="w-full text-sm text-left"><thead><tr><th className="p-2">Date</th><th>Cash account</th><th>Direction</th><th>Native amount</th><th>Base amount ({reportCurrency})</th></tr></thead>
+          <tbody>{performance.cashFlows.rows.map((row) => <tr key={row.lineId} className="border-t"><td className="p-2 whitespace-nowrap">{formatDateString(row.date)}</td><td>{row.accountName}</td><td>{row.amount > 0 ? "Deposit" : "Withdrawal"}</td><td>{formatValuationAmount(row.amount, row.currency, { disambiguate: true })}</td><td>{formatValuationAmount(row.amountBase, reportCurrency, { disambiguate: true, maximumFractionDigits: 8 })}</td></tr>)}</tbody>
+        </table></div> : <p className="text-sm text-gray-500">No external cash flows in this period.</p>}
+      </section> : null}
 
       {/* Asset Allocation */}
       <div className="bg-white shadow rounded-lg p-6">

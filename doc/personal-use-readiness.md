@@ -9,6 +9,40 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 39 — External portfolio cash flows and native opening funding (2026-11-07)
+
+- Performance cash-flow facts now follow journal ownership across all portfolio cash currencies,
+  including ordinary transfers, renamed settlement accounts and archived history. Inter-portfolio
+  transfers count once on each side; internal FX and investment activity do not become funding
+  because of an editable deposit tag.
+- Tagged opening funding survives system-account renaming. A new failing regression also exposed
+  foreign opening entries crediting the system account's default unit. Creation and explicit
+  updates now use the opening account's native currency on both lines, retaining the system default.
+- Posting-date canonical FX converts each flow. Required missing FX leaves the affected base total
+  unavailable while retaining native summaries and dated rows in the report. Mixed funding,
+  in-kind transfers and unclassified system adjustments require review. A separate failing case
+  drove zero-opening handling; ten cash-flow tests cover the positive and review paths. A failing
+  fractional-cent regression drove unrounded FX aggregation, and a formatter regression preserves
+  those converted row values for audit instead of rounding every contribution prematurely.
+- A failing renderer regression drove visible native/base cash-flow details. See the
+  [period-performance contract](F-007-investment-account-management/period-performance.md).
+- **1,112 tests across 135 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging with pinned Node 22. The cash-flow scenario
+  passed three packaged repetitions; the final complete packaged suite passed all **21 cases**.
+  Its native/base funding table was visually inspected.
+- The first development E2E run passed 77 checks and timed out once waiting for the base-currency
+  banner after saving, before dismissal. The inspected trace had API steps but no DOM snapshots;
+  its cause remains unproven. Failure-only backend/control-state and screenshot capture was added
+  without changing assertions, timeouts or product code. The final complete development run
+  passed all **78 cases**, with each scenario repeated three times. Keep the earlier timeout as
+  an unresolved verification limitation rather than claiming the diagnostic change fixed it.
+- This batch establishes flow facts; it does **not** close dated opening/closing valuation or
+  return-method work. The packaged fixture still exposes the incorrect existing return after
+  renaming settlement cash; the contract records its expected CAD 225 closing value and CAD 45
+  economic gain. Fix those return paths next,
+  followed by statement targeting, baselines/replay/corrections, exact decimals, whole-book
+  verification and personal/native acceptance.
+
 ### Batch 38 — Quote units checked at valuation and posting (2026-11-07)
 
 - Account-aware prices require the exact canonical market's metadata quote currency to match

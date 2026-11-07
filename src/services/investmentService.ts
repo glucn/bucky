@@ -3,6 +3,8 @@ import { createHolding } from "./securityHolding";
 import type { NewHoldingInput } from "../shared/securityHolding";
 import { recordInvestmentCash } from "./investmentCash";
 import { investmentIncomeReport, realizedGainReport, investmentReportingBundle } from "./investmentIncomeReporting";
+import { investmentCashFlows } from "./investmentCashFlows";
+import type { InvestmentCashFlows } from "../shared/investmentReporting";
 import { importInvestments } from "./investmentImport";
 import { parseInvestmentImport, type InvestmentImportMapping, type InvestmentImportOptions } from "../shared/investmentImport";
 import { getInvestmentSnapshot } from "./investmentActivity";
@@ -1220,8 +1222,9 @@ class InvestmentService {
     dividendIncome: number | null;
     interestIncome: number | null;
     fees: number | null;
-    deposits: number;
-    withdrawals: number;
+    deposits: number | null;
+    withdrawals: number | null;
+    cashFlows: InvestmentCashFlows;
     currentValue: number | null;
   }> {
     const baseCurrency = (await appSettingsService.getBaseCurrency()) || "USD";
@@ -1229,66 +1232,8 @@ class InvestmentService {
     const portfolioValue = await this.getPortfolioAtDate(portfolioId, resolveValuationDate(), baseCurrency);
     const currentValue = portfolioValue.totalMarketValue === null || portfolioValue.cashBalance === null ? null : portfolioValue.totalMarketValue + portfolioValue.cashBalance;
 
-    // Calculate deposits (cash deposits to portfolio)
-    const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
-    const tradeCashId = portfolioAccounts.tradeCash?.id;
-
-    let deposits = 0;
-    if (tradeCashId) {
-      const depositEntries = await databaseService.prismaClient.journalEntry.findMany({
-        where: {
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
-          type: InvestmentTransactionType.CASH_DEPOSIT,
-          lines: {
-            some: {
-              accountId: tradeCashId,
-            },
-          },
-        },
-        include: {
-          lines: true,
-        },
-      });
-
-      for (const entry of depositEntries) {
-        const cashLine = entry.lines.find(l => l.accountId === tradeCashId && l.amount > 0);
-        if (cashLine) {
-          deposits += cashLine.amount;
-        }
-      }
-    }
-
-    // Calculate withdrawals (cash withdrawals from portfolio)
-    let withdrawals = 0;
-    if (tradeCashId) {
-      const withdrawalEntries = await databaseService.prismaClient.journalEntry.findMany({
-        where: {
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
-          type: InvestmentTransactionType.CASH_WITHDRAWAL,
-          lines: {
-            some: {
-              accountId: tradeCashId,
-            },
-          },
-        },
-        include: {
-          lines: true,
-        },
-      });
-
-      for (const entry of withdrawalEntries) {
-        const cashLine = entry.lines.find(l => l.accountId === tradeCashId && l.amount < 0);
-        if (cashLine) {
-          withdrawals += -cashLine.amount;
-        }
-      }
-    }
+    const cashFlows = await investmentCashFlows(portfolioId, startDate, endDate, baseCurrency);
+    const { deposits, withdrawals } = cashFlows;
 
     const income = await investmentReportingBundle(portfolioId, startDate, endDate, baseCurrency);
     const realizedGains = income.gains.reduce<number | null>((sum, row) => sum === null || row.realizedGainBase === null ? null : sum + row.realizedGainBase, 0);
@@ -1296,11 +1241,11 @@ class InvestmentService {
     const dividendIncome = income.dividends.total, interestIncome = income.interest.total, fees = income.fees.total;
 
     // Calculate total return: (current value + withdrawals - deposits) / deposits
-    const totalReturn = currentValue === null ? null : deposits > 0
+    const totalReturn = currentValue === null || deposits === null || withdrawals === null ? null : deposits > 0
       ? currentValue + withdrawals - deposits 
       : 0;
     
-    const totalReturnPercent = totalReturn === null ? null : deposits > 0
+    const totalReturnPercent = totalReturn === null || deposits === null ? null : deposits > 0
       ? (totalReturn / deposits) * 100 
       : 0;
 
@@ -1314,8 +1259,9 @@ class InvestmentService {
       dividendIncome: dividendIncome === null ? null : Math.round(dividendIncome * 100) / 100,
       interestIncome: interestIncome === null ? null : Math.round(interestIncome * 100) / 100,
       fees: fees === null ? null : Math.round(fees * 100) / 100,
-      deposits: Math.round(deposits * 100) / 100,
-      withdrawals: Math.round(withdrawals * 100) / 100,
+      deposits,
+      withdrawals,
+      cashFlows,
       currentValue: currentValue === null ? null : Math.round(currentValue * 100) / 100,
     };
   }

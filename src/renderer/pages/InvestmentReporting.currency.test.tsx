@@ -38,6 +38,23 @@ it("sums converted gains in base while retaining the native currency on holding 
   const row = (await screen.findByText("ABC")).closest("tr")!;
   expect(row.textContent).toMatch(/USD\s*10\.00/); expect(row.textContent).not.toContain("CA$10.00");
 });
+
+it("keeps native external cash-flow facts visible when historical FX leaves the base contribution unavailable", async () => {
+  const invoke = bridge(), original = invoke.getMockImplementation()!;
+  invoke.mockImplementation(async (channel: string, ...args: any[]) => {
+    const result = await original(channel, ...args);
+    return channel === "get-portfolio-performance" ? { ...result, performance: { ...result.performance, deposits: null, withdrawals: 0,
+      cashFlows: { deposits: null, withdrawals: 0, depositsByCurrency: { USD: 100 }, withdrawalsByCurrency: {}, rows: [
+        { entryId: "funding", lineId: "cash-line", accountId: "cash", accountName: "Broker settlement", date: "2026-01-02", currency: "USD", amount: 100, amountBase: null, fxSource: "unavailable" },
+      ] } } } : result;
+  });
+  show(true);
+  const section = (await screen.findByRole("heading", { name: "Cash flows in selected period" })).parentElement!;
+  expect(section.textContent).toMatch(/USD\s*100\.00/);
+  expect(within(section).getByText("Deposits").parentElement!.textContent).toContain("N/A");
+  const row = within(section).getByText("Broker settlement").closest("tr")!;
+  expect(row.textContent).toContain("1/2/2026"); expect(row.textContent).toContain("N/A");
+});
 it("shows an unavailable gain total when any conversion is missing", async () => {
   bridge([{ ...gain, realizedGainBase: null }]); show();
   expect((await screen.findByText("Realized Gain/Loss")).parentElement!.textContent).toContain("N/A");

@@ -2,10 +2,24 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { databaseService } from "./database";
 import { resetTestDatabase } from "./database.test.utils";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
+import type { JournalLine } from "@prisma/client";
 
 describe("Opening Balance Workflow", () => {
   beforeEach(async () => {
     await resetTestDatabase();
+  });
+
+  it("posts both sides of foreign opening funding in its native currency, preserving the system account default", async () => {
+    const equity = await databaseService.prismaClient.account.findFirstOrThrow({ where: { name: "Opening Balances", type: AccountType.System } });
+    await databaseService.updateAccount(equity.id, { currency: "CAD" });
+    const account = await databaseService.createAccount({ name: "USD cash", type: AccountType.User, currency: "USD" });
+    for (const displayAmount of [100, 125]) {
+      const entry = await databaseService.setOpeningBalance({ accountId: account.id, displayAmount, asOfDate: "2026-01-02" });
+      const lines: JournalLine[] = entry!.lines;
+      expect(lines.map((line) => line.currency)).toEqual(["USD", "USD"]);
+      expect(lines.reduce((sum, line) => sum + line.amount, 0)).toBe(0);
+    }
+    expect((await databaseService.getAccount(equity.id))!.currency).toBe("CAD");
   });
 
   it("creates a missing opening-balance system account in the explicitly selected base currency", async () => {

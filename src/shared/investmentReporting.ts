@@ -1,4 +1,10 @@
 export type ReportFxSource = "same_currency" | "as_of" | "zero_amount" | "unavailable";
+export type InvestmentCashFlows = {
+  deposits: number | null; withdrawals: number | null;
+  depositsByCurrency: Record<string, number>; withdrawalsByCurrency: Record<string, number>;
+  rows: Array<{ entryId: string; lineId: string; accountId: string; accountName: string; date: string; currency: string;
+    amount: number; amountBase: number | null; fxSource: ReportFxSource }>;
+};
 export type InvestmentIncomeRow = {
   entryId: string; lineId: string; date: string; accountId: string | null;
   tickerSymbol: string | null; market: string | null; recordedMarket: string | null; currency: string;

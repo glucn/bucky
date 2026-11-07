@@ -9,3 +9,8 @@ it("preserves a known zero and native currency labels", () => {
   expect(formatValuationAmount(0, "CAD")).toContain("0.00");
   expect(formatValuationAmount(10, "USD", { disambiguate: true })).toBe("USD 10.00");
 });
+it("can retain fractional-cent converted flow values for audit while totals use normal currency display", () => {
+  expect(formatValuationAmount(0.015, "CAD", { disambiguate: true, maximumFractionDigits: 6 })).toBe("CAD 0.015");
+  expect(formatValuationAmount(0.0000015, "CAD", { disambiguate: true, maximumFractionDigits: 7 })).toBe("CAD 0.0000015");
+  expect(formatValuationAmount(0.15, "CAD", { disambiguate: true })).toBe("CAD 0.15");
+});
