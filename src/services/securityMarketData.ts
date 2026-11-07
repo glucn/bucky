@@ -3,6 +3,7 @@ import { parseToStandardDate } from "../shared/dateUtils";
 import { databaseService } from "./database";
 import { verifyPricePolicy, type SecurityPricePolicy } from "./securityPricePolicy";
 import { resolveValuationDate } from "./valuationDate";
+import type { Prisma } from "@prisma/client";
 
 export type CanonicalSecurityPrice = { date: string; price: number; source: string };
 type Write = { identity: SecurityIdentity; points: Array<{ date: string; price: number } & SecurityPricePolicy>; mode: "fill" | "correct"; source: "manual" | "import" | "provider" };
@@ -32,7 +33,7 @@ export const securityMarketData = {
       where: { ...key, priceBasis: "raw", barStatus: "complete", marketDate: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } }, orderBy: { marketDate: "asc" },
     })).map(point);
   },
-  async write(input: Write): Promise<{ inserted: number; corrected: number; retained: number }> {
+  async write(input: Write, transaction?: Prisma.TransactionClient): Promise<{ inserted: number; corrected: number; retained: number }> {
     if (!input || !["fill", "correct"].includes(input.mode) || !["manual", "import", "provider"].includes(input.source)) throw new Error("An explicit price mode and source policy are required");
     if (input.source === "provider" && input.mode !== "fill") throw new Error("Provider policy permits fill only; correction must be explicit manual or import work");
     const key = parseSecurityIdentity(input.identity);
@@ -44,7 +45,7 @@ export const securityMarketData = {
       return { marketDate: date(row.date), close: row.price, ...policy };
     });
     if (new Set(points.map((row) => row.marketDate)).size !== points.length) throw new Error("Duplicate security price dates in one batch");
-    return databaseService.prismaClient.$transaction(async (tx) => {
+    const write = async (tx: Prisma.TransactionClient) => {
       const result = { inserted: 0, corrected: 0, retained: 0 };
       for (const row of points) {
         const where = { ticker_market_marketDate: { ...key, marketDate: row.marketDate } };
@@ -57,6 +58,7 @@ export const securityMarketData = {
         }
       }
       return result;
-    }, { timeout: 30000 });
+    };
+    return transaction ? write(transaction) : databaseService.prismaClient.$transaction(write, { timeout: 30000 });
   },
 };

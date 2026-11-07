@@ -70,6 +70,9 @@ const createProviderMap = (env: Partial<Record<string, string | undefined>>) => 
   return adapters;
 };
 
+export const resolveConfiguredEnrichmentProvider = (env: Partial<Record<string, string | undefined>> = process.env) =>
+  resolveEnrichmentProvider({ env, adapters: createProviderMap(env) });
+
 export class EnrichmentRuntimeService {
   private latestSummary: any | null = null;
 

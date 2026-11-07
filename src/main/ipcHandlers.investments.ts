@@ -1,9 +1,41 @@
 import type { IpcRegistrar } from "./ipcSecurity";
 import { investmentService } from "../services/investmentService";
 import { previewInvestmentImport } from "../services/investmentImport";
+import { getSecurityPriceContext, previewSecurityPrices, saveSecurityPrices, searchSecurityMarkets, excludeSecurityPrice } from "../services/securityPriceControls";
+import { bindSecurityMarket } from "../services/securityMarketBinding";
 
 export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
   console.log("Registering investment IPC handlers...");
+  ipcMain.removeHandler("get-security-price-context");
+  ipcMain.removeHandler("search-security-markets");
+  ipcMain.removeHandler("bind-security-market");
+  ipcMain.removeHandler("preview-security-prices");
+  ipcMain.removeHandler("save-security-prices");
+  ipcMain.removeHandler("exclude-security-price");
+  ipcMain.handle("exclude-security-price", async (_, input) => {
+    try { return { success: true, result: await excludeSecurityPrice(input) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to exclude price" }; }
+  });
+  ipcMain.handle("get-security-price-context", async (_, input) => {
+    try { return { success: true, context: await getSecurityPriceContext(input) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to read prices" }; }
+  });
+  ipcMain.handle("search-security-markets", async (_, accountId) => {
+    try { return { success: true, candidates: await searchSecurityMarkets(accountId) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to look up markets" }; }
+  });
+  ipcMain.handle("bind-security-market", async (_, input) => {
+    try { await bindSecurityMarket(input); return { success: true }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to assign market" }; }
+  });
+  ipcMain.handle("preview-security-prices", async (_, input) => {
+    try { return { success: true, preview: await previewSecurityPrices(input) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to review prices" }; }
+  });
+  ipcMain.handle("save-security-prices", async (_, input) => {
+    try { return { success: true, result: await saveSecurityPrices(input) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to save prices" }; }
+  });
 
   // Remove any existing handlers first
   ipcMain.removeHandler("get-investment-portfolios");
