@@ -9,6 +9,43 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 34 — Atomic market-aware holding setup and cash selection (2026-11-07)
+
+- Added a lazy **Add holding** dialog on portfolios. Setup requires an explicit market, selected
+  trade cash account/quote currency and cost method. It creates an empty tracked holding without
+  journals, invented opening quantities or inferred lots. Distinct resolved markets can share a
+  ticker; duplicate identities and unresolved existing same-ticker holdings require review.
+- Account creation, properties, portfolio membership, market binding and quote-currency metadata
+  now commit together. The legacy service helper also creates atomically and derives currency
+  from the sole eligible cash account, replacing hardcoded USD. Metadata conflicts and injected
+  write failures leave no orphan account. Ticker-only lookup refuses ambiguous listings.
+- Transaction entry selects holdings by account ID, labels market/currency and submits matching
+  cash IDs. Position actions retain their exact holding; portfolio actions can select either
+  listing. Fees and interest now require selected cash when multiple accounts exist, validate
+  dates/finite cent amounts and share the guarded posting helper with durable statement imports.
+- Added the creation IPC channel to the ordinary authenticated inventory. Setup failures remain
+  visible for correction, and account-loading responses cannot populate a different dialog.
+  See the [holding setup contract](F-007-investment-account-management/holding-setup.md).
+- TDD began with seven failing service regressions. Additional failing tests drove strict new
+  creation inputs and registered IPC forwarding; renderer tests failed before the new form and
+  selectors were implemented. An existing matching-currency fixture now uses explicit setup
+  rather than rewriting account currency directly; its posting assertions remain intact.
+- The first packaged run exposed select labels that included their option text in Chromium.
+  Exact cash/method label selectors were retained; explicit label associations fixed the form,
+  and the unchanged workflow passed three repetitions. Unit DOM accessible-name checks alone
+  did not reproduce this browser difference. Screenshots of setup and both listings were inspected.
+- **1,045 tests across 128 files passed in each native and encrypted storage mode**. The final
+  select-label correction passed both focused UI tests in each mode. TypeScript checking and
+  Apple Silicon packaging passed using pinned Node 22. The new packaged flow passed three
+  repetitions, all **16 packaged acceptance cases passed** together, and all 25 development E2E
+  cases passed three repetitions (**75 checks**).
+- Explicit same-ticker statement targeting, historical baselines/corrections/replay, full reporting,
+  raw Yahoo quotes, exact decimals, whole-book verification and representative personal/native
+  acceptance remain open.
+  The new cross-listed acceptance screenshot also confirms that a native USD realized gain is
+  currently labeled CAD in the portfolio card. Income/gain helpers still need currency-aware
+  reporting across all cash accounts; posting correctness is not evidence that those cards are correct.
+
 ### Batch 33 — Reviewed market assignment and canonical price controls (2026-11-06)
 
 - Connected a lazy **Market & prices** dialog to account-ID position pages. It supports explicit

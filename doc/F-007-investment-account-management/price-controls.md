@@ -1,6 +1,6 @@
 # Reviewed market and closing-price controls
 
-Updated 2026-11-06. Existing holdings expose **Market & prices** from their account-ID position
+Updated 2026-11-07. Existing holdings expose **Market & prices** from their account-ID position
 page. Assignment is explicit, whether the user types the exact source market or chooses a
 provider search result. Discovery filters by exact ticker and compatible supplied currency;
 missing currency is labelled for manual verification. Discovery never assigns a listing.
@@ -57,6 +57,6 @@ date filtering, exclusion/restoration and UI confirmation/error behavior. Packag
 exercises assignment, quarantine retention/correction, CSV, legacy promotion, a competing
 correction, exclusion, restart persistence and unchanged legacy records.
 
-Remaining gates include market-aware creation of distinct same-ticker holdings, historical
-baseline/correction/replay workflows, complete performance/income/gain reporting, verified raw
+Market-aware creation is documented in [holding setup](holding-setup.md). Remaining gates include
+historical baseline/correction/replay workflows, complete performance/income/gain reporting, verified raw
 Yahoo support, exact decimals, whole-book verification and representative personal acceptance.

@@ -16,10 +16,12 @@ it("defaults a new investment transaction to the local book day across UTC midni
 });
 
 it("posts a position's selected account identity rather than relying on its ticker", async () => {
-  const invoke = vi.fn(async (channel) => channel === "get-portfolio-accounts" ? { success: true, accounts: { securities: [] } } : { success: true });
+  const invoke = vi.fn(async (channel) => channel === "get-portfolio-accounts" ? { success: true, accounts: { securities: [{ id: "selected-listing", currency: "USD", investmentProperties: { tickerSymbol: "ABC", market: "NASDAQ" } }], tradeCashAccounts: [{ id: "cash", name: "Trade Cash", currency: "USD" }] } } : { success: true });
   Object.defineProperty(window, "electron", { configurable: true, value: { ipcRenderer: { invoke } } });
   const props: any = { isOpen: true, portfolioId: "portfolio", initialTickerSymbol: "ABC", initialSecurityAccountId: "selected-listing", onClose: vi.fn() };
   const { container } = render(<TransactionEntryModal {...props} />);
+  await waitFor(() => expect((screen.getByLabelText("Holding") as HTMLSelectElement).value).toBe("selected-listing"));
+  await waitFor(() => expect((screen.getByLabelText("Cash account") as HTMLSelectElement).value).toBe("cash"));
   const inputs = screen.getAllByPlaceholderText("0.00");
   fireEvent.change(inputs[0], { target: { value: "1" } }); fireEvent.change(inputs[1], { target: { value: "12" } });
   fireEvent.submit(container.querySelector("form")!);

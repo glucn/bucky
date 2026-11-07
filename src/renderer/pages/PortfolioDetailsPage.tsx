@@ -6,6 +6,7 @@ import { useAccounts } from "../context/AccountsContext";
 import { formatMultiCurrencyBalances } from "../utils/currencyUtils";
 import { formatValuationAmount } from "../utils/valuationFormatting";
 import { SUPPORTED_CURRENCY_OPTIONS } from "../../shared/currencies";
+const NewHoldingModal = React.lazy(() => import("../components/NewHoldingModal").then((module) => ({ default: module.NewHoldingModal })));
 const InvestmentImportWizard = React.lazy(() => import("../components/InvestmentImportWizard").then((module) => ({ default: module.InvestmentImportWizard })));
 
 interface Position {
@@ -47,6 +48,7 @@ export const PortfolioDetailsPage: React.FC = () => {
   const [dividendIncome, setDividendIncome] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
+  const [showNewHolding, setShowNewHolding] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [selectedTransactionType, setSelectedTransactionType] = useState<TransactionType>('buy');
   const [showAddCashModal, setShowAddCashModal] = useState(false);
@@ -374,6 +376,7 @@ export const PortfolioDetailsPage: React.FC = () => {
       <div className="bg-white shadow rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <button data-testid="add-holding-button" onClick={() => setShowNewHolding(true)} className="px-4 py-3 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Add holding</button>
           <button data-testid="import-investments-button" onClick={() => setShowImport(true)} className="px-4 py-3 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Import statement</button>
           <button
             onClick={() => {
@@ -422,6 +425,9 @@ export const PortfolioDetailsPage: React.FC = () => {
         </div>
       </div>
 
+      {showNewHolding ? <React.Suspense fallback={<p role="status">Loading holding setup…</p>}>
+        <NewHoldingModal portfolioId={portfolioId!} onClose={() => setShowNewHolding(false)} onCreated={(accountId) => { setShowNewHolding(false); void refreshAccounts(); navigate(`/investments/${portfolioId}/holding/${accountId}`); }} />
+      </React.Suspense> : null}
       {/* Transaction Modal */}
       {showImport ? <React.Suspense fallback={<p role="status">Loading import…</p>}>
         <InvestmentImportWizard isOpen portfolioId={portfolioId!} onClose={() => setShowImport(false)} onImportComplete={() => { void handleTransactionCreated(); }} />

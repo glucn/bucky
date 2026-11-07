@@ -1,8 +1,8 @@
 # Canonical investment prices and market identity
 
-Updated 2026-11-06. BL-021 remains in progress. The persisted identity and canonical price
+Updated 2026-11-07. BL-021 remains in progress. The persisted identity and canonical price
 services, market-aware refresh targeting, core application valuation and existing-holding
-market/price controls are implemented; security creation and full historical reporting remain open. This does not
+market/price controls and explicit market-aware holding creation are implemented; full historical reporting remains open. This does not
 establish investment readiness.
 
 `SecurityDailyPrice(ticker, market, marketDate)` is the price source of truth. Market strings
@@ -62,10 +62,12 @@ atomically. Manual/import prices and future points do not advance provider backf
 
 Remaining required integration:
 
-- Existing positions now expose [reviewed market and price controls](F-007-investment-account-management/price-controls.md),
-  including explicit assignment/discovery and account-scoped writes. Complete market-aware
-  security creation, including another listing of an already-held ticker. Ticker-only creation
-  remains insufficient even though position routes/actions retain account identity.
+- Existing positions expose [reviewed market and price controls](F-007-investment-account-management/price-controls.md),
+  including explicit assignment/discovery and account-scoped writes. The portfolio now provides
+  [market-aware holding setup](F-007-investment-account-management/holding-setup.md), including
+  another resolved listing of an already-held ticker, explicit cash currency and cost policy,
+  atomic creation and account-ID transaction selection. The new form creates empty holdings,
+  without inventing opening positions or repairing legacy history.
 - Position, portfolio and dashboard valuation now read the canonical service, using verified
   dated quantities where requested and `FxDailyRate` conversion. Missing quotes remain null
   through native/base values, currency summaries, net worth, allocations and market-dependent

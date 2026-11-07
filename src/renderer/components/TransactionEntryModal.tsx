@@ -1,5 +1,5 @@
 import { localCalendarDate } from "../../shared/dateUtils";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 
 interface TransactionEntryModalProps {
   isOpen: boolean;
@@ -23,8 +23,15 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
   initialSecurityAccountId,
 }) => {
   const [transactionType, setTransactionType] = useState<TransactionType>(initialTransactionType);
-  const [tickerSymbol, setTickerSymbol] = useState('');
-  const [availableTickers, setAvailableTickers] = useState<string[]>([]);
+  const [securities, setSecurities] = useState<any[]>([]);
+  const [cashAccounts, setCashAccounts] = useState<any[]>([]);
+  const [securityAccountId, setSecurityAccountId] = useState('');
+  const [tradeCashAccountId, setTradeCashAccountId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const requiresTicker = ['buy', 'sell', 'dividend', 'dividend_reinvest'].includes(transactionType);
+  const selectedHolding = securities.find((account) => account.id === securityAccountId);
+  const tickerSymbol = selectedHolding?.investmentProperties.tickerSymbol || '';
+  const eligibleCash = useMemo(() => cashAccounts.filter((account) => !requiresTicker || (selectedHolding && account.currency === selectedHolding.currency)), [cashAccounts, requiresTicker, selectedHolding]);
   const [quantity, setQuantity] = useState('');
   const [pricePerShare, setPricePerShare] = useState('');
   const [amount, setAmount] = useState('');
@@ -34,46 +41,41 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  // Fetch available ticker symbols when modal opens
   useEffect(() => {
-    if (isOpen) {
-      fetchAvailableTickers();
-    }
-  }, [isOpen, portfolioId]);
+    if (!isOpen) return;
+    let active = true;
+    setLoading(true); setError(''); setSecurities([]); setCashAccounts([]);
+    setSecurityAccountId(''); setTradeCashAccountId(''); setTransactionType(initialTransactionType);
+    void (async () => {
+      try {
+        const result = await window.electron.ipcRenderer.invoke("get-portfolio-accounts", portfolioId);
+        if (!active) return;
+        if (!result.success) throw new Error(result.error || "Unable to load portfolio accounts");
+        const holdings = (result.accounts.securities || []).filter((a: any) => !a.isArchived);
+        setSecurities(holdings);
+        setCashAccounts((result.accounts.tradeCashAccounts || []).filter((a: any) => !a.isArchived));
+        const matches = holdings.filter((a: any) => a.investmentProperties?.tickerSymbol === initialTickerSymbol);
+        const selected = initialSecurityAccountId ? holdings.find((a: any) => a.id === initialSecurityAccountId)
+          : initialTickerSymbol ? matches.length === 1 ? matches[0] : undefined : holdings.length === 1 ? holdings[0] : undefined;
+        setSecurityAccountId(selected?.id || '');
+      } catch (error) { if (active) setError(error instanceof Error ? error.message : "Unable to load portfolio accounts"); }
+      finally { if (active) setLoading(false); }
+    })();
+    return () => { active = false; };
+  }, [isOpen, portfolioId, initialTransactionType, initialTickerSymbol, initialSecurityAccountId]);
 
-  // Reset transaction type and ticker when modal opens
   useEffect(() => {
-    if (isOpen) {
-      setTransactionType(initialTransactionType);
-      if (initialTickerSymbol) {
-        setTickerSymbol(initialTickerSymbol);
-      }
-    }
-  }, [isOpen, initialTransactionType, initialTickerSymbol]);
-
-  const fetchAvailableTickers = async () => {
-    try {
-      const result = await window.electron.ipcRenderer.invoke(
-        "get-portfolio-accounts",
-        portfolioId
-      );
-      
-      if (result.success && result.accounts.securities) {
-        const tickers = result.accounts.securities
-          .map((sec: any) => sec.investmentProperties?.tickerSymbol)
-          .filter((ticker: string) => ticker);
-        setAvailableTickers(tickers);
-      }
-    } catch (error) {
-      console.error("Error fetching tickers:", error);
-    }
-  };
+    setTradeCashAccountId((current) => eligibleCash.some((a) => a.id === current) ? current : eligibleCash.length === 1 ? eligibleCash[0].id : '');
+  }, [eligibleCash]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (loading || submitting) return;
+    if (requiresTicker && !selectedHolding) { setError('Select a holding. Add a holding from the portfolio first if needed.'); return; }
+    if (!eligibleCash.some((a) => a.id === tradeCashAccountId)) { setError('Select a matching cash account.'); return; }
     setSubmitting(true);
 
     try {
@@ -84,7 +86,8 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           result = await window.electron.ipcRenderer.invoke('record-buy', {
             portfolioId,
             tickerSymbol,
-            securityAccountId: tickerSymbol === initialTickerSymbol ? initialSecurityAccountId : undefined,
+            securityAccountId,
+            tradeCashAccountId,
             quantity: parseFloat(quantity),
             pricePerShare: parseFloat(pricePerShare),
             date,
@@ -97,7 +100,8 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           result = await window.electron.ipcRenderer.invoke('record-sell', {
             portfolioId,
             tickerSymbol,
-            securityAccountId: tickerSymbol === initialTickerSymbol ? initialSecurityAccountId : undefined,
+            securityAccountId,
+            tradeCashAccountId,
             quantity: parseFloat(quantity),
             pricePerShare: parseFloat(pricePerShare),
             date,
@@ -110,7 +114,8 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           result = await window.electron.ipcRenderer.invoke('record-dividend', {
             portfolioId,
             tickerSymbol,
-            securityAccountId: tickerSymbol === initialTickerSymbol ? initialSecurityAccountId : undefined,
+            securityAccountId,
+            tradeCashAccountId,
             amount: parseFloat(amount),
             date,
             isReturnOfCapital: false,
@@ -122,7 +127,8 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           result = await window.electron.ipcRenderer.invoke('record-reinvested-dividend', {
             portfolioId,
             tickerSymbol,
-            securityAccountId: tickerSymbol === initialTickerSymbol ? initialSecurityAccountId : undefined,
+            securityAccountId,
+            tradeCashAccountId,
             dividendAmount: parseFloat(amount),
             reinvestmentPrice: parseFloat(pricePerShare),
             date,
@@ -134,6 +140,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
         case 'interest':
           result = await window.electron.ipcRenderer.invoke('record-interest', {
             portfolioId,
+            tradeCashAccountId,
             amount: parseFloat(amount),
             date,
             description,
@@ -143,6 +150,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
         case 'fee':
           result = await window.electron.ipcRenderer.invoke('record-fee', {
             portfolioId,
+            tradeCashAccountId,
             amount: parseFloat(amount),
             description: description || 'Investment fee',
             date,
@@ -176,7 +184,8 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
 
   const handleClose = () => {
     setTransactionType('buy');
-    setTickerSymbol('');
+    setSecurityAccountId('');
+    setTradeCashAccountId('');
     setQuantity('');
     setPricePerShare('');
     setAmount('');
@@ -187,25 +196,25 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
     onClose();
   };
 
-  const requiresTicker = ['buy', 'sell', 'dividend', 'dividend_reinvest'].includes(transactionType);
   const requiresQuantity = ['buy', 'sell'].includes(transactionType);
   const requiresPrice = ['buy', 'sell', 'dividend_reinvest'].includes(transactionType);
   const requiresAmount = ['dividend', 'dividend_reinvest', 'interest', 'fee'].includes(transactionType);
 
   return (
     <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="transaction-entry-title" data-testid="transaction-entry-dialog" className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <h3 id="transaction-entry-title" className="text-lg font-medium text-gray-900 mb-4">
           Record Transaction
         </h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {loading ? <p role="status">Loading portfolio accounts…</p> : null}
           {/* Transaction Type */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="transaction-type" className="block text-sm font-medium text-gray-700 mb-1">
               Transaction Type
             </label>
-            <select
+            <select id="transaction-type"
               value={transactionType}
               onChange={(e) => setTransactionType(e.target.value as TransactionType)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -219,36 +228,29 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
             </select>
           </div>
 
-          {/* Ticker Symbol */}
-          {requiresTicker && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Ticker Symbol *
-              </label>
-              <input
-                type="text"
-                list="ticker-symbols"
-                value={tickerSymbol}
-                onChange={(e) => setTickerSymbol(e.target.value.toUpperCase())}
-                placeholder="e.g., AAPL"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                required
-              />
-              <datalist id="ticker-symbols">
-                {availableTickers.map((ticker) => (
-                  <option key={ticker} value={ticker} />
-                ))}
-              </datalist>
-            </div>
-          )}
+          {requiresTicker && <div>
+            <label htmlFor="transaction-holding" className="block text-sm font-medium text-gray-700 mb-1">Holding</label>
+            <select id="transaction-holding" className="w-full px-3 py-2 border rounded-md" value={securityAccountId} onChange={(e) => setSecurityAccountId(e.target.value)} required disabled={loading || submitting}>
+              <option value="">Select holding</option>
+              {securities.map((a) => <option key={a.id} value={a.id}>{a.investmentProperties.tickerSymbol} · {a.investmentProperties.market || 'Market needs review'} · {a.currency}</option>)}
+            </select>
+            {!loading && !securities.length ? <p className="text-sm text-gray-600">Add a holding from the portfolio before recording a security transaction.</p> : null}
+          </div>}
+          <div>
+            <label htmlFor="transaction-cash" className="block text-sm font-medium text-gray-700 mb-1">Cash account</label>
+            <select id="transaction-cash" className="w-full px-3 py-2 border rounded-md" value={tradeCashAccountId} onChange={(e) => setTradeCashAccountId(e.target.value)} required disabled={loading || submitting}>
+              <option value="">Select cash account</option>{eligibleCash.map((a) => <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>)}
+            </select>
+            {requiresTicker && selectedHolding ? <p className="text-sm text-gray-600">Amounts are in {selectedHolding.currency}. Only matching cash accounts are shown.</p> : null}
+          </div>
 
           {/* Quantity */}
           {requiresQuantity && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="transaction-quantity" className="block text-sm font-medium text-gray-700 mb-1">
                 Quantity *
               </label>
-              <input
+              <input id="transaction-quantity"
                 type="number"
                 step="0.000001"
                 value={quantity}
@@ -263,10 +265,10 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           {/* Price Per Share */}
           {requiresPrice && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="transaction-price" className="block text-sm font-medium text-gray-700 mb-1">
                 Price Per Share *
               </label>
-              <input
+              <input id="transaction-price"
                 type="number"
                 step="0.01"
                 value={pricePerShare}
@@ -281,10 +283,10 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           {/* Amount */}
           {requiresAmount && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="transaction-amount" className="block text-sm font-medium text-gray-700 mb-1">
                 Amount *
               </label>
-              <input
+              <input id="transaction-amount"
                 type="number"
                 step="0.01"
                 value={amount}
@@ -298,10 +300,10 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
 
           {/* Date */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="transaction-date" className="block text-sm font-medium text-gray-700 mb-1">
               Date *
             </label>
-            <input
+            <input id="transaction-date"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -313,10 +315,10 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           {/* Fee (for buy/sell) */}
           {(transactionType === 'buy' || transactionType === 'sell') && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="transaction-fee" className="block text-sm font-medium text-gray-700 mb-1">
                 Fee (optional)
               </label>
-              <input
+              <input id="transaction-fee"
                 type="number"
                 step="0.01"
                 value={fee}
@@ -329,10 +331,10 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="transaction-description" className="block text-sm font-medium text-gray-700 mb-1">
               Description (optional)
             </label>
-            <input
+            <input id="transaction-description"
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -344,7 +346,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           {/* Error Message */}
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-sm text-red-600">{error}</p>
+              <p role="alert" className="text-sm text-red-600">{error}</p>
             </div>
           )}
 
@@ -361,7 +363,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
             <button
               type="submit"
               className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
-              disabled={submitting}
+              disabled={submitting || loading || (requiresTicker && !selectedHolding) || !eligibleCash.some((a) => a.id === tradeCashAccountId)}
             >
               {submitting ? 'Recording...' : 'Record Transaction'}
             </button>
