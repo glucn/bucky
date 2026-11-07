@@ -82,6 +82,18 @@ This note captures practical findings from stabilizing flaky E2E runs, especiall
 ## Operational hygiene
 
 - Before Playwright runs, check port `3000` usage to avoid stale servers causing false failures.
+
+## Packaged quit while report reads are active
+
+- Closing a completed investment import starts a portfolio refresh. Parallel report reads exposed
+  a real driver shutdown race: disconnecting while interactive transactions were starting or
+  rolling back could keep the packaged app from quitting within its existing five-second bound.
+- `PrismaSession` now revokes access immediately, checks revocation before entering queued
+  callbacks and drains owned interactive transaction promises before driver disconnect. Lazy
+  requests and late results remain revoked; reopening stays blocked until closing settles.
+- Keep the original quit assertion. Do not hide this failure by delaying the test's quit action,
+  waiting for the page to finish every report, or increasing the shutdown timeout. Both original
+  import/restart cases passed three repetitions after the lifecycle fix.
 - Keep local DB artifacts (`dev.db`, `test.db`) untracked.
 - If a run stalls, inspect its owned process/session first. Preserve unrelated listeners; select
   another free development port rather than killing an occupying process without confirmation.

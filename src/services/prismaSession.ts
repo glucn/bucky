@@ -8,6 +8,7 @@ export class PrismaSession {
   private active: PrismaClient | undefined;
   private epoch = 0;
   private closing: Promise<void> | undefined;
+  private readonly transactions = new Set<Promise<unknown>>();
   readonly client: PrismaClient = this.facade(() => this.requireActive()) as PrismaClient;
 
   activate(client: PrismaClient) {
@@ -22,7 +23,12 @@ export class PrismaSession {
     this.active = undefined;
     this.epoch++;
     if (!client) return;
-    this.closing = client.$disconnect();
+    // Revocation is immediate, but the driver must stay alive long enough for
+    // interactive transactions to finish/roll back, including queued callbacks.
+    this.closing = this.transactions.size ? (async () => {
+      await Promise.allSettled(Array.from(this.transactions));
+      await client.$disconnect();
+    })() : client.$disconnect();
     try { await this.closing; } finally { this.closing = undefined; }
   }
 
@@ -51,11 +57,18 @@ export class PrismaSession {
           const epoch = this.epoch;
           const check = () => { this.requireActive(epoch); guard?.(); };
           check();
-          if (property === "$transaction" && typeof args[0] === "function") {
+          const interactive = property === "$transaction" && typeof args[0] === "function";
+          if (interactive) {
             const callback = args[0];
-            args[0] = (tx: any) => callback(this.transactionFacade(tx, check));
+            args[0] = (tx: any) => { check(); return callback(this.transactionFacade(tx, check)); };
           }
-          return this.guardPromise(owner[property](...args), check);
+          const value = owner[property](...args);
+          if (interactive) {
+            const running = Promise.resolve(value);
+            this.transactions.add(running);
+            void running.then(() => this.transactions.delete(running), () => this.transactions.delete(running));
+          }
+          return this.guardPromise(value, check);
         };
       },
     });

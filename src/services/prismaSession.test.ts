@@ -80,4 +80,40 @@ describe("main-owned Prisma session", () => {
     finish();
     await rejected;
   });
+
+  it("revokes immediately but lets active transactions roll back before disconnecting their driver", async () => {
+    const session = new PrismaSession(), first = fakeClient("first"), events: string[] = [];
+    let release!: () => void;
+    first.execute.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve([]); }));
+    (first.client as any).$transaction = async (callback: any) => {
+      try { return await callback(first.client); } finally { events.push("transaction finished"); }
+    };
+    first.client.$disconnect = vi.fn(async () => { events.push("disconnect"); });
+    session.activate(first.client);
+    const request = Promise.resolve(session.client.$transaction(async (tx) => { await tx.account.findMany(); })).catch((error: Error) => error);
+    await vi.waitFor(() => expect(first.execute).toHaveBeenCalledOnce());
+    const closing = session.close();
+    const disconnectedBeforeRollback = events.includes("disconnect");
+    expect(() => session.client.account.findMany()).toThrow(/closed/i);
+    release();
+    const result = await request; await closing;
+    expect(disconnectedBeforeRollback).toBe(false);
+    expect(events).toEqual(["transaction finished", "disconnect"]);
+    expect(result).toBeInstanceOf(Error); expect((result as Error).message).toMatch(/closed/i);
+  });
+
+  it("does not enter a queued transaction callback after session revocation", async () => {
+    const session = new PrismaSession(), first = fakeClient("first"), callback = vi.fn(async () => "private result");
+    let start!: () => void;
+    (first.client as any).$transaction = (run: any) => {
+      const pending = new Promise((resolve, reject) => { start = () => { void Promise.resolve().then(() => run(first.client)).then(resolve, reject); }; });
+      void pending.catch(() => {}); return pending;
+    };
+    session.activate(first.client);
+    const request = Promise.resolve(session.client.$transaction(callback)).catch((error: Error) => error);
+    const closing = session.close(); start();
+    const result = await request; await closing;
+    expect(callback).not.toHaveBeenCalled();
+    expect(result).toBeInstanceOf(Error); expect((result as Error).message).toMatch(/closed/i);
+  });
 });
