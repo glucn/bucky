@@ -79,6 +79,17 @@ This note captures practical findings from stabilizing flaky E2E runs, especiall
 - Use repeat runs before closing the task, e.g.:
   - `npx playwright test tests/e2e/import-headered.spec.ts --repeat-each=3`
 
+## Base-currency banner failure evidence
+
+- A full-suite banner timeout recurred while waiting after saving a currency, before dismissal.
+  The inspected Electron trace contained test API steps and source files but no DOM snapshots.
+  A trace file alone therefore did not establish whether the setting was saved or the banner
+  state was stale. The cause remains unproven.
+- The banner scenarios now capture selected currency, save-button state, page text, backend
+  impact/reconciliation state and a screenshot on failure, before closing the app. Assertions and
+  timeouts remain unchanged. Inspect these artifacts before changing product behavior; an expected
+  websocket connection attempt to the stopped preparation port is not evidence of a hot-update 404.
+
 ## Operational hygiene
 
 - Before Playwright runs, check port `3000` usage to avoid stale servers causing false failures.
