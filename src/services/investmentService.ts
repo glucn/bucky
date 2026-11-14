@@ -1,4 +1,6 @@
 import { databaseService } from "./database";
+import { recordPortfolioFunding, fundingAccounts } from "./investmentFunding";
+import type { InvestmentFundingOptions } from "../shared/investmentFunding";
 import { createHolding } from "./securityHolding";
 import { createPortfolio, addPortfolioCash, lookupPortfolioCash, listPortfolios, readPortfolioAccounts, reviewPortfolioCandidates, confirmPortfolio } from "./investmentPortfolioIdentity";
 import type { NewHoldingInput } from "../shared/securityHolding";
@@ -269,69 +271,13 @@ class InvestmentService {
    * 
    * Requirements: 7.1, 7.3, 7.5
    */
-  public async depositCash(
-    portfolioId: string,
-    amount: number,
-    fromAccountId: string,
-    date: string,
-    description?: string
-  ): Promise<any> {
-    // Validate required fields (Requirements 7.1, 7.3)
-    if (!portfolioId) {
-      throw new Error("Portfolio ID is required");
-    }
-    if (typeof amount !== "number" || amount <= 0) {
-      throw new Error("Amount must be a positive number");
-    }
-    if (!fromAccountId || fromAccountId.trim() === "") {
-      throw new Error("Source account ID is required");
-    }
-    if (!date || date.trim() === "") {
-      throw new Error("Transaction date is required");
-    }
+  public async getPortfolioFundingAccounts(portfolioId: string) {
+    return fundingAccounts(portfolioId);
+  }
 
-    // Get the portfolio to find the trade cash account
-    const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
-    if (!portfolioAccounts.tradeCash) {
-      throw new Error("Trade cash account not found in portfolio");
-    }
-
-    // Validate that the source account exists
-    const sourceAccount = await databaseService.prismaClient.account.findUnique({
-      where: { id: fromAccountId },
-    });
-    if (!sourceAccount) {
-      throw new Error("Source account not found");
-    }
-
-    // Create journal entry using existing transfer functionality (Requirements 7.5)
-    // Debit Trade Cash Account (asset increase), Credit source account (asset decrease)
-    const desc = description || `Cash deposit to investment portfolio`;
-    
-    const result = await databaseService.createJournalEntry({
-      date: date,
-      description: desc,
-      fromAccountId: fromAccountId,
-      toAccountId: portfolioAccounts.tradeCash.id,
-      amount: amount,
-      transactionType: "transfer",
-      skipDuplicateCheck: false, // Allow manual cash deposits even if they look like duplicates
-    });
-
-    if (result.skipped) {
-      throw new Error(`Failed to create deposit transaction: ${result.reason}`);
-    }
-
-    // Update the journal entry type to CASH_DEPOSIT
-    const journalEntry = await databaseService.prismaClient.journalEntry.update({
-      where: { id: result.entry.id },
-      data: {
-        type: InvestmentTransactionType.CASH_DEPOSIT,
-      },
-      include: { lines: true },
-    });
-
-    return journalEntry;
+  public async depositCash(portfolioId: string, amount: number, fromAccountId: string, date: string,
+    description?: string, options: InvestmentFundingOptions = {}): Promise<any> {
+    return recordPortfolioFunding("deposit", portfolioId, amount, fromAccountId, date, description, options);
   }
 
   /**
@@ -349,79 +295,9 @@ class InvestmentService {
    * 
    * Requirements: 7.2, 7.3, 7.4, 7.5
    */
-  public async withdrawCash(
-    portfolioId: string,
-    amount: number,
-    toAccountId: string,
-    date: string,
-    description?: string
-  ): Promise<any> {
-    // Validate required fields (Requirements 7.2, 7.3)
-    if (!portfolioId) {
-      throw new Error("Portfolio ID is required");
-    }
-    if (typeof amount !== "number" || amount <= 0) {
-      throw new Error("Amount must be a positive number");
-    }
-    if (!toAccountId || toAccountId.trim() === "") {
-      throw new Error("Destination account ID is required");
-    }
-    if (!date || date.trim() === "") {
-      throw new Error("Transaction date is required");
-    }
-
-    // Get the portfolio to find the trade cash account
-    const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
-    if (!portfolioAccounts.tradeCash) {
-      throw new Error("Trade cash account not found in portfolio");
-    }
-
-    // Validate that the destination account exists
-    const destinationAccount = await databaseService.prismaClient.account.findUnique({
-      where: { id: toAccountId },
-    });
-    if (!destinationAccount) {
-      throw new Error("Destination account not found");
-    }
-
-    // Validate sufficient Trade Cash balance (Requirements 7.4)
-    const tradeCashBalance = await databaseService.getAccountBalance(
-      portfolioAccounts.tradeCash.id
-    );
-    if (tradeCashBalance < amount) {
-      throw new Error(
-        `Insufficient trade cash balance: trying to withdraw ${amount} but only ${tradeCashBalance} available`
-      );
-    }
-
-    // Create journal entry using existing transfer functionality (Requirements 7.5)
-    // Credit Trade Cash Account (asset decrease), Debit destination account (asset increase)
-    const desc = description || `Cash withdrawal from investment portfolio`;
-    
-    const result = await databaseService.createJournalEntry({
-      date: date,
-      description: desc,
-      fromAccountId: portfolioAccounts.tradeCash.id,
-      toAccountId: toAccountId,
-      amount: amount,
-      transactionType: "transfer",
-      skipDuplicateCheck: false, // Allow manual cash withdrawals even if they look like duplicates
-    });
-
-    if (result.skipped) {
-      throw new Error(`Failed to create withdrawal transaction: ${result.reason}`);
-    }
-
-    // Update the journal entry type to CASH_WITHDRAWAL
-    const journalEntry = await databaseService.prismaClient.journalEntry.update({
-      where: { id: result.entry.id },
-      data: {
-        type: InvestmentTransactionType.CASH_WITHDRAWAL,
-      },
-      include: { lines: true },
-    });
-
-    return journalEntry;
+  public async withdrawCash(portfolioId: string, amount: number, toAccountId: string, date: string,
+    description?: string, options: InvestmentFundingOptions = {}): Promise<any> {
+    return recordPortfolioFunding("withdrawal", portfolioId, amount, toAccountId, date, description, options);
   }
 
   /**

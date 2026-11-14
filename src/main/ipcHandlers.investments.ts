@@ -48,6 +48,7 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
   ipcMain.removeHandler("confirm-investment-portfolio");
   ipcMain.removeHandler("create-investment-portfolio");
   ipcMain.removeHandler("get-portfolio-accounts");
+  ipcMain.removeHandler("get-portfolio-funding-accounts");
   ipcMain.removeHandler("get-portfolio-value");
   ipcMain.removeHandler("get-all-positions");
   ipcMain.removeHandler("get-position-details");
@@ -292,6 +293,10 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
   });
 
   // Cash Management
+  ipcMain.handle("get-portfolio-funding-accounts", async (_, portfolioId: string) => {
+    try { return { success: true, accounts: await investmentService.getPortfolioFundingAccounts(portfolioId) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to load funding accounts" }; }
+  });
   ipcMain.handle("deposit-cash", async (_, params) => {
     console.log("Handling deposit-cash request:", params);
     try {
@@ -300,7 +305,8 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
         params.amount,
         params.fromAccountId,
         params.date,
-        params.description
+        params.description,
+        { tradeCashAccountId: params.tradeCashAccountId, counterAmount: params.counterAmount, exchangeRate: params.exchangeRate, expectedCashCurrency: params.expectedCashCurrency, expectedCounterCurrency: params.expectedCounterCurrency }
       );
       return { success: true, entry };
     } catch (error) {
@@ -320,7 +326,8 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
         params.amount,
         params.toAccountId,
         params.date,
-        params.description
+        params.description,
+        { tradeCashAccountId: params.tradeCashAccountId, counterAmount: params.counterAmount, exchangeRate: params.exchangeRate, expectedCashCurrency: params.expectedCashCurrency, expectedCounterCurrency: params.expectedCounterCurrency }
       );
       return { success: true, entry };
     } catch (error) {

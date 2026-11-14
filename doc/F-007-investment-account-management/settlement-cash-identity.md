@@ -26,9 +26,9 @@ require this identity before treating a group as a posting portfolio.
 The shared predicate serves holding setup, trade/distribution settlement and imports. Cash lookup
 by currency refuses multiple eligible matches; account-ID selection remains required when
 ambiguous. The legacy `tradeCash` response field remains a compatibility alias; consumers should
-use `tradeCashAccounts` and explicit IDs. The legacy deposit/withdraw shortcuts still require a
-separate review of first-account selection, native-unit safety and atomic journal tagging. Those
-shortcuts do not establish readiness merely because renaming now works.
+use `tradeCashAccounts` and explicit IDs. [Portfolio funding](portfolio-funding.md) now selects
+cash explicitly, preserves both FX amounts and posts/tag journals atomically. The compatibility
+alias no longer determines a funding destination.
 
 The portfolio review channel uses the ordinary authenticated IPC inventory. The optional review
 component loads lazily, and obsolete portfolio-list/value reads cannot overwrite newer results.

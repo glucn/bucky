@@ -72,6 +72,7 @@ export const APP_IPC_CHANNELS = [
   "get-opening-balance",
   "get-overview-dashboard",
   "get-portfolio-accounts",
+  "get-portfolio-funding-accounts",
   "get-portfolio-performance",
   "get-portfolio-value",
   "get-position-details",

@@ -9,6 +9,46 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 44 — Explicit, currency-aware and atomic portfolio funding (2026-11-14)
+
+- Replaced the funding shortcuts' first-account destination and separate tagging write with a
+  dedicated transactional service. Selection uses active cash IDs in an identified portfolio and
+  an active external user account without security properties. Category/system, own-portfolio,
+  archived and mismatched-unit counterparties are refused before financial writes.
+- Portfolio-native amount and actual external amount remain distinct for FX. Both journal lines
+  retain their currencies and source-to-destination rate after funding tagging. A supplied rate
+  must agree; a missing other-currency amount is not replaced with a 1:1 assumption. The actual
+  funding rate does not populate canonical `FxDailyRate` reporting data.
+- Withdrawals check dated journal availability, refuse a checkpoint discrepancy and cannot use
+  later deposits/openings as earlier cash. The check and write share the same transaction;
+  concurrent withdrawal coverage proves the balance is not spent twice. An injected final tag
+  failure restores both journals and affected opening-balance adjustments.
+- Deposit/Withdraw Cash now works in the portfolio dialog. Users select both accounts, see native
+  labels and implied FX, and must re-enter amounts after changing accounts or direction. Failed
+  saves retain their values. Obsolete choices/save responses cannot affect another portfolio.
+- Eight initially failing service cases drove the core changes; additional service coverage
+  checks active/foreign IDs, agreeing checkpoints, concurrent withdrawals and rate provenance.
+  Failing renderer contracts drove the missing controls and retained-save behavior.
+- Two further failing currency-snapshot cases exposed unused-account relabeling during an open
+  form. The UI now passes both displayed units and the transaction refuses either stale unit,
+  rather than silently treating equal numbers as a different currency.
+- A failing cross-portfolio case exposed an outgoing-cash check bypass through the receiving
+  portfolio's deposit form. Both entry directions now validate the actual outgoing portfolio cash
+  in the posting transaction; ordinary bank deposits retain their existing source-balance policy.
+- **1,176 tests across 141 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging with pinned Node 22. The packaged native/FX
+  funding, retained-refusal, correction and restart scenario passed three repetitions; all
+  **26 packaged acceptance cases passed** together. The FX funding dialog was visually inspected.
+  The development E2E run was interrupted in chat; Playwright's retained last-run status records
+  a pass with no failed tests, though the terminal log was unavailable after resuming.
+- Read-only review found that `addAccountToGroup` and `removeAccountFromGroup` still update
+  portfolio ownership without checking existing financial history. Since portfolio flow/report
+  scope follows ownership, regrouping can reinterpret prior facts. Protect those boundaries next.
+- See the [funding contract](F-007-investment-account-management/portfolio-funding.md). Exact
+  decimals, reviewed investment baselines/corrections/replay, whole-book verification and
+  personal/native acceptance remain open. Dated withdrawal checks do not establish global
+  checkpoint semantics, margin support or future balance consistency.
+
 ### Batch 43 — Durable portfolio identity and name-free settlement cash (2026-11-14)
 
 - New portfolios retain an explicit group marker, created atomically with initial cash and
@@ -1205,7 +1245,7 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation work
-is **explicit and atomic portfolio funding, reviewed investment baselines/corrections/replay,
+is **portfolio membership history protection, reviewed investment baselines/corrections/replay,
 exact decimals and whole-book verification**,
 alongside full installed/native recovery/conversion acceptance. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance

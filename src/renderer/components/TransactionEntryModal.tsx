@@ -1,5 +1,7 @@
 import { localCalendarDate } from "../../shared/dateUtils";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import type { FundingAccount } from "../../shared/investmentFunding";
+import { InvestmentFundingFields } from "./InvestmentFundingFields";
 
 interface TransactionEntryModalProps {
   isOpen: boolean;
@@ -28,10 +30,16 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
   const [securityAccountId, setSecurityAccountId] = useState('');
   const [tradeCashAccountId, setTradeCashAccountId] = useState('');
   const [loading, setLoading] = useState(false);
+  const isFunding = transactionType === 'cash_deposit' || transactionType === 'cash_withdrawal';
+  const [fundingAccounts, setFundingAccounts] = useState<FundingAccount[]>([]), [fundingLoading, setFundingLoading] = useState(false);
+  const [otherAccountId, setOtherAccountId] = useState(''), [counterAmount, setCounterAmount] = useState('');
+  const generation = useRef(0);
   const requiresTicker = ['buy', 'sell', 'dividend', 'dividend_reinvest'].includes(transactionType);
   const selectedHolding = securities.find((account) => account.id === securityAccountId);
   const tickerSymbol = selectedHolding?.investmentProperties.tickerSymbol || '';
   const eligibleCash = useMemo(() => cashAccounts.filter((account) => !requiresTicker || (selectedHolding && account.currency === selectedHolding.currency)), [cashAccounts, requiresTicker, selectedHolding]);
+  const selectedCash = eligibleCash.find((account) => account.id === tradeCashAccountId), selectedOther = fundingAccounts.find((account) => account.id === otherAccountId);
+  const fundingFx = isFunding && selectedCash && selectedOther && selectedCash.currency !== selectedOther.currency;
   const [quantity, setQuantity] = useState('');
   const [pricePerShare, setPricePerShare] = useState('');
   const [amount, setAmount] = useState('');
@@ -44,7 +52,9 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     let active = true;
+    generation.current++;
     setLoading(true); setError(''); setSecurities([]); setCashAccounts([]);
+    setSubmitting(false); setQuantity(''); setPricePerShare(''); setAmount(''); setFee(''); setDescription(''); setDate(localCalendarDate());
     setSecurityAccountId(''); setTradeCashAccountId(''); setTransactionType(initialTransactionType);
     void (async () => {
       try {
@@ -61,21 +71,39 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
       } catch (error) { if (active) setError(error instanceof Error ? error.message : "Unable to load portfolio accounts"); }
       finally { if (active) setLoading(false); }
     })();
-    return () => { active = false; };
+    return () => { active = false; generation.current++; };
   }, [isOpen, portfolioId, initialTransactionType, initialTickerSymbol, initialSecurityAccountId]);
 
   useEffect(() => {
     setTradeCashAccountId((current) => eligibleCash.some((a) => a.id === current) ? current : eligibleCash.length === 1 ? eligibleCash[0].id : '');
   }, [eligibleCash]);
 
+  useEffect(() => {
+    if (!isOpen || !isFunding) { setFundingLoading(false); setFundingAccounts([]); setOtherAccountId(''); return; }
+    let active = true; setFundingLoading(true); setFundingAccounts([]); setOtherAccountId('');
+    void window.electron.ipcRenderer.invoke('get-portfolio-funding-accounts', portfolioId).then((result) => {
+      if (!active) return;
+      if (!result.success || !Array.isArray(result.accounts)) throw new Error(result.error || 'Unable to load funding accounts');
+      setFundingAccounts(result.accounts);
+    }).catch((failure) => { if (active) setError(failure instanceof Error ? failure.message : 'Unable to load funding accounts'); })
+      .finally(() => { if (active) setFundingLoading(false); });
+    return () => { active = false; };
+  }, [isOpen, portfolioId, isFunding]);
+
+  useEffect(() => {
+    if (isFunding) { setAmount(''); setCounterAmount(''); setError(''); }
+  }, [isFunding, transactionType, tradeCashAccountId, otherAccountId]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (loading || submitting) return;
+    if (loading || fundingLoading || submitting) return;
     if (requiresTicker && !selectedHolding) { setError('Select a holding. Add a holding from the portfolio first if needed.'); return; }
     if (!eligibleCash.some((a) => a.id === tradeCashAccountId)) { setError('Select a matching cash account.'); return; }
+    if (isFunding && !selectedOther) { setError('Select the other account.'); return; }
+    const token = generation.current;
     setSubmitting(true);
 
     try {
@@ -159,15 +187,19 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
 
         case 'cash_deposit':
         case 'cash_withdrawal':
-          // These need to be implemented with account selection
-          setError('Cash deposit/withdrawal functionality coming soon. Please use the Transfer modal from the Accounts page.');
-          setSubmitting(false);
-          return;
+          result = await window.electron.ipcRenderer.invoke(transactionType === 'cash_deposit' ? 'deposit-cash' : 'withdraw-cash', {
+            portfolioId, tradeCashAccountId, amount: Number(amount), date, description,
+            expectedCashCurrency: selectedCash.currency, expectedCounterCurrency: selectedOther!.currency,
+            ...(transactionType === 'cash_deposit' ? { fromAccountId: otherAccountId } : { toAccountId: otherAccountId }),
+            ...(fundingFx ? { counterAmount: Number(counterAmount) } : {}),
+          });
+          break;
 
         default:
           throw new Error('Unsupported transaction type');
       }
 
+      if (token !== generation.current) return;
       if (result.success) {
         onTransactionCreated?.();
         handleClose();
@@ -176,9 +208,9 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
       }
     } catch (err) {
       console.error('Error recording transaction:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      if (token === generation.current) setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
-      setSubmitting(false);
+      if (token === generation.current) setSubmitting(false);
     }
   };
 
@@ -198,7 +230,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
 
   const requiresQuantity = ['buy', 'sell'].includes(transactionType);
   const requiresPrice = ['buy', 'sell', 'dividend_reinvest'].includes(transactionType);
-  const requiresAmount = ['dividend', 'dividend_reinvest', 'interest', 'fee'].includes(transactionType);
+  const requiresAmount = isFunding || ['dividend', 'dividend_reinvest', 'interest', 'fee'].includes(transactionType);
 
   return (
     <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
@@ -209,6 +241,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {loading ? <p role="status">Loading portfolio accounts…</p> : null}
+          {fundingLoading ? <p role="status">Loading funding accounts…</p> : null}
           {/* Transaction Type */}
           <div>
             <label htmlFor="transaction-type" className="block text-sm font-medium text-gray-700 mb-1">
@@ -225,6 +258,8 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
               <option value="dividend_reinvest">Reinvested Dividend</option>
               <option value="interest">Interest Income</option>
               <option value="fee">Fee</option>
+              <option value="cash_deposit">Cash Deposit</option>
+              <option value="cash_withdrawal">Cash Withdrawal</option>
             </select>
           </div>
 
@@ -243,6 +278,8 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
             </select>
             {requiresTicker && selectedHolding ? <p className="text-sm text-gray-600">Amounts are in {selectedHolding.currency}. Only matching cash accounts are shown.</p> : null}
           </div>
+
+          {isFunding ? <InvestmentFundingFields accounts={fundingAccounts} otherId={otherAccountId} onOtherChange={setOtherAccountId} cashCurrency={selectedCash?.currency} amount={amount} counterAmount={counterAmount} onCounterAmountChange={setCounterAmount} withdrawal={transactionType === 'cash_withdrawal'} disabled={loading || fundingLoading || submitting} /> : null}
 
           {/* Quantity */}
           {requiresQuantity && (
@@ -284,7 +321,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           {requiresAmount && (
             <div>
               <label htmlFor="transaction-amount" className="block text-sm font-medium text-gray-700 mb-1">
-                Amount *
+                {isFunding ? `Portfolio amount${selectedCash ? ` (${selectedCash.currency})` : ''} *` : 'Amount *'}
               </label>
               <input id="transaction-amount"
                 type="number"
@@ -294,6 +331,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
                 placeholder="0.00"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 required
+                disabled={loading || fundingLoading || submitting}
               />
             </div>
           )}
@@ -363,7 +401,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
             <button
               type="submit"
               className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
-              disabled={submitting || loading || (requiresTicker && !selectedHolding) || !eligibleCash.some((a) => a.id === tradeCashAccountId)}
+              disabled={submitting || loading || fundingLoading || (isFunding && !selectedOther) || (requiresTicker && !selectedHolding) || !eligibleCash.some((a) => a.id === tradeCashAccountId)}
             >
               {submitting ? 'Recording...' : 'Record Transaction'}
             </button>
