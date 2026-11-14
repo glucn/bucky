@@ -1,5 +1,6 @@
 import { databaseService } from "./database";
 import { createHolding } from "./securityHolding";
+import { createPortfolio, addPortfolioCash, lookupPortfolioCash, listPortfolios, readPortfolioAccounts, reviewPortfolioCandidates, confirmPortfolio } from "./investmentPortfolioIdentity";
 import type { NewHoldingInput } from "../shared/securityHolding";
 import { recordInvestmentCash } from "./investmentCash";
 import { investmentIncomeReport, realizedGainReport, investmentReportingBundle, investmentReportRange } from "./investmentIncomeReporting";
@@ -96,34 +97,8 @@ class InvestmentService {
    * 
    * Requirements: 1.1, 1.2, 1.3
    */
-  public async createInvestmentPortfolio(
-    name: string,
-    currency: string = "USD"
-  ): Promise<{
-    group: any;
-    tradeCashAccount: any;
-  }> {
-    // Create the AccountGroup with accountType "user"
-    const group = await databaseService.createAccountGroup({
-      name,
-      accountType: AccountType.User,
-    });
-
-    // Create the trade cash Account linked to the group
-    const tradeCashAccount = await databaseService.createAccount({
-      name: `Trade Cash - ${name} (${currency})`,
-      type: AccountType.User,
-      subtype: AccountSubtype.Asset,
-      currency,
-    });
-
-    // Link the trade cash account to the group
-    await databaseService.addAccountToGroup(tradeCashAccount.id, group.id);
-
-    return {
-      group,
-      tradeCashAccount,
-    };
+  public async createInvestmentPortfolio(name: string, currency = "USD") {
+    return createPortfolio(name, currency);
   }
 
   /**
@@ -136,34 +111,8 @@ class InvestmentService {
    * 
    * Requirements: Multi-currency support
    */
-  public async addTradeCashAccount(
-    portfolioId: string,
-    currency: string
-  ): Promise<any> {
-    // Validate that the portfolio exists
-    const portfolio = await databaseService.getAccountGroupById(portfolioId);
-    if (!portfolio) {
-      throw new Error("Portfolio not found");
-    }
-
-    // Check if a trade cash account for this currency already exists in the portfolio
-    const existingTradeCash = await this.getTradeCashAccount(portfolioId, currency);
-    if (existingTradeCash) {
-      throw new Error(`Trade cash account for ${currency} already exists in this portfolio`);
-    }
-
-    // Create the trade cash Account
-    const tradeCashAccount = await databaseService.createAccount({
-      name: `Trade Cash - ${portfolio.name} (${currency})`,
-      type: AccountType.User,
-      subtype: AccountSubtype.Asset,
-      currency,
-    });
-
-    // Link the trade cash account to the group
-    await databaseService.addAccountToGroup(tradeCashAccount.id, portfolioId);
-
-    return tradeCashAccount;
+  public async addTradeCashAccount(portfolioId: string, currency: string) {
+    return addPortfolioCash(portfolioId, currency);
   }
 
   /**
@@ -173,31 +122,15 @@ class InvestmentService {
    * @param currency - Currency code to search for
    * @returns The trade cash account, or null if not found
    */
-  public async getTradeCashAccount(
-    portfolioId: string,
-    currency: string
-  ): Promise<any | null> {
-    // Get the portfolio group with its accounts
-    const portfolio = await databaseService.getAccountGroupById(portfolioId);
-    if (!portfolio) {
-      throw new Error("Portfolio not found");
-    }
-
-    // Search through the portfolio's accounts for a trade cash account with matching currency
-    for (const account of portfolio.accounts) {
-      if (account.name.includes("Trade Cash") && account.currency === currency) {
-        return account;
-      }
-    }
-
-    return null;
+  public async getTradeCashAccount(portfolioId: string, currency: string) {
+    return lookupPortfolioCash(portfolioId, currency);
   }
 
   /**
    * Get all investment portfolios.
    * Returns all AccountGroups with accountType "user" that contain investment-related accounts.
    * An account group is considered an investment portfolio if it contains:
-   * - A trade cash account (name contains "Trade Cash"), OR
+   * - An explicit investment portfolio marker, OR
    * - Any security accounts (accounts with InvestmentProperties)
    * 
    * This filters out regular banking account groups that don't have investment accounts.
@@ -206,42 +139,16 @@ class InvestmentService {
    * 
    * Requirements: 1.4
    */
-  public async getInvestmentPortfolios(): Promise<any[]> {
-    // Query all AccountGroups with accountType "user"
-    const allGroups = await databaseService.getAccountGroups(AccountType.User);
+  public async getInvestmentPortfolios() {
+    return listPortfolios();
+  }
 
-    // Filter to only groups that contain investment-related accounts
-    const investmentPortfolios: any[] = [];
+  public async getPortfolioReviewCandidates() {
+    return reviewPortfolioCandidates();
+  }
 
-    for (const group of allGroups) {
-      // Check if this group has any investment-related accounts
-      let hasInvestmentAccounts = false;
-
-      for (const account of group.accounts) {
-        // Check if it's a trade cash account
-        if (account.name.includes("Trade Cash")) {
-          hasInvestmentAccounts = true;
-          break;
-        }
-
-        // Check if it has investment properties (security account)
-        const accountWithProps = await databaseService.prismaClient.account.findUnique({
-          where: { id: account.id },
-          include: { investmentProperties: true },
-        });
-
-        if (accountWithProps?.investmentProperties) {
-          hasInvestmentAccounts = true;
-          break;
-        }
-      }
-
-      if (hasInvestmentAccounts) {
-        investmentPortfolios.push(group);
-      }
-    }
-
-    return investmentPortfolios;
+  public async confirmInvestmentPortfolio(groupId: string, expectedAccountIds: string[]) {
+    return confirmPortfolio(groupId, expectedAccountIds);
   }
 
   /**
@@ -252,43 +159,8 @@ class InvestmentService {
    * 
    * Requirements: 1.4, 1.5, Multi-currency support
    */
-  public async getPortfolioAccounts(portfolioId: string): Promise<{
-    tradeCash: any | null; // Legacy: first trade cash account for backward compatibility
-    tradeCashAccounts: any[]; // New: all trade cash accounts
-    securities: any[];
-  }> {
-    // Get the portfolio group with its accounts
-    const portfolio = await databaseService.getAccountGroupById(portfolioId);
-
-    if (!portfolio) {
-      throw new Error("Portfolio not found");
-    }
-
-    // Separate trade cash from security accounts
-    const tradeCashAccounts: any[] = [];
-    const securities: any[] = [];
-
-    for (const account of portfolio.accounts) {
-      // Check if account has investment properties (indicates it's a security account)
-      const accountWithProps = await databaseService.prismaClient.account.findUnique({
-        where: { id: account.id },
-        include: { investmentProperties: true },
-      });
-
-      if (accountWithProps?.investmentProperties) {
-        // This is a security account
-        securities.push(accountWithProps);
-      } else if (account.name.includes("Trade Cash")) {
-        // This is a trade cash account
-        tradeCashAccounts.push(account);
-      }
-    }
-
-    return {
-      tradeCash: tradeCashAccounts.length > 0 ? tradeCashAccounts[0] : null, // Legacy compatibility
-      tradeCashAccounts,
-      securities,
-    };
+  public async getPortfolioAccounts(portfolioId: string) {
+    return readPortfolioAccounts(portfolioId);
   }
 
   /**

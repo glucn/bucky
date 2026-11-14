@@ -1,6 +1,6 @@
 import type { InvestmentImportOrigin, Prisma } from "@prisma/client";
-import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import type { InvestmentImportOptions, InvestmentImportRow } from "../shared/investmentImport";
+import { hasPortfolioIdentity, isSettlementCash } from "../shared/investmentAccounts";
 
 export class ImportHoldingSelectionError extends Error {}
 export const securityImportRow = (row: InvestmentImportRow) => row.type !== "fee" && row.type !== "interest";
@@ -24,8 +24,10 @@ export async function resolveImportSelection(tx: Prisma.TransactionClient, portf
   if (!chosen && !options.tradeCashAccountId && original) {
     return { currency: original.currency, securityAccountId: securityImportRow(row) ? await originHolding(tx, original) : null };
   }
-  const accounts = await tx.account.findMany({ where: { groupId: portfolioId }, include: { investmentProperties: true } });
-  const cash = accounts.filter((account) => !account.isArchived && !account.investmentProperties && account.type === AccountType.User && account.subtype === AccountSubtype.Asset && account.name.includes("Trade Cash"));
+  const portfolio = await tx.accountGroup.findUnique({ where: { id: portfolioId }, include: { accounts: { include: { investmentProperties: true } } } });
+  if (!portfolio || !hasPortfolioIdentity(portfolio)) throw new Error("Review and confirm this account group as an investment portfolio before posting");
+  const accounts = portfolio.accounts;
+  const cash = accounts.filter((account) => isSettlementCash(account));
   const selected = options.tradeCashAccountId ? cash.find((account) => account.id === options.tradeCashAccountId) : undefined;
   if (options.tradeCashAccountId && !selected) throw new Error("Selected trade cash account not found in this portfolio");
   const holdings = securityImportRow(row) ? accounts.filter((account) => account.investmentProperties?.tickerSymbol === row.ticker) : [];

@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
 import { databaseService } from "./database";
+import { hasPortfolioIdentity, isSettlementCash } from "../shared/investmentAccounts";
 
 export function investmentTransaction<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>, tx?: Prisma.TransactionClient): Promise<T> {
   return tx ? operation(tx) : databaseService.prismaClient.$transaction(operation, { timeout: 30000 });
@@ -35,14 +36,14 @@ export async function resolveInvestmentAccounts(tx: Prisma.TransactionClient, in
     const portfolio = await tx.accountGroup.findUnique({ where: { id: input.portfolioId }, include: { accounts: { include: { investmentProperties: true } } } });
     if (!portfolio) throw new Error("Portfolio not found");
     if (portfolio.accountType !== AccountType.User) throw new Error("Investment portfolio must be a user account group");
+    if (!hasPortfolioIdentity(portfolio)) throw new Error("Review and confirm this account group as an investment portfolio before posting");
     const matches = portfolio.accounts.filter((account) => account.investmentProperties?.tickerSymbol.trim() === ticker);
     let security = input.securityAccountId ? matches.find((account) => account.id === input.securityAccountId) : matches.length === 1 ? matches[0] : undefined;
     if (input.securityAccountId && !security) throw new Error("Selected security does not match this portfolio and ticker");
     if (!input.securityAccountId && matches.length > 1) throw new Error("Select an explicit security account for this ticker");
     if (security?.isArchived) throw new Error("Security account is archived");
     if (!security && options.requireSecurity && !options.createSecurity) throw new Error(`Security account for ${ticker} not found in portfolio`);
-    const cashAccounts = portfolio.accounts.filter((account) => !account.isArchived && !account.investmentProperties &&
-      account.type === AccountType.User && account.subtype === AccountSubtype.Asset && account.name.includes("Trade Cash"));
+    const cashAccounts = portfolio.accounts.filter((account) => isSettlementCash(account));
     const eligibleCash = cashAccounts.filter((account) => !security || account.currency === security.currency);
     const cash = input.tradeCashAccountId ? eligibleCash.find((account) => account.id === input.tradeCashAccountId) : eligibleCash.length === 1 ? eligibleCash[0] : undefined;
     if (!cash) {

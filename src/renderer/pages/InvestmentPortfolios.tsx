@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAccounts } from "../context/AccountsContext";
 import { formatValuationAmount } from "../utils/valuationFormatting";
 import { SUPPORTED_CURRENCY_OPTIONS } from "../../shared/currencies";
+import type { PortfolioReviewCandidate } from "../components/PortfolioGroupReview";
+const PortfolioGroupReview = lazy(() => import("../components/PortfolioGroupReview"));
 
 interface Portfolio {
   id: string;
@@ -31,6 +33,9 @@ export const InvestmentPortfolios: React.FC = () => {
   const [baseCurrencyAtModalOpen, setBaseCurrencyAtModalOpen] = useState("USD");
   const [creating, setCreating] = useState(false);
   const [baseCurrency, setBaseCurrency] = useState("USD");
+  const [reviewCandidates, setReviewCandidates] = useState<PortfolioReviewCandidate[]>([]);
+  const [loadError, setLoadError] = useState("");
+  const generation = useRef(0);
 
   const openCreatePortfolioModal = async () => {
     const impactState = await window.electron.getBaseCurrencyImpactState();
@@ -41,22 +46,27 @@ export const InvestmentPortfolios: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchPortfolios();
+    let active = true;
+    void fetchPortfolios();
     void window.electron.getBaseCurrencyImpactState().then((state) => {
-      setBaseCurrency(state.baseCurrency || "USD");
+      if (active) setBaseCurrency(state.baseCurrency || "USD");
     });
+    return () => { active = false; generation.current++; };
   }, []);
 
   const fetchPortfolios = async () => {
-    setLoading(true);
+    const token = ++generation.current; setLoading(true); setLoadError("");
     try {
       const result = await window.electron.ipcRenderer.invoke("get-investment-portfolios");
+      if (token !== generation.current) return;
+      if (!result.success) throw new Error(result.error || "Unable to load portfolios");
       if (result.success) {
         setPortfolios(result.portfolios);
+        setReviewCandidates(Array.isArray(result.reviewCandidates) ? result.reviewCandidates : []);
         
         // Fetch values for each portfolio
         const values: Record<string, PortfolioValue> = {};
-        for (const portfolio of result.portfolios) {
+        await Promise.all(result.portfolios.map(async (portfolio: Portfolio) => {
           const valueResult = await window.electron.ipcRenderer.invoke(
             "get-portfolio-value",
             portfolio.id
@@ -64,13 +74,14 @@ export const InvestmentPortfolios: React.FC = () => {
           if (valueResult.success) {
             values[portfolio.id] = valueResult.value;
           }
-        }
-        setPortfolioValues(values);
+        }));
+        if (token === generation.current) setPortfolioValues(values);
       }
     } catch (error) {
       console.error("Error fetching portfolios:", error);
+      if (token === generation.current) setLoadError(error instanceof Error ? error.message : "Unable to load portfolios");
     } finally {
-      setLoading(false);
+      if (token === generation.current) setLoading(false);
     }
   };
 
@@ -130,6 +141,8 @@ export const InvestmentPortfolios: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {loadError ? <p role="alert" className="text-red-700">{loadError} <button className="underline" onClick={() => void fetchPortfolios()}>Retry</button></p> : null}
+      {reviewCandidates.length ? <Suspense fallback={<p>Loading portfolio review…</p>}><PortfolioGroupReview candidates={reviewCandidates} onConfirmed={async () => { await fetchPortfolios(); await refreshAccounts(); }} /></Suspense> : null}
       <div className="bg-white shadow rounded-lg p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">Investment Portfolios</h2>

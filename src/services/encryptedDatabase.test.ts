@@ -63,6 +63,9 @@ describe("encrypted personal database lifecycle", () => {
       VALUES ('legacy-holding','keep','ABC',3,'FIFO','[]',CURRENT_TIMESTAMP)`);
     await query(`INSERT INTO SecurityPriceHistory (id,tickerSymbol,date,price,source) VALUES ('legacy-price','ABC','2026-01-02',999,'manual')`);
     await query(`INSERT INTO SecurityDailyPrice (id,ticker,market,marketDate,close) VALUES ('canonical-price','ABC','NASDAQ','2026-01-02',12.345678)`);
+    await query(`INSERT INTO AccountGroup (id,name,accountType,updatedAt) VALUES ('known','Recorded holdings','user',CURRENT_TIMESTAMP), ('cash','Cash-only broker','user',CURRENT_TIMESTAMP), ('bank','Bank group','user',CURRENT_TIMESTAMP)`);
+    await query(`UPDATE Account SET groupId='known' WHERE id='keep'`);
+    await query(`INSERT INTO Account (id,name,type,subtype,currency,groupId,updatedAt) VALUES ('cash-only','Trade Cash - Cash-only broker (CAD)','user','asset','CAD','cash',CURRENT_TIMESTAMP), ('bank-cash','Trade Cash - Bank group (CAD)','user','asset','CAD','bank',CURRENT_TIMESTAMP)`);
     const result = await initializeEncryptedDatabase(filename, migrations, key);
     expect(result.backupPath).toBeTruthy();
     expect((await query("SELECT name FROM Account"))[0].name).toBe(sentinel);
@@ -76,6 +79,10 @@ describe("encrypted personal database lifecycle", () => {
     expect((await query("SELECT hasCompleteActivityHistory FROM InvestmentProperties WHERE id='legacy-holding'"))[0].hasCompleteActivityHistory).toBe(0);
     expect((await query("SELECT count(*) AS count FROM InvestmentActivity"))[0].count).toBe(0);
     expect((await query("SELECT count(*) AS count FROM InvestmentImportOrigin"))[0].count).toBe(0);
+    expect(await query("SELECT id,isInvestmentPortfolio FROM AccountGroup ORDER BY id")).toEqual([
+      { id: "bank", isInvestmentPortfolio: 0 }, { id: "cash", isInvestmentPortfolio: 0 }, { id: "known", isInvestmentPortfolio: 1 },
+    ]);
+    expect((await query("PRAGMA table_info(AccountGroup)", result.backupPath!)).some((column: any) => column.name === "isInvestmentPortfolio")).toBe(false);
     expect((await fs.readFile(result.backupPath!)).includes(Buffer.from(sentinel))).toBe(false);
     await expect(query("SELECT name FROM Account", result.backupPath!, randomBytes(32))).rejects.toThrow();
   });

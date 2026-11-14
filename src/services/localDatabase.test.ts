@@ -64,6 +64,9 @@ describe("Personal database lifecycle", () => {
       VALUES ('legacy-holding','keep','ABC',3,'FIFO','[]',CURRENT_TIMESTAMP)`);
     await sql(`INSERT INTO SecurityPriceHistory (id,tickerSymbol,date,price,source) VALUES ('legacy-price','ABC','2026-01-02',999,'manual')`);
     await sql(`INSERT INTO SecurityDailyPrice (id,ticker,market,marketDate,close) VALUES ('canonical-price','ABC','NASDAQ','2026-01-02',12.345678)`);
+    await sql(`INSERT INTO AccountGroup (id,name,accountType,updatedAt) VALUES ('known','Recorded holdings','user',CURRENT_TIMESTAMP), ('cash','Cash-only broker','user',CURRENT_TIMESTAMP), ('bank','Bank group','user',CURRENT_TIMESTAMP)`);
+    await sql(`UPDATE Account SET groupId='known' WHERE id='keep'`);
+    await sql(`INSERT INTO Account (id,name,type,subtype,currency,groupId,updatedAt) VALUES ('cash-only','Trade Cash - Cash-only broker (CAD)','user','asset','CAD','cash',CURRENT_TIMESTAMP), ('bank-cash','Trade Cash - Bank group (CAD)','user','asset','CAD','bank',CURRENT_TIMESTAMP)`);
     const result = await initializePersonalDatabase(filename, migrations);
     expect(result.backupPath).toBeTruthy();
     expect(await sql("SELECT name FROM Account WHERE id='keep'"))
@@ -84,6 +87,10 @@ describe("Personal database lifecycle", () => {
       .toEqual([{ hasCompleteActivityHistory: 0 }]);
     expect(await sql("SELECT count(*) AS count FROM InvestmentActivity")).toEqual([{ count: 0 }]);
     expect(await sql("SELECT count(*) AS count FROM InvestmentImportOrigin")).toEqual([{ count: 0 }]);
+    expect(await sql("SELECT id,isInvestmentPortfolio FROM AccountGroup ORDER BY id")).toEqual([
+      { id: "bank", isInvestmentPortfolio: 0 }, { id: "cash", isInvestmentPortfolio: 0 }, { id: "known", isInvestmentPortfolio: 1 },
+    ]);
+    expect((await sql("PRAGMA table_info(AccountGroup)", result.backupPath!)).some((column) => column.name === "isInvestmentPortfolio")).toBe(false);
   });
 
   it("rolls back an unsuccessful migration and leaves a recoverable pre-upgrade snapshot", async () => {

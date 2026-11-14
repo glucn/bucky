@@ -4,6 +4,7 @@ import { parseSecurityIdentity } from "../shared/securityMarket";
 import type { NewHoldingInput } from "../shared/securityHolding";
 import { investmentTransaction } from "./investmentPosting";
 import { bindSecurityMarket } from "./securityMarketBinding";
+import { hasPortfolioIdentity, isSettlementCash } from "../shared/investmentAccounts";
 
 /** A selected cash account supplies the currency; never infer it from array order. */
 export async function selectPortfolioCash(tx: Prisma.TransactionClient, portfolioId: string, cashId?: string) {
@@ -11,7 +12,8 @@ export async function selectPortfolioCash(tx: Prisma.TransactionClient, portfoli
   const portfolio = await tx.accountGroup.findUnique({ where: { id: portfolioId }, include: { accounts: { include: { investmentProperties: true } } } });
   if (!portfolio) throw new Error("Portfolio not found");
   if (portfolio.accountType !== AccountType.User) throw new Error("Investment portfolio must be a user account group");
-  const eligible = portfolio.accounts.filter((a) => !a.isArchived && a.type === AccountType.User && a.subtype === AccountSubtype.Asset && !a.investmentProperties && a.name.includes("Trade Cash"));
+  if (!hasPortfolioIdentity(portfolio)) throw new Error("Review and confirm this account group as an investment portfolio before posting");
+  const eligible = portfolio.accounts.filter((account) => isSettlementCash(account));
   const cash = cashId ? eligible.find((a) => a.id === cashId) : eligible.length === 1 ? eligible[0] : undefined;
   if (!cash) throw new Error("Select an active Trade Cash account in this portfolio");
   return { portfolio, cash };

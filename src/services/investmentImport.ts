@@ -8,6 +8,7 @@ import { cents, investmentTransaction } from "./investmentPosting";
 import { recordInvestmentTrade } from "./investmentTrades";
 import { recordCashDividend, recordReinvestment, recordSplit } from "./investmentDistributions";
 import { ImportHoldingSelectionError, originHolding, resolveImportSelection, securityImportRow } from "./investmentImportSelection";
+import { isSettlementCash } from "../shared/investmentAccounts";
 
 type Match = { status: "new" | "matching" | "review" | "conflict"; reason?: string; count?: number };
 function context(options: InvestmentImportOptions, rows: InvestmentImportRow[]) {
@@ -119,7 +120,7 @@ async function post(tx: Prisma.TransactionClient, portfolioId: string, row: Inve
   }
   const cashAccounts = (await tx.account.findMany({ where: { groupId: portfolioId, currency, isArchived: false, type: AccountType.User, subtype: AccountSubtype.Asset, investmentProperties: null,
     ...(options.tradeCashAccountId ? { id: options.tradeCashAccountId } : {}),
-  } })).filter((account) => account.name.includes("Trade Cash"));
+  }, include: { investmentProperties: true } })).filter((account) => isSettlementCash(account));
   if (cashAccounts.length !== 1) throw new Error("Select one active trade cash account for this statement");
   const cash = cashAccounts[0];
   return recordInvestmentCash({ portfolioId, kind: row.type, amount: row.amount, date: row.date,

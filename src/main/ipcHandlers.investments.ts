@@ -45,6 +45,7 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
 
   // Remove any existing handlers first
   ipcMain.removeHandler("get-investment-portfolios");
+  ipcMain.removeHandler("confirm-investment-portfolio");
   ipcMain.removeHandler("create-investment-portfolio");
   ipcMain.removeHandler("get-portfolio-accounts");
   ipcMain.removeHandler("get-portfolio-value");
@@ -78,8 +79,8 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
   ipcMain.handle("get-investment-portfolios", async () => {
     console.log("Handling get-investment-portfolios request");
     try {
-      const portfolios = await investmentService.getInvestmentPortfolios();
-      return { success: true, portfolios };
+      const [portfolios, reviewCandidates] = await Promise.all([investmentService.getInvestmentPortfolios(), investmentService.getPortfolioReviewCandidates()]);
+      return { success: true, portfolios, reviewCandidates };
     } catch (error) {
       console.error("Error getting investment portfolios:", error);
       return {
@@ -87,6 +88,11 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
         error: error instanceof Error ? error.message : "Unknown error",
       };
     }
+  });
+
+  ipcMain.handle("confirm-investment-portfolio", async (_, { groupId, expectedAccountIds }) => {
+    try { return { success: true, portfolio: await investmentService.confirmInvestmentPortfolio(groupId, expectedAccountIds) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to confirm portfolio" }; }
   });
 
   ipcMain.handle(

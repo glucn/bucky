@@ -9,6 +9,38 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 43 — Durable portfolio identity and name-free settlement cash (2026-11-14)
+
+- New portfolios retain an explicit group marker, created atomically with initial cash and
+  membership. Renaming cash or the group no longer hides a cash-only portfolio. Additional cash
+  creation is atomic and detects same-currency cash after renaming, including archived history.
+- One shared structural predicate identifies portfolio user/asset accounts without holding
+  properties. Setup, trades/distributions, fee/interest and statement context no longer require
+  `Trade Cash` in the display name. Active selection and historical listing remain distinct;
+  ambiguous currency lookup refuses a first-account guess.
+- A schema migration recognizes existing groups with structured holdings and leaves cash-only
+  groups for explicit review. Native/encrypted upgrade tests verify marker decisions, retained
+  financial facts and pre-upgrade snapshots. A bank account named `Trade Cash` is not a portfolio.
+- A lazy review component lists an existing group's accounts/currencies for confirmation.
+  The ordinary authenticated IPC boundary checks current membership before changing the marker;
+  stale/refused confirmation remains visible. Listing/value reads are parallel and guarded
+  against obsolete responses. No financial records are rewritten by classification.
+- Six failing service contracts drove rename behavior, false discovery, ambiguity, creation
+  rollback and reviewed legacy classification. A failing UI contract drove the review path.
+  A seventh failing case drove the explicit portfolio boundary before new investment posting.
+- **1,154 tests across 139 files passed in each native and encrypted storage mode**, plus
+  TypeScript checking and Apple Silicon packaging with pinned Node 22. The new real-UI review,
+  rename, holding setup, fee import and restart scenario passed three packaged repetitions.
+  Its initial fixture omitted the required cost method and timed out with Create holding disabled;
+  explicitly selecting FIFO corrected the fixture without changing product behavior or timeouts.
+  The review screenshot was visually inspected. All **25 packaged acceptance cases passed**
+  together, followed by all **78 development E2E checks**, each scenario repeated three times.
+- See the [settlement cash contract](F-007-investment-account-management/settlement-cash-identity.md).
+  The legacy deposit/withdraw shortcuts still use a compatibility first-account alias and tag
+  journals after posting; review explicit selection, native-unit safety and atomicity next.
+  Reviewed baselines/corrections/replay, exact decimals, whole-book verification and personal/native
+  acceptance remain open.
+
 ### Batch 42 — Exact holding selection in investment statements (2026-11-14)
 
 - Statement security rows can select an account labeled by ticker, market and currency. Ambiguous
@@ -1173,7 +1205,7 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation work
-is **consistent settlement-cash identification, reviewed investment baselines/corrections/replay,
+is **explicit and atomic portfolio funding, reviewed investment baselines/corrections/replay,
 exact decimals and whole-book verification**,
 alongside full installed/native recovery/conversion acceptance. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance

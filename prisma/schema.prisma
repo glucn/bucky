@@ -63,6 +63,7 @@ model AccountGroup {
   id           String      @id @default(uuid())
   name         String
   accountType  AccountType
+  isInvestmentPortfolio Boolean @default(false)
   displayOrder Int         @default(0)
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
