@@ -84,11 +84,19 @@ This note captures practical findings from stabilizing flaky E2E runs, especiall
 - A full-suite banner timeout recurred while waiting after saving a currency, before dismissal.
   The inspected Electron trace contained test API steps and source files but no DOM snapshots.
   A trace file alone therefore did not establish whether the setting was saved or the banner
-  state was stale. The cause remains unproven.
+  state was stale. That trace did not establish a cause.
 - The banner scenarios now capture selected currency, save-button state, page text, backend
   impact/reconciliation state and a screenshot on failure, before closing the app. Assertions and
   timeouts remain unchanged. Inspect these artifacts before changing product behavior; an expected
   websocket connection attempt to the stopped preparation port is not evidence of a hot-update 404.
+- A subsequent repeated run captured USD selected and saved after the test chose EUR, with no
+  pending reconciliation. Strict Mode runs the settings effect twice in development; its obsolete
+  request could enable controls before the current request finished or overwrite a user's choice
+  after controls became available. Deterministic component tests failed for both response orders,
+  matching that failure state. The loader now ignores obsolete effect responses, including its
+  loading cleanup, and reads independent rules/settings in parallel. Disabling controls during
+  loading alone was insufficient. Keep Strict Mode in the regression and retain the original E2E
+  selections, banner assertions, timeouts and failure diagnostics.
 
 ## Operational hygiene
 

@@ -26,21 +26,26 @@ export const AutoCategorizationRules: React.FC = () => {
   const [baseCurrencySaveMessage, setBaseCurrencySaveMessage] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    let active = true;
     const loadRules = async () => {
       setLoading(true);
       try {
-        const fetched = await window.electron.getAutoCategorizationRules();
+        const [fetched, savedBaseCurrency] = await Promise.all([
+          window.electron.getAutoCategorizationRules(),
+          window.electron.getAppSetting("baseCurrency"),
+        ]);
+        if (!active) return;
         setRules(Array.isArray(fetched) ? fetched : []);
-        const savedBaseCurrency = await window.electron.getAppSetting("baseCurrency");
         if (typeof savedBaseCurrency === "string") {
           setBaseCurrency(savedBaseCurrency);
         }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     void loadRules();
+    return () => { active = false; };
   }, []);
 
   const filteredRules = React.useMemo(() => {

@@ -256,4 +256,24 @@ describe("AutoCategorizationRules", () => {
     fireEvent.click(screen.getByTestId("base-currency-save"));
     await waitFor(() => expect(mockSetAppSetting).toHaveBeenCalledWith("baseCurrency", "EUR"));
   });
+  it.each(["obsolete first", "current first"])("ignores Strict Mode's obsolete settings request when responses arrive %s", async (order) => {
+    mockGetAutoCategorizationRules.mockResolvedValue([]);
+    const finish: Array<(value: string) => void> = [];
+    mockGetAppSetting.mockImplementation(() => new Promise<string>((resolve) => finish.push(resolve)));
+    render(<React.StrictMode><AutoCategorizationRules /></React.StrictMode>);
+    await waitFor(() => expect(finish).toHaveLength(2));
+    const select = screen.getByTestId("base-currency-select") as HTMLSelectElement;
+    if (order === "obsolete first") {
+      await act(async () => finish[0]("USD"));
+      expect(select.disabled).toBe(true);
+      expect((screen.getByTestId("base-currency-save") as HTMLButtonElement).disabled).toBe(true);
+    }
+    await act(async () => finish[1]("USD"));
+    expect(select.disabled).toBe(false);
+    fireEvent.change(select, { target: { value: "EUR" } });
+    if (order === "current first") await act(async () => finish[0]("USD"));
+    expect(select.value).toBe("EUR");
+    fireEvent.click(screen.getByTestId("base-currency-save"));
+    await waitFor(() => expect(mockSetAppSetting).toHaveBeenCalledWith("baseCurrency", "EUR"));
+  });
 });

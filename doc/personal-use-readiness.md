@@ -9,6 +9,26 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 41 — Preserve currency selection across obsolete settings loads (2026-11-14)
+
+- The previously intermittent development banner timeout recurred with useful diagnostics:
+  the test selected EUR, but the settings page showed and saved USD and the backend had no pending
+  reconciliation. A screenshot and backend/control-state capture were preserved before rerunning.
+- Two deterministic Strict Mode regressions began red. An obsolete settings response could enable
+  controls while the current response was pending, or overwrite EUR with USD after the user chose
+  it. The loader now ignores obsolete effect results and loading cleanup. Independent rules and
+  saved-currency reads run in parallel. The existing initial-load disabled-controls guard remains.
+- All **1,135 native-storage tests across 137 files passed**; all **8 affected settings tests passed
+  in encrypted storage**, alongside TypeScript checking and Apple Silicon packaging with pinned
+  Node 22. The preceding dated-return batch's full encrypted run passed 1,133 tests; this UI-only
+  follow-up does not claim a repeated full encrypted run.
+- The complete development E2E run passed all **78 checks**, each scenario repeated three times,
+  including all six original currency-banner checks. These results accompany the deterministic
+  stale-response regressions; passing a rerun alone was not treated as evidence of a fix.
+- See [E2E stabilization learnings](agent-learnings/e2e-stabilization-learnings.md). Original banner
+  selections/assertions/timeouts and failure diagnostics remain unchanged. The broader readiness
+  gates listed below remain open.
+
 ### Batch 40 — Dated portfolio values and time-weighted returns (2026-11-13)
 
 - Performance now values the close before the inclusive start and the selected end date,
@@ -1122,7 +1142,8 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation work
-is **canonical investment valuation, exact decimals and whole-book verification**,
+is **statement holding selection, reviewed investment baselines/corrections/replay,
+exact decimals and whole-book verification**,
 alongside full installed/native recovery/conversion acceptance. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance
 gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.
