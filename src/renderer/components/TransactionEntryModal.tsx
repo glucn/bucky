@@ -2,6 +2,9 @@ import { localCalendarDate } from "../../shared/dateUtils";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import type { FundingAccount } from "../../shared/investmentFunding";
 import { InvestmentFundingFields } from "./InvestmentFundingFields";
+import type { TradeInsertion } from "../../shared/investmentReplay";
+const InvestmentCorrectionModal = React.lazy(() => import("./InvestmentCorrectionModal"));
+type InsertionReview = TradeInsertion & { ticker: string; currency: string; settlementName: string };
 
 interface TransactionEntryModalProps {
   isOpen: boolean;
@@ -48,12 +51,15 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [rejectedTrade, setRejectedTrade] = useState<InsertionReview | null>(null);
+  const [reviewingTrade, setReviewingTrade] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
     let active = true;
     generation.current++;
     setLoading(true); setError(''); setSecurities([]); setCashAccounts([]);
+    setRejectedTrade(null); setReviewingTrade(false);
     setSubmitting(false); setQuantity(''); setPricePerShare(''); setAmount(''); setFee(''); setDescription(''); setDate(localCalendarDate());
     setSecurityAccountId(''); setTradeCashAccountId(''); setTransactionType(initialTransactionType);
     void (async () => {
@@ -104,6 +110,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
     if (!eligibleCash.some((a) => a.id === tradeCashAccountId)) { setError('Select a matching cash account.'); return; }
     if (isFunding && !selectedOther) { setError('Select the other account.'); return; }
     const token = generation.current;
+    setRejectedTrade(null);
     setSubmitting(true);
 
     try {
@@ -205,6 +212,11 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
         handleClose();
       } else {
         setError(result.error || 'Failed to record transaction');
+        if (result.code === "investment-replay-required" && (transactionType === "buy" || transactionType === "sell") && selectedHolding && selectedCash) {
+          setRejectedTrade({ operation: "insert", kind: transactionType, accountId: securityAccountId, tradeCashAccountId, date,
+            quantity: Number(quantity), pricePerShare: Number(pricePerShare), fee: fee ? Number(fee) : undefined, description,
+            ticker: tickerSymbol, currency: selectedHolding.currency, settlementName: selectedCash.name });
+        }
       }
     } catch (err) {
       console.error('Error recording transaction:', err);
@@ -225,12 +237,19 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
     setFee('');
     setDescription('');
     setError('');
+    setRejectedTrade(null); setReviewingTrade(false);
     onClose();
   };
 
   const requiresQuantity = ['buy', 'sell'].includes(transactionType);
   const requiresPrice = ['buy', 'sell', 'dividend_reinvest'].includes(transactionType);
   const requiresAmount = isFunding || ['dividend', 'dividend_reinvest', 'interest', 'fee'].includes(transactionType);
+  const canReview = rejectedTrade && rejectedTrade.kind === transactionType && rejectedTrade.accountId === securityAccountId &&
+    rejectedTrade.tradeCashAccountId === tradeCashAccountId && rejectedTrade.date === date && rejectedTrade.quantity === Number(quantity) &&
+    rejectedTrade.pricePerShare === Number(pricePerShare) && rejectedTrade.fee === (fee ? Number(fee) : undefined) && rejectedTrade.description === description;
+  if (reviewingTrade && rejectedTrade) return <React.Suspense fallback={<p role="status">Loading trade review…</p>}>
+    <InvestmentCorrectionModal insertion={rejectedTrade} onCancel={() => setReviewingTrade(false)} onSaved={() => { onTransactionCreated?.(); handleClose(); }} />
+  </React.Suspense>;
 
   return (
     <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
@@ -385,6 +404,7 @@ export const TransactionEntryModal: React.FC<TransactionEntryModalProps> = ({
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-md">
               <p role="alert" className="text-sm text-red-600">{error}</p>
+              {canReview ? <button type="button" className="mt-2 underline" onClick={() => setReviewingTrade(true)}>Review backdated trade</button> : null}
             </div>
           )}
 

@@ -1,8 +1,7 @@
 # Dated investment activity
 
 Chronological activity, dated quantity and basis reads, reviewed legacy cutovers, and
-reviewed corrections and voids of tracked buys and sales are implemented. Standalone
-backdated insertion remains open.
+reviewed corrections, voids and backdated insertion of buys and sales are implemented.
 
 `InvestmentActivity` is the source for dated quantities and basis in newly tracked security
 accounts. Each event stores account identity, currency, effective date, a per-account sequence,
@@ -56,10 +55,15 @@ trade retains its fingerprint and holding identity, without a live journal link.
 the original statement again skips the voided row by default.
 Development reset deletes links/activity along with the rest of the book in one transaction.
 
-Posting a date before the account's latest activity is refused until replay can recompute later
-lot consumption and realized gains. Statement imports sort normalized dates ascending while
-retaining same-day source order and original error row numbers. Importing older activity into an
-already populated book still needs replay. [Durable investment import origins](import-origins.md)
+For a missed buy or sale, enter it in the normal transaction form. If later activity exists,
+the form offers **Review backdated trade**. The proposal uses the selected holding and cash
+account, comes after existing events on its date, and needs a preview and reason before saving.
+The replay recomputes the later suffix and keeps its original records and statement links in
+the revision. Dates at or before the baseline and changes crossing checkpoints are refused.
+
+Statement imports sort normalized dates ascending while retaining same-day source order and
+original error row numbers. Bulk imports do not automatically insert trades into existing
+history. [Durable investment import origins](import-origins.md)
 now replace description signatures for reimports and expose explicit additional-row review.
 Reviewed legacy association and representative reimport acceptance remain required.
 

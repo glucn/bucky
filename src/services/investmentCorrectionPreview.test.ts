@@ -24,6 +24,31 @@ async function ledger() {
     origins: await db.investmentImportOrigin.findMany(),
   };
 }
+it("inserts a missed trade and recalculates future FIFO without a duplicate retry", async () => {
+  const { holding, cash } = await setup(), before = await ledger();
+  const change = { operation: "insert", kind: "buy", accountId: holding.id, tradeCashAccountId: cash.id,
+    date: "2025-12-31", quantity: 5, pricePerShare: 8 } as const;
+  const preview = await correction.previewInvestmentTradeCorrection(change);
+  expect(preview).toMatchObject({ before: { quantity: 10, costBasis: 50 }, after: { quantity: 20, costBasis: 100 },
+    affected: [{ before: null, kind: "buy", after: { cashAmount: -40 } }, {}, {}, { after: { realizedGain: 110 } }] });
+  expect(await ledger()).toEqual(before);
+  const saved = await correction.saveInvestmentTradeCorrection(change, preview.reviewToken, "Missing statement trade");
+  const revision = await databaseService.prismaClient.investmentCorrection.findUniqueOrThrow({ where: { id: saved.revisionId } });
+  expect(JSON.parse(revision.afterJson)[0]).toMatchObject({ replaces: null, event: { id: revision.activityId, date: change.date } });
+  await expect(correction.saveInvestmentTradeCorrection(change, preview.reviewToken, "Repeated confirmation")).rejects.toThrow(/preview/i);
+  expect(await investmentService.getPositionDetails(holding.id, "2026-01-03")).toMatchObject({ quantity: 20, costBasis: 100 });
+});
+
+it("inserts after existing same-day activity and refuses an unrelated settlement account", async () => {
+  const { holding, cash, activity } = await setup();
+  const other = await investmentService.createInvestmentPortfolio("Other brokerage", "CAD");
+  const change = { operation: "insert", kind: "sell", accountId: holding.id, tradeCashAccountId: cash.id,
+    date: activity.date, quantity: 2, pricePerShare: 15 } as const;
+  await expect(correction.previewInvestmentTradeCorrection({ ...change, tradeCashAccountId: other.tradeCashAccount.id })).rejects.toThrow(/trade cash/i);
+  const preview = await correction.previewInvestmentTradeCorrection(change);
+  expect(preview.affected[0]).toMatchObject({ before: null, after: { quantityAfter: 8, realizedGain: 10 } });
+  expect(preview.affected[1]).toMatchObject({ kind: "split", after: { quantityAfter: 16 } });
+});
 it("previews a corrected purchase through a split and a later sale without persisting changes", async () => {
   const { activity } = await setup(), before = await ledger();
   const result = await correction.previewInvestmentTradeCorrection({ activityId: activity.id, date: activity.date, quantity: 10, pricePerShare: 12 });

@@ -12,6 +12,7 @@ export type InvestmentSnapshot = { status: "available"; quantity: number; costBa
   { status: "unavailable"; reason: "legacy_history" | "inconsistent_history" };
 const close = (a: number, b: number) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= 1e-10 * Math.max(1, Math.abs(a), Math.abs(b));
 const linkedJournals = { include: { entry: { include: { lines: true } } } } as const;
+export class InvestmentReplayRequiredError extends Error {}
 
 function validLots(method: string, quantity: number, basis: number, lots: string | null, cutoff?: string) {
   if (method === "AVERAGE_COST") return lots === null;
@@ -174,7 +175,7 @@ export async function beginInvestmentActivity(tx: Prisma.TransactionClient, acco
   }
   const last = await tx.investmentActivity.findFirst({ where: { accountId }, orderBy: { sequence: "desc" } });
   if (last?.kind === "baseline" && date === last.date) throw new Error("Post new activity after the reviewed closing date; activity on the cutover date requires review");
-  if (last && date < last.date) throw new Error("Backdated investment posting requires dated replay of subsequent activity");
+  if (last && date < last.date) throw new InvestmentReplayRequiredError("Backdated investment posting requires dated replay of subsequent activity");
   const basis = (await tx.journalLine.aggregate({ where: { accountId }, _sum: { amount: true } }))._sum.amount ?? 0;
   if (props.hasCompleteActivityHistory) {
     const verified = await verifyInvestmentSnapshot(tx, accountId, "9999-12-31");

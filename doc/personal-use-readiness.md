@@ -9,6 +9,21 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 51 — Review and insert a missed backdated trade
+
+- Ordinary entry still refuses to append a buy or sale out of order. Its structured response
+  lets the form offer a reviewed insertion with the exact selected holding, cash and trade terms.
+  Editing those terms requires a new attempt. The reviewed trade goes after existing activity
+  on its date; later events replay in sequence. No historical insertion is needed for a trade
+  on or after the last activity date.
+- Preview leaves records untouched. Save requires a matching preview and reason and retains
+  the original suffix, updated journals, and inserted activity in the revision. Tests cover
+  FIFO gains, same-day order, unrelated settlement accounts and duplicate retry refusal.
+- This is a manual buy/sell workflow. Bulk backdated statement import and an in-app revision
+  viewer remain open, alongside exact decimals, whole-book verification and personal acceptance.
+- Verification: 1,201 native tests, 17 targeted encrypted tests, TypeScript, Apple Silicon
+  packaging, and three packaged correction/void/insertion restart runs passed.
+
 ### Batch 50 — Review and void a tracked trade
 
 - The holding's correction dialog can preview a void, recalculate later activity, and save

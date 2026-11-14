@@ -56,6 +56,22 @@ test("reviewed trade correction updates later gains and retains the original jou
     await app.stop(); page = await app.launch(); await unlock(page);
     expect(await invoke("get-position-details", { accountId, asOfDate: "2026-01-04" })).toMatchObject({ success: true, position: { quantity: 10, costBasis: 120 } });
     expect(await invoke("get-portfolio-performance", { portfolioId, startDate: "2026-01-01", endDate: "2026-01-04" })).toMatchObject({ success: true, performance: { realizedGains: 0 } });
+    await page.evaluate(({ portfolioId, accountId }) => { window.location.hash = `/investments/${portfolioId}/holding/${accountId}`; }, { portfolioId, accountId });
+    await page.getByRole("button", { name: "Buy", exact: true }).click();
+    const entry = page.getByTestId("transaction-entry-dialog");
+    await entry.getByLabel("Date *", { exact: true }).fill("2025-12-31");
+    await entry.getByLabel("Quantity *", { exact: true }).fill("2");
+    await entry.getByLabel("Price Per Share *", { exact: true }).fill("5");
+    await entry.getByRole("button", { name: "Record Transaction", exact: true }).click();
+    await entry.getByRole("button", { name: "Review backdated trade", exact: true }).click();
+    const insertion = page.getByRole("dialog", { name: "Review backdated trade", exact: true });
+    await insertion.getByLabel("Insertion reason", { exact: true }).fill("Missed year-end purchase");
+    await insertion.getByRole("button", { name: "Preview insertion" }).click();
+    await expect(insertion.getByRole("row", { name: /will be inserted/i })).toContainText("2025-12-31");
+    await insertion.getByRole("button", { name: "Insert trade", exact: true }).click();
+    await expect(insertion).toHaveCount(0);
+    await app.stop(); page = await app.launch(); await unlock(page);
+    expect(await invoke("get-position-details", { accountId, asOfDate: "2026-01-04" })).toMatchObject({ success: true, position: { quantity: 12, costBasis: 130 } });
     await app.stop();
     const profile = await readProtectedProfile(app.directory), key = unlockWithRecovery(profile.envelope, pending.recoverySecret, "default"), db = createEncryptedPrisma(profile.databaseFile, key);
     try {
@@ -65,6 +81,8 @@ test("reviewed trade correction updates later gains and retains the original jou
       const voidRevision = await db.investmentCorrection.findFirstOrThrow({ where: { accountId, reason: "Broker reversed the sale" } });
       expect(JSON.parse(voidRevision.beforeJson)[0].kind).toBe("sell");
       expect(JSON.parse(voidRevision.afterJson)).toEqual([{ replaces: voidRevision.activityId, event: null }]);
+      const insertionRevision = await db.investmentCorrection.findFirstOrThrow({ where: { accountId, reason: "Missed year-end purchase" } });
+      expect(JSON.parse(insertionRevision.afterJson)[0]).toMatchObject({ replaces: null, event: { id: insertionRevision.activityId, date: "2025-12-31" } });
     } finally { await db.$disconnect(); key.fill(0); }
   } finally { await app.dispose(); }
 });

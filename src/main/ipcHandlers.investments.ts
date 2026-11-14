@@ -4,7 +4,7 @@ import { previewInvestmentImport } from "../services/investmentImport";
 import { getSecurityPriceContext, previewSecurityPrices, saveSecurityPrices, searchSecurityMarkets, excludeSecurityPrice } from "../services/securityPriceControls";
 import { bindSecurityMarket } from "../services/securityMarketBinding";
 import { appSettingsService } from "../services/appSettingsService";
-import { confirmInvestmentBaseline, getInvestmentBaselineReview } from "../services/investmentActivity";
+import { confirmInvestmentBaseline, getInvestmentBaselineReview, InvestmentReplayRequiredError } from "../services/investmentActivity";
 import { getInvestmentTradeCorrection, previewInvestmentTradeCorrection, saveInvestmentTradeCorrection } from "../services/investmentCorrectionPreview";
 
 export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
@@ -213,6 +213,7 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
       console.error("Error recording buy transaction:", error);
       return {
         success: false,
+        ...(error instanceof InvestmentReplayRequiredError ? { code: "investment-replay-required" } : {}),
         error: error instanceof Error ? error.message : "Unknown error",
       };
     }
@@ -227,6 +228,7 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
       console.error("Error recording sell transaction:", error);
       return {
         success: false,
+        ...(error instanceof InvestmentReplayRequiredError ? { code: "investment-replay-required" } : {}),
         error: error instanceof Error ? error.message : "Unknown error",
       };
     }

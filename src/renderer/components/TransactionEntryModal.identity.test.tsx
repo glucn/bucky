@@ -27,3 +27,24 @@ it("posts a position's selected account identity rather than relying on its tick
   fireEvent.submit(container.querySelector("form")!);
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("record-buy", expect.objectContaining({ tickerSymbol: "ABC", securityAccountId: "selected-listing" })));
 });
+
+it("offers review with the rejected backdated trade and leaves it unsaved until confirmation", async () => {
+  const invoke = vi.fn(async (channel: string, _params: unknown) => channel === "get-portfolio-accounts"
+    ? { success: true, accounts: { securities: [{ id: "holding", currency: "CAD", investmentProperties: { tickerSymbol: "ABC" } }], tradeCashAccounts: [{ id: "cash", currency: "CAD" }] } }
+    : channel === "record-buy" ? { success: false, code: "investment-replay-required", error: "Backdated trade" }
+      : { success: true, preview: { reviewToken: "preview", before: { quantity: 1, costBasis: 10 }, after: { quantity: 2, costBasis: 22 }, affected: [] } });
+  Object.defineProperty(window, "electron", { configurable: true, value: { ipcRenderer: { invoke } } });
+  render(<TransactionEntryModal isOpen portfolioId="portfolio" onClose={vi.fn()} />);
+  await waitFor(() => expect((screen.getByLabelText("Cash account") as HTMLSelectElement).value).toBe("cash"));
+  fireEvent.change(screen.getByLabelText("Date *"), { target: { value: "2026-01-01" } });
+  fireEvent.change(screen.getByLabelText("Quantity *"), { target: { value: "1" } });
+  fireEvent.change(screen.getByLabelText("Price Per Share *"), { target: { value: "12" } });
+  fireEvent.click(screen.getByRole("button", { name: "Record Transaction" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Review backdated trade" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Preview insertion" }));
+  await screen.findByText("CAD 10.00 → CAD 22.00");
+  expect(invoke).toHaveBeenLastCalledWith("preview-investment-trade-correction", expect.objectContaining({
+    operation: "insert", kind: "buy", accountId: "holding", tradeCashAccountId: "cash", date: "2026-01-01", quantity: 1, pricePerShare: 12,
+  }));
+  expect((screen.getByRole("button", { name: "Insert trade" }) as HTMLButtonElement).disabled).toBe(true);
+});
