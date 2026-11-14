@@ -23,6 +23,7 @@ import { securityQuoteCurrency } from "./securityQuoteCurrency";
 import { resolveValuationDate } from "./valuationDate";
 
 export type InvestmentPosition = {
+  needsBaselineReview?: boolean;
   accountId: string;
   market: string | null;
   priceDate: string | null;
@@ -646,6 +647,7 @@ class InvestmentService {
 
     return {
       accountId,
+      needsBaselineReview: !investmentProps.hasCompleteActivityHistory && !account.isArchived,
       market: investmentProps.market,
       priceDate: quote?.date ?? null,
       ...quoteUnit,

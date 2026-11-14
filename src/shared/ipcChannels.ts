@@ -62,6 +62,8 @@ export const APP_IPC_CHANNELS = [
   "get-income-expense-trend-report",
   "get-interest-income",
   "get-investment-portfolios",
+  "get-investment-baseline-review",
+  "confirm-investment-baseline",
   "get-latest-checkpoint-for-account",
   "get-latest-market-price",
   "get-liability-metrics",

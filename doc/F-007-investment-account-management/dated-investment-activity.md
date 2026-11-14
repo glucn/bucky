@@ -1,8 +1,7 @@
 # Dated investment activity
 
-Updated 2026-11-06. Chronological activity recording and dated quantity/basis reads are
-implemented. Backdated replay, reviewed legacy starting positions and investment correction
-controls remain required before historical investment readiness.
+Chronological activity, dated quantity and basis reads, and reviewed legacy cutovers are
+implemented. Backdated replay and investment correction controls remain open.
 
 `InvestmentActivity` is the source for dated quantities and basis in newly tracked security
 accounts. Each event stores account identity, currency, effective date, a per-account sequence,
@@ -22,15 +21,23 @@ An inclusive as-of read selects the last verified event on or before the request
 the first event in a newly tracked account, holdings/basis are zero. A later complete sale or
 split does not erase earlier quantities or basis. `getPositionDetails` uses this dated snapshot;
 the existing main/preload endpoint carries the corrected values. Price lookup still uses the
-legacy path pending canonical valuation cutover, so this is not completion of BL-021.
+canonical market-aware path described in [price controls](price-controls.md).
 
 The migration adds `hasCompleteActivityHistory = false` to every existing holding and creates
 empty activity tables. It does not infer trades, lot dates, starting quantities or completeness.
-New empty holdings created through supported services establish complete tracking. Legacy
-accounts can record subsequent activity, but their history remains unavailable until reviewed
-starting-position support exists. Current legacy views retain their prior current-position
-behavior; explicit dated views explain that historical holdings require review. A tracked account
-whose chain no longer matches its current position refuses current valuation and further posting.
+New empty holdings created through supported services establish complete tracking. A legacy
+holding can establish a cutover from **Review baseline** on the holding page. Compare retained
+units, native journal basis and FIFO lots with records, select a date at or after all retained
+activity, and confirm. Average-cost holdings do not need lot data. FIFO lots must be in
+acquisition order, dated no later than the cutover, and reconcile to the units and basis.
+
+Confirmation records a baseline event and links retained basis journals without changing their
+contents or writing new money. It verifies the chain in the same transaction and rolls back on
+inconsistency. Dates before the cutover remain unavailable. The cutover is a reviewed closing
+position; new activity must be dated after it so statements cannot silently post a cutover-day row
+already reflected in the baseline. Current legacy views
+retain their prior behavior until review. Ordinary posting and opening-balance changes cannot
+bypass a reviewed baseline; later attempts to post before the cutover still require replay.
 
 Ordinary journal edit/delete cannot change linked events or legacy investment buy/sell,
 distribution/reinvestment and split entries. Money, lots and units must be corrected together.
@@ -44,9 +51,8 @@ already populated book still needs replay. [Durable investment import origins](i
 now replace description signatures for reimports and expose explicit additional-row review.
 Reviewed legacy association and representative reimport acceptance remain required.
 
-Quantities and amounts still use Float with existing cent/unit policies. Exact-decimal migration,
-canonical market valuation, identity-based income/gain reports, legacy baseline review and full
-correction/reimport acceptance remain open. Dividends recorded without an existing security
+Quantities and amounts still use Float with existing cent/unit policies. Exact-decimal migration
+and full correction/reimport acceptance remain open. Dividends recorded without an existing security
 account do not establish a security quantity history.
 
 Tests exercise historical positions after sales/complete disposal, splits and distributions,

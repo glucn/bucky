@@ -4,8 +4,19 @@ import { previewInvestmentImport } from "../services/investmentImport";
 import { getSecurityPriceContext, previewSecurityPrices, saveSecurityPrices, searchSecurityMarkets, excludeSecurityPrice } from "../services/securityPriceControls";
 import { bindSecurityMarket } from "../services/securityMarketBinding";
 import { appSettingsService } from "../services/appSettingsService";
+import { confirmInvestmentBaseline, getInvestmentBaselineReview } from "../services/investmentActivity";
 
 export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
+  ipcMain.removeHandler("get-investment-baseline-review");
+  ipcMain.removeHandler("confirm-investment-baseline");
+  ipcMain.handle("get-investment-baseline-review", async (_, accountId: string) => {
+    try { return { success: true, review: await getInvestmentBaselineReview(accountId) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to load baseline" }; }
+  });
+  ipcMain.handle("confirm-investment-baseline", async (_, input) => {
+    try { return { success: true, snapshot: await confirmInvestmentBaseline(input) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to confirm baseline" }; }
+  });
   console.log("Registering investment IPC handlers...");
   ipcMain.removeHandler("create-market-holding");
   ipcMain.handle("create-market-holding", async (_, input) => {

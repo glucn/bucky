@@ -9,6 +9,21 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 46 — Reviewed legacy investment cutover
+
+- The holding page can review a legacy starting position against retained units and native
+  journal basis. FIFO lots must agree with both and be in acquisition order; average-cost
+  holdings do not invent lot records. Confirmation is explicit, and failed saves keep the draft.
+- The existing activity chain records the confirmed closing position and links retained basis
+  journals in one transaction. It posts no money and rolls back if journal verification fails.
+  Before the cutover history remains unavailable; later sales verify against that baseline.
+- New activity must be dated after the reviewed close. Ordinary journal writes and independent
+  changes to opening basis cannot bypass a baseline. This does not reconstruct earlier trades,
+  associate manual activity with statement origins, or support correction and replay.
+- See the [dated activity contract](F-007-investment-account-management/dated-investment-activity.md).
+  Verified with all **1,186 native tests**, **31 targeted encrypted tests**, TypeScript,
+  Apple Silicon packaging, and **three packaged review/sale/restart repetitions**.
+
 ### Batch 45 — Preserve historical portfolio membership
 
 - Moving accounts into or out of a portfolio, ungrouping them, and deleting the portfolio group
@@ -1261,7 +1276,7 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation work
-is **reviewed investment baselines/corrections/replay,
+is **investment corrections and replay,
 exact decimals and whole-book verification**,
 alongside full installed/native recovery/conversion acceptance. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance

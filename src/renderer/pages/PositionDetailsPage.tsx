@@ -4,8 +4,10 @@ import { TransactionEntryModal } from "../components/TransactionEntryModal";
 import { useAccounts } from "../context/AccountsContext";
 import { formatValuationAmount } from "../utils/valuationFormatting";
 const SecurityPriceModal = React.lazy(() => import("../components/SecurityPriceModal").then((module) => ({ default: module.SecurityPriceModal })));
+const InvestmentBaselineModal = React.lazy(() => import("../components/InvestmentBaselineModal"));
 
 interface PositionDetails {
+  needsBaselineReview?: boolean;
   accountId: string;
   market: string | null;
   priceDate: string | null;
@@ -49,11 +51,13 @@ export const PositionDetailsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showPrices, setShowPrices] = useState(false);
+  const [baselineAccount, setBaselineAccount] = useState<string | null>(null);
   const [selectedTransactionType, setSelectedTransactionType] = useState<TransactionType>('buy');
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [positionValuation, setPositionValuation] = useState<PositionValuationSnapshot | null>(null);
 
   useEffect(() => {
+    setBaselineAccount(null);
     void fetchPositionData();
     let disposed = false;
     void window.electron.getBaseCurrencyImpactState().then((state) => {
@@ -143,6 +147,7 @@ export const PositionDetailsPage: React.FC = () => {
             <p className="text-sm text-gray-500 mt-1">{position.market || "Market needs review"}{position.priceDate ? ` · Close as of ${position.priceDate}` : ""}</p>
           </div>
           <div className="flex gap-3">
+            {position.needsBaselineReview && accountId ? <button className="border rounded-md px-4 py-2 text-sm" onClick={() => setBaselineAccount(accountId)}>Review baseline</button> : null}
             <button data-testid="security-price-controls-button" className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium" onClick={() => setShowPrices(true)}>Market &amp; prices</button>
             <button 
               onClick={() => {
@@ -307,6 +312,7 @@ export const PositionDetailsPage: React.FC = () => {
 
       {/* Transaction Modal */}
       {showPrices && accountId ? <React.Suspense fallback={<p role="status">Loading price controls…</p>}><SecurityPriceModal isOpen accountId={accountId} onClose={() => setShowPrices(false)} onChanged={() => { void handleTransactionCreated(); }} /></React.Suspense> : null}
+      {baselineAccount && accountId === baselineAccount ? <React.Suspense fallback={<p role="status">Loading baseline review…</p>}><InvestmentBaselineModal accountId={baselineAccount} onClose={() => setBaselineAccount(null)} onSaved={() => { setBaselineAccount(null); void fetchPositionData(); }} /></React.Suspense> : null}
       {portfolioId && (
         <TransactionEntryModal
           isOpen={showTransactionModal}

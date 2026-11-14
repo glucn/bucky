@@ -1028,6 +1028,10 @@ class DatabaseService {
       return { skipped: true, reason: "Account not found" };
     }
 
+    if (await prisma.investmentActivity.findFirst({ where: { accountId: { in: [fromAccount.id, toAccount.id] }, kind: "baseline" }, select: { id: true } })) {
+      return { skipped: true, reason: "Use investment activity to post to a holding with a reviewed baseline" };
+    }
+
     // Determine transaction type
     const isCurrencyTransfer = data.type === "currency_transfer";
     console.log("[createJournalEntry] isCurrencyTransfer:", isCurrencyTransfer);
@@ -1553,6 +1557,9 @@ class DatabaseService {
       data.accountId,
       prisma
     );
+    if (await prisma.investmentActivity.findFirst({ where: { accountId: data.accountId, kind: "baseline" }, select: { id: true } })) {
+      throw new Error("Use investment correction to change the basis of a holding with a reviewed baseline");
+    }
 
     if (rawAmount === 0) {
       if (openingEntry) {
@@ -2688,6 +2695,9 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       prisma.account.findUnique({ where: { id: data.toAccountId } }),
     ]);
     if (!fromAccount || !toAccount) throw new Error("Account not found");
+    if (await prisma.investmentActivity.findFirst({ where: { accountId: { in: [fromAccount.id, toAccount.id] }, kind: "baseline" }, select: { id: true } })) {
+      throw new Error("Use investment activity to post to a holding with a reviewed baseline");
+    }
     const isCategoryTransaction = fromAccount.type === AccountType.Category || toAccount.type === AccountType.Category;
     const isCurrencyTransfer = !isCategoryTransaction && fromAccount.currency !== toAccount.currency;
     if (isCurrencyTransfer && data.type !== "currency_transfer") {
