@@ -4,7 +4,8 @@ import type { InvestmentImportMapping, InvestmentImportOptions, InvestmentImport
 
 interface Props { isOpen: boolean; onClose: () => void; portfolioId: string; onImportComplete?: () => void }
 type Step = "upload" | "mapping" | "preview" | "importing" | "complete";
-type PreviewRow = InvestmentImportRow & { status: "new" | "matching" | "review" | "conflict"; reason?: string; count?: number; currency?: string };
+type PreviewRow = InvestmentImportRow & { status: "new" | "matching" | "review" | "conflict"; reason?: string; count?: number; currency?: string; securityAccountId?: string | null; requiresHoldingSelection?: boolean };
+type Holding = { id: string; currency: string; isArchived?: boolean; investmentProperties: { tickerSymbol: string; market?: string | null } };
 type Validation = { valid: boolean; rowCount: number; errors: Array<{ row: number; field: string; error: string }>; preview?: PreviewRow[] };
 type Summary = { imported: number; skipped: number; errors: Array<{ row: number; error: string }> };
 const emptyMapping: InvestmentImportMapping = { date: "", type: "", ticker: "", quantity: "", price: "", amount: "", fee: "", description: "", sourceId: "" };
@@ -19,15 +20,19 @@ export const InvestmentImportWizard: React.FC<Props> = ({ isOpen, onClose, portf
   const [error, setError] = useState(""), [busy, setBusy] = useState(false);
   const [previewPage, setPreviewPage] = useState(0);
   const [cashAccounts, setCashAccounts] = useState<Array<{ id: string; name: string; currency: string }>>([]);
+  const [holdings, setHoldings] = useState<Holding[]>([]), [previewStale, setPreviewStale] = useState(false);
   const generation = useRef(0), changed = useRef(false);
   const reset = useCallback(() => {
     generation.current++; changed.current = false; setStep("upload"); setCsvData(""); setHeaders([]); setMapping(emptyMapping);
-    setOptions({ amountBasis: "gross" }); setValidation(null); setSummary(null); setError(""); setBusy(false); setPreviewPage(0); setCashAccounts([]);
+    setOptions({ amountBasis: "gross" }); setValidation(null); setSummary(null); setError(""); setBusy(false); setPreviewPage(0); setCashAccounts([]); setHoldings([]); setPreviewStale(false);
   }, []);
   useEffect(() => {
     reset(); let disposed = false;
     if (isOpen) void window.electron.ipcRenderer.invoke("get-portfolio-accounts", portfolioId).then((result) => {
-      if (!disposed && result.success && Array.isArray(result.accounts?.tradeCashAccounts)) setCashAccounts(result.accounts.tradeCashAccounts);
+      if (!disposed && result.success) {
+        if (Array.isArray(result.accounts?.tradeCashAccounts)) setCashAccounts(result.accounts.tradeCashAccounts);
+        if (Array.isArray(result.accounts?.securities)) setHoldings(result.accounts.securities);
+      }
     }).catch(() => { if (!disposed) setError("Unable to load cash accounts. Reopen import to try again."); });
     return () => { disposed = true; generation.current++; };
   }, [isOpen, portfolioId, reset]);
@@ -57,12 +62,12 @@ export const InvestmentImportWizard: React.FC<Props> = ({ isOpen, onClose, portf
       const result = await window.electron.ipcRenderer.invoke("validate-import-data", { portfolioId, csvData, mapping, options: { ...options, skipRows: [] } });
       if (token !== generation.current) return;
       if (!result.success) throw new Error(result.error || "Unable to preview this statement");
-      setValidation(result.validation); setPreviewPage(0); if (result.validation.valid) setStep("preview"); else setError("Correct the validation errors before importing");
+      setValidation(result.validation); setPreviewStale(false); setPreviewPage(0); if (result.validation.valid) setStep("preview"); else setError("Correct the validation errors before importing");
     } catch (failure) { if (token === generation.current) setError(failure instanceof Error ? failure.message : "Unable to preview this statement"); }
     finally { if (token === generation.current) setBusy(false); }
   };
   const importRows = async () => {
-    if (busy) return;
+    if (busy || previewStale || validation?.preview?.some((row) => row.requiresHoldingSelection || row.status === "conflict")) return;
     const token = generation.current; setBusy(true); setError(""); setStep("importing");
     try {
       const skipRows = (validation?.preview || []).filter((row) => row.status === "review" && !options.additionalRows?.includes(row.row)).map((row) => row.row);
@@ -74,6 +79,7 @@ export const InvestmentImportWizard: React.FC<Props> = ({ isOpen, onClose, portf
     finally { if (token === generation.current) setBusy(false); }
   };
   const rows = validation?.preview || [];
+  const holdingLabel = (holding: Holding) => `${holding.investmentProperties.tickerSymbol} · ${holding.investmentProperties.market || "Unassigned market"} · ${holding.currency}${holding.isArchived ? " (archived)" : ""}`;
   const selectedCash = cashAccounts.find((account) => account.id === options.tradeCashAccountId) || (cashAccounts.length === 1 ? cashAccounts[0] : null);
   const cashChange = (row: PreviewRow) => Math.round((row.type === "buy" ? -row.amount - row.fee : row.type === "sell" ? row.amount - row.fee : row.type === "fee" ? -row.amount : row.type === "split" || row.type === "dividend_reinvest" ? 0 : row.amount) * 100) / 100;
   return <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
@@ -92,7 +98,7 @@ export const InvestmentImportWizard: React.FC<Props> = ({ isOpen, onClose, portf
         <div className="grid grid-cols-2 gap-4">{fields.map(([field, label]) => <div key={field}>
           <label className="block text-sm mb-1" htmlFor={`investment-map-${field}`}>{label}</label>
           <select id={`investment-map-${field}`} data-testid={`investment-import-mapping-${field}`} value={mapping[field] || ""} disabled={busy} className="w-full border rounded-md p-2"
-            onChange={(event) => { setMapping({ ...mapping, [field]: event.target.value }); setOptions({ ...options, additionalRows: [] }); }}>
+            onChange={(event) => { setMapping({ ...mapping, [field]: event.target.value }); setOptions({ ...options, additionalRows: [], securityAccountsByRow: {} }); }}>
             <option value="">Select column...</option>{headers.map((header, index) => <option key={index} value={header}>{header}</option>)}
           </select>
         </div>)}</div>
@@ -113,20 +119,32 @@ export const InvestmentImportWizard: React.FC<Props> = ({ isOpen, onClose, portf
       {step === "preview" ? <div className="space-y-4">
         <p>Review {validation?.rowCount} records. Matching rows will be skipped. Unverified matches are excluded unless you explicitly add a separate transaction.</p>
         <p className="text-sm text-gray-600">Cash context: {selectedCash ? `${selectedCash.name} (${selectedCash.currency})` : "automatic by existing holding currency; select cash for new holdings when multiple currencies exist"}.</p>
-        <div className="overflow-x-auto"><table className="w-full text-sm text-left"><thead><tr>{["Row", "Date", "Type", "Ticker", "Units", "Price", "Amount", "Fee", "Cash change", "Currency", "Broker ID", "Review"].map((label) => <th key={label} className="p-2">{label}</th>)}</tr></thead>
+        {previewStale ? <p role="status">Holding selection changed. Refresh Preview before importing.</p> : null}
+        <div className="overflow-x-auto"><table className="w-full text-sm text-left"><thead><tr>{["Row", "Date", "Type", "Ticker / holding", "Units", "Price", "Amount", "Fee", "Cash change", "Currency", "Broker ID", "Review"].map((label) => <th key={label} className="p-2">{label}</th>)}</tr></thead>
           <tbody>{rows.slice(previewPage * 200, (previewPage + 1) * 200).map((row) => <tr key={row.row} className="border-t" data-testid={`investment-import-row-${row.row}`}>
-            <td className="p-2">{row.row}</td><td className="whitespace-nowrap pr-2">{row.date}</td><td>{row.type}</td><td>{row.ticker}</td><td>{row.quantity ?? "—"}</td><td>{row.price ?? "—"}</td><td>{row.amount}</td><td>{row.fee}</td><td>{cashChange(row)}</td><td>{row.currency || selectedCash?.currency || "—"}</td><td>{row.sourceId || "Not provided"}</td><td className="p-2">
+            <td className="p-2">{row.row}</td><td className="whitespace-nowrap pr-2">{row.date}</td><td>{row.type}</td><td>{row.ticker}
+              {row.type !== "fee" && row.type !== "interest" ? <select aria-label={`Holding for row ${row.row}`} data-testid={`investment-import-holding-${row.row}`} className="block border rounded p-1 max-w-64" disabled={busy} value={options.securityAccountsByRow?.[row.row] || ""}
+                onChange={(event) => {
+                  const choices = { ...options.securityAccountsByRow };
+                  if (event.target.value) choices[row.row] = event.target.value; else delete choices[row.row];
+                  setOptions({ ...options, securityAccountsByRow: choices, additionalRows: [] }); setPreviewStale(true);
+                }}>
+                <option value="">{row.securityAccountId ? `Automatic: ${holdings.find((holding) => holding.id === row.securityAccountId) ? holdingLabel(holdings.find((holding) => holding.id === row.securityAccountId)!) : row.securityAccountId}` : "Automatic; select if ambiguous"}</option>
+                {holdings.filter((holding) => holding.investmentProperties.tickerSymbol === row.ticker).map((holding) => <option key={holding.id} value={holding.id} disabled={holding.isArchived}>{holdingLabel(holding)}</option>)}
+              </select> : null}
+            </td><td>{row.quantity ?? "—"}</td><td>{row.price ?? "—"}</td><td>{row.amount}</td><td>{row.fee}</td><td>{cashChange(row)}</td><td>{row.currency || selectedCash?.currency || "—"}</td><td>{row.sourceId || "Not provided"}</td><td className="p-2">
               <p>{options.additionalRows?.includes(row.row) ? "Additional transaction selected" : row.status === "new" ? "New" : row.status === "conflict" ? "Conflicting broker ID" : row.status === "review" ? "Needs review; excluded" : "Matching row; skipped"}{row.count ? ` (${row.count})` : ""}</p>
               {row.reason ? <p className="text-gray-600">{row.reason}</p> : null}
-              {row.status === "review" || (row.status === "matching" && !row.sourceId) ? <label className="block mt-1">
-                <input type="checkbox" checked={options.additionalRows?.includes(row.row) || false} onChange={(event) => setOptions({ ...options, additionalRows: event.target.checked ? [...(options.additionalRows || []), row.row] : options.additionalRows?.filter((value) => value !== row.row) })} />
+              {!row.requiresHoldingSelection && (row.status === "review" || (row.status === "matching" && !row.sourceId)) ? <label className="block mt-1">
+                <input type="checkbox" disabled={busy || previewStale} checked={options.additionalRows?.includes(row.row) || false} onChange={(event) => setOptions({ ...options, additionalRows: event.target.checked ? [...(options.additionalRows || []), row.row] : options.additionalRows?.filter((value) => value !== row.row) })} />
                 <span className="ml-2">Import row {row.row} as an additional transaction</span>
               </label> : null}
             </td>
           </tr>)}</tbody></table></div>
         {rows.length > 200 ? <div className="flex items-center gap-3"><button className={button} disabled={previewPage === 0} onClick={() => setPreviewPage(previewPage - 1)}>Previous rows</button><span>Page {previewPage + 1} of {Math.ceil(rows.length / 200)}</span><button className={button} disabled={(previewPage + 1) * 200 >= rows.length} onClick={() => setPreviewPage(previewPage + 1)}>Next rows</button></div> : null}
         <div className="flex justify-end gap-3"><button className={button} onClick={() => { setStep("mapping"); setOptions({ ...options, additionalRows: [] }); }}>Back</button><button className={button} onClick={close}>Cancel</button>
-          <button className={button} disabled={busy || rows.some((row) => row.status === "conflict")} onClick={() => void importRows()}>Import Transactions</button></div>
+          {previewStale ? <button className={button} disabled={busy} onClick={() => void validate()}>Refresh Preview</button> : null}
+          <button className={button} disabled={busy || previewStale || rows.some((row) => row.status === "conflict" || row.requiresHoldingSelection)} onClick={() => void importRows()}>Import Transactions</button></div>
       </div> : null}
       {step === "importing" ? <p role="status">Importing transactions…</p> : null}
       {step === "complete" && summary ? <div className="space-y-4">

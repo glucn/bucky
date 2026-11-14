@@ -2,7 +2,7 @@ import Papa from "papaparse";
 import { parseToStandardDate } from "./dateUtils";
 
 export type InvestmentImportMapping = { date: string; type: string; ticker: string; amount: string; quantity?: string; price?: string; fee?: string; description?: string; sourceId?: string };
-export type InvestmentImportOptions = { amountBasis?: "gross" | "net"; sourceNamespace?: string; additionalRows?: number[]; skipRows?: number[]; reviewId?: string; tradeCashAccountId?: string };
+export type InvestmentImportOptions = { amountBasis?: "gross" | "net"; sourceNamespace?: string; additionalRows?: number[]; skipRows?: number[]; reviewId?: string; tradeCashAccountId?: string; securityAccountsByRow?: Record<number, string> };
 export type InvestmentImportRow = { row: number; date: string; type: "buy" | "sell" | "dividend" | "dividend_reinvest" | "interest" | "fee" | "split"; ticker: string; amount: number; quantity?: number; price?: number; fee: number; description?: string; sourceId?: string };
 export type InvestmentImportError = { row: number; field: string; error: string };
 const numeric = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;

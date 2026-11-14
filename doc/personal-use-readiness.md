@@ -9,6 +9,37 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 42 — Exact holding selection in investment statements (2026-11-14)
+
+- Statement security rows can select an account labeled by ticker, market and currency. Ambiguous
+  tickers now produce reviewable rows instead of failing the entire preview. Changing a choice
+  clears additional-trade decisions and requires a fresh preview before importing. Unknown targets
+  and broker-ID conflicts block the wizard. Posting validates portfolio/ticker ownership and
+  refuses new archived activity while still matching previously imported archived history.
+- Buy/sell, dividend, reinvestment and split posting carry the selected holding ID. New origin
+  payloads retain the actual linked activity's account ID; untracked cash dividends retain null.
+  Equal no-ID trades on distinct same-currency holdings remain separate. Broker-ID retargets and
+  changing the target of a stable additional-trade review ID are refused. Conflicting targets for
+  one broker ID within a file are rejected before any posting.
+- Legacy origins establish identity only from retained linked activity, without rewriting their
+  payloads or old keys. Missing evidence requires review. Existing atomic origin/posting rollback
+  remains covered. No schema migration or guessed backfill is introduced. See the
+  [import-origin contract](F-007-investment-account-management/import-origins.md).
+- Failing service and renderer contracts drove selection and fresh-preview behavior; a further
+  failing archive case drove preview refusal. Full native and encrypted verification each passed
+  **1,146 tests across 138 files**. The final added no-ID review-target assertion also passed all ten
+  selection tests in native storage and was included in the full encrypted run.
+  TypeScript checking and Apple Silicon packaging passed with pinned Node 22 after correcting a
+  test helper's optional-property typing.
+- Same-currency no-ID and cross-currency broker-ID selection/restart/reimport scenarios each passed
+  three packaged repetitions (**6 checks**); all **24 packaged acceptance cases passed** together.
+  The cross-currency preview screenshot was inspected. All **78 development E2E checks passed**,
+  with each scenario repeated three times and failure diagnostics enabled.
+- Read-only audit confirmed that posting, holding setup and account discovery still infer cash
+  eligibility from the words `Trade Cash` in its editable name. Unify those paths next. Reviewed
+  baselines/corrections/replay, exact decimals, whole-book verification and personal/native
+  acceptance remain open.
+
 ### Batch 41 — Preserve currency selection across obsolete settings loads (2026-11-14)
 
 - The previously intermittent development banner timeout recurred with useful diagnostics:
@@ -1142,7 +1173,7 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation work
-is **statement holding selection, reviewed investment baselines/corrections/replay,
+is **consistent settlement-cash identification, reviewed investment baselines/corrections/replay,
 exact decimals and whole-book verification**,
 alongside full installed/native recovery/conversion acceptance. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance

@@ -49,3 +49,22 @@ it("sends an explicitly selected cash account instead of guessing currency in a 
   fireEvent.click(screen.getByText("Import Transactions"));
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("import-investment-transactions", expect.objectContaining({ options: expect.objectContaining({ tradeCashAccountId: "cad" }) })));
 });
+it("requires a fresh preview after selecting an exact market holding for an ambiguous row", async () => {
+  const row = { row: 2, date: "2026-01-02", type: "buy", ticker: "ABC", amount: 10, fee: 1, status: "review", requiresHoldingSelection: true };
+  invoke.mockImplementation(async (channel, input) => channel === "get-portfolio-accounts" ? { success: true, accounts: { tradeCashAccounts: [], securities: [
+    { id: "tsx", currency: "CAD", investmentProperties: { tickerSymbol: "ABC", market: "TSX" } },
+    { id: "nasdaq", currency: "USD", investmentProperties: { tickerSymbol: "ABC", market: "NASDAQ" } },
+  ] } } : channel === "validate-import-data" ? { success: true, validation: { valid: true, rowCount: 1, errors: [], preview: [input.options.securityAccountsByRow?.[2] ? { ...row, status: "new", requiresHoldingSelection: false, securityAccountId: "tsx", currency: "CAD" } : row] } }
+    : { success: true, imported: 1, skipped: 0, errors: [] });
+  await upload(); fireEvent.click(screen.getByText("Validate & Preview"));
+  const select = await screen.findByLabelText("Holding for row 2");
+  expect(screen.getByRole("option", { name: /ABC.*TSX.*CAD/ })).toBeTruthy();
+  expect((screen.getByText("Import Transactions") as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByLabelText("Import row 2 as an additional transaction")).toBeNull();
+  fireEvent.change(select, { target: { value: "tsx" } });
+  expect((screen.getByText("Import Transactions") as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByText("Refresh Preview"));
+  await waitFor(() => expect((screen.getByText("Import Transactions") as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByText("Import Transactions"));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("import-investment-transactions", expect.objectContaining({ options: expect.objectContaining({ securityAccountsByRow: { 2: "tsx" } }) })));
+});
