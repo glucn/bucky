@@ -13,7 +13,7 @@ async function setup() {
   await investmentService.recordStockSplit(holding.id, 2, "2026-01-02");
   await investmentService.recordSell({ ...identity, date: "2026-01-03", quantity: 10, pricePerShare: 15 });
   const activity = await databaseService.prismaClient.investmentActivity.findFirstOrThrow({ where: { accountId: holding.id, kind: "buy" } });
-  return { holding, activity };
+  return { holding, activity, cash: portfolio.tradeCashAccount };
 }
 async function ledger() {
   const db = databaseService.prismaClient;
@@ -45,6 +45,46 @@ it("rejects a correction that would make a later sale impossible and keeps the o
   expect(await ledger()).toEqual(before);
 });
 
+it("commits the reviewed replay and retains original source journals and revision provenance", async () => {
+  const { activity, holding } = await setup(), before = await ledger();
+  const change = { activityId: activity.id, date: activity.date, quantity: 10, pricePerShare: 12 };
+  const preview = await correction.previewInvestmentTradeCorrection(change);
+  const saved = await correction.saveInvestmentTradeCorrection(change, preview.reviewToken, "Corrected broker trade confirmation");
+  expect(saved.after).toMatchObject({ quantity: 10, costBasis: 60 });
+  const revision = await databaseService.prismaClient.investmentCorrection.findUniqueOrThrow({ where: { id: saved.revisionId } });
+  expect(revision).toMatchObject({ accountId: holding.id, activityId: activity.id, reason: "Corrected broker trade confirmation" });
+  const original = JSON.parse(revision.beforeJson);
+  expect(original.map((row: { id: string }) => row.id)).toEqual(before.activities.map((row) => row.id));
+  expect(original[0].journalLinks[0].entry.lines.map((line: { amount: number }) => line.amount).sort((a: number,b: number) => a-b)).toEqual([-100, 100]);
+  await expect(correction.saveInvestmentTradeCorrection(change, preview.reviewToken, "Duplicate save")).rejects.toThrow();
+});
+
+it("refuses stale previews and retains history after a write failure", async () => {
+  const { activity, holding } = await setup();
+  const change = { activityId: activity.id, date: activity.date, quantity: 10, pricePerShare: 12 };
+  const preview = await correction.previewInvestmentTradeCorrection(change);
+  await investmentService.recordStockSplit(holding.id, 2, "2026-01-04");
+  const before = await ledger();
+  await expect(correction.saveInvestmentTradeCorrection(change, preview.reviewToken, "Stale")).rejects.toThrow(/preview|review/i);
+  const fresh = await correction.previewInvestmentTradeCorrection(change);
+  await databaseService.prismaClient.$executeRawUnsafe("CREATE TRIGGER fail_revision BEFORE INSERT ON InvestmentCorrection BEGIN SELECT RAISE(ABORT, 'synthetic revision failure'); END");
+  try {
+    await expect(correction.saveInvestmentTradeCorrection(change, fresh.reviewToken, "Fails on audit write")).rejects.toThrow();
+    expect(await ledger()).toEqual(before);
+  } finally { await databaseService.prismaClient.$executeRawUnsafe("DROP TRIGGER fail_revision"); }
+});
+
+it("refuses changed proposed values and stops at retained settlement checkpoints", async () => {
+  const { activity, cash } = await setup(), before = await ledger();
+  const change = { activityId: activity.id, date: activity.date, quantity: 10, pricePerShare: 12 };
+  const preview = await correction.previewInvestmentTradeCorrection(change);
+  await expect(correction.saveInvestmentTradeCorrection({ ...change, pricePerShare: 13 }, preview.reviewToken, "Unreviewed price")).rejects.toThrow(/preview again/i);
+  await databaseService.prismaClient.checkpoint.create({ data: { accountId: cash.id, date: "2026-01-03", balance: 50 } });
+  await expect(correction.saveInvestmentTradeCorrection(change, preview.reviewToken, "Checkpoint retained")).rejects.toThrow(/checkpoint/i);
+  expect(await ledger()).toEqual(before);
+  expect(await databaseService.prismaClient.investmentCorrection.count()).toBe(0);
+});
+
 it("replays in corrected date order and keeps durable import identity linked to its original journal", async () => {
   const portfolio = await investmentService.createInvestmentPortfolio("Statement replay", "CAD");
   const portfolioId = portfolio.group.id;
@@ -61,6 +101,13 @@ it("replays in corrected date order and keeps durable import identity linked to 
   expect(preview.affected.map(({ after }) => after.date)).toEqual(["2026-01-02", "2026-01-03", "2026-01-04"]);
   expect(preview.affected[2]).toMatchObject({ before: { realizedGain: 200 }, after: { realizedGain: 100 } });
   expect(await ledger()).toEqual(before);
+  await correction.saveInvestmentTradeCorrection({ activityId: first.id, date: "2026-01-03", quantity: 10, pricePerShare: 10 }, preview.reviewToken, "Confirmed corrected date");
+  const origin = await databaseService.prismaClient.investmentImportOrigin.findUniqueOrThrow({ where: { id: before.origins[0].id }, include: { entry: true } });
+  expect(origin).toMatchObject({ sourceKey: before.origins[0].sourceKey, fingerprint: before.origins[0].fingerprint, entry: { date: "2026-01-03" } });
+  expect(origin.entryId).not.toBe(before.origins[0].entryId);
+  expect(await investmentService.importInvestmentTransactions(portfolioId, csv, {
+    date: "Date", type: "Type", ticker: "Ticker", quantity: "Quantity", price: "Price", amount: "Amount", sourceId: "Id",
+  })).toMatchObject({ imported: 0, skipped: 1, errors: [] });
 });
 
 it("replays retained distributions and both reinvestment classifications from their original postings", async () => {

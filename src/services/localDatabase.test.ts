@@ -54,7 +54,7 @@ describe("Personal database lifecycle", () => {
   it("backs up before an upgrade and preserves existing records", async () => {
     const partial = path.join(directory, "old-migrations");
     const names = (await fs.readdir(migrations)).filter((name) => /^\d/.test(name)).sort();
-    for (const name of names.slice(0, -1)) {
+    for (const name of names.filter((name) => name < "20261114000000_portfolio_identity")) {
       await fs.cp(path.join(migrations, name), path.join(partial, name), { recursive: true });
     }
     await initializePersonalDatabase(filename, partial);
@@ -68,6 +68,7 @@ describe("Personal database lifecycle", () => {
     await sql(`UPDATE Account SET groupId='known' WHERE id='keep'`);
     await sql(`INSERT INTO Account (id,name,type,subtype,currency,groupId,updatedAt) VALUES ('cash-only','Trade Cash - Cash-only broker (CAD)','user','asset','CAD','cash',CURRENT_TIMESTAMP), ('bank-cash','Trade Cash - Bank group (CAD)','user','asset','CAD','bank',CURRENT_TIMESTAMP)`);
     const result = await initializePersonalDatabase(filename, migrations);
+    expect(await sql("SELECT count(*) AS count FROM InvestmentCorrection")).toEqual([{ count: 0 }]);
     expect(result.backupPath).toBeTruthy();
     expect(await sql("SELECT name FROM Account WHERE id='keep'"))
       .toEqual([{ name: "Keep through upgrade" }]);

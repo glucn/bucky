@@ -90,6 +90,7 @@ model Account {
   liabilityProfile LiabilityProfile?
   investmentProperties InvestmentProperties?
   investmentActivities InvestmentActivity[]
+  investmentCorrections InvestmentCorrection[]
   autoCategorizationRules AutoCategorizationRule[] @relation("AutoCategorizationRuleTarget")
   group     AccountGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   
@@ -296,6 +297,19 @@ model InvestmentActivity {
 
   @@unique([accountId, sequence])
   @@index([accountId, date])
+}
+
+model InvestmentCorrection {
+  id         String   @id @default(uuid())
+  accountId  String
+  activityId String   // Original activity identity, retained after replay replaces it
+  reason     String
+  beforeJson String
+  afterJson  String
+  createdAt  DateTime @default(now())
+  account    Account  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, createdAt])
 }
 
 model InvestmentActivityJournal {

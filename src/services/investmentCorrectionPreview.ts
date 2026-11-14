@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { createHash } from "node:crypto";
 import { AccountType } from "../shared/accountTypes";
 import { isValidStandardDate } from "../shared/dateUtils";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
@@ -7,7 +8,8 @@ import { cents, investmentTransaction } from "./investmentPosting";
 import { recordInvestmentTrade } from "./investmentTrades";
 
 export type TradeCorrection = { activityId: string; date: string; quantity: number; pricePerShare: number; fee?: number };
-const journals = { include: { entry: { include: { lines: { include: { account: true } } } } } } as const;
+const journals = { orderBy: { entryId: "asc" }, include: { entry: { include: { investmentImportOrigin: true,
+  lines: { orderBy: { id: "asc" }, include: { account: true } } } } } } as const;
 type Event = Prisma.InvestmentActivityGetPayload<{ include: { journalLinks: typeof journals } }>;
 
 function summary(row: Pick<Event, "date" | "quantityAfter" | "basisAfter" | "cashAmount" | "kind" | "basisBefore">) {
@@ -48,6 +50,9 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
   planned.sort((a, b) => a.date.localeCompare(b.date) || a.row.sequence - b.row.sequence);
 
   const entryIds = suffix.flatMap((row) => row.journalLinks.map(({ entryId }) => entryId));
+  const accountIds = [...new Set(suffix.flatMap((row) => row.journalLinks.flatMap(({ entry }) => entry.lines.map(({ accountId }) => accountId))))];
+  const checkpoint = await tx.checkpoint.findFirst({ where: { accountId: { in: accountIds }, date: { gte: earliest } }, select: { id: true } });
+  if (checkpoint) throw new Error("Correction crosses a retained checkpoint; reconcile affected account history before replay");
   await tx.investmentActivity.deleteMany({ where: { id: { in: suffix.map(({ id }) => id) } } });
   await tx.journalLine.deleteMany({ where: { entryId: { in: entryIds } } });
   await tx.journalEntry.deleteMany({ where: { id: { in: entryIds } } });
@@ -56,7 +61,7 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
     lots: previous ? previous.lotsAfter : target.costBasisMethod === "FIFO" ? "[]" : null,
   } });
 
-  const affected = [];
+  const affected = [], replacement = [];
   for (const { row, posting, date } of planned) {
     const common = { portfolioId: target.account.groupId, tickerSymbol: row.ticker, securityAccountId: row.accountId,
       tradeCashAccountId: posting.cashId, description: posting.description, date };
@@ -75,24 +80,67 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
         break;
       default: throw new Error("Unsupported event in correction replay");
     }
-    const next = await tx.investmentActivity.findFirstOrThrow({ where: { accountId: row.accountId }, orderBy: { sequence: "desc" } });
+    let next = await tx.investmentActivity.findFirstOrThrow({ where: { accountId: row.accountId }, orderBy: { sequence: "desc" }, include: { journalLinks: journals } });
+    for (const { entry: original } of row.journalLinks) {
+      const updated = next.journalLinks.find(({ entry }) => entry.type === original.type)?.entry;
+      if (!updated) throw new Error("Could not preserve the original journal role during replay");
+      if (original.postingDate && original.postingDate < date) throw new Error("Corrected date is after the retained posting date");
+      const category = (entry: typeof original) => entry.lines.filter(({ account }) => account.type === AccountType.Category).map(({ accountId }) => accountId).sort();
+      const oldCategory = category(original), newCategory = category(updated);
+      if (oldCategory.length && newCategory.length && JSON.stringify(oldCategory) !== JSON.stringify(newCategory)) throw new Error("Original journal category changed; review before replay");
+      await tx.journalEntry.update({ where: { id: updated.id }, data: {
+        postingDate: original.postingDate, entryType: original.entryType, displayOrder: date === original.date ? original.displayOrder : null,
+      } });
+      if (original.investmentImportOrigin) await tx.investmentImportOrigin.update({
+        where: { id: original.investmentImportOrigin.id }, data: { entryId: updated.id },
+      });
+    }
+    next = await tx.investmentActivity.findUniqueOrThrow({ where: { id: next.id }, include: { journalLinks: journals } });
     affected.push({ activityId: row.id, kind: row.kind, before: summary(row), after: summary(next) });
+    replacement.push({ replaces: row.id, event: next });
   }
   const after = await verifyInvestmentSnapshot(tx, target.accountId, "9999-12-31");
   if (after.status !== "available") throw new Error("Replayed history did not verify");
-  return { before, after, affected };
+  const outputs = replacement.map(({ replaces, event }) => ({
+    replaces, lots: event.lotsAfter, units: event.units, price: event.price, fee: event.fee,
+    journals: event.journalLinks.map(({ entry }) => ({
+      type: entry.type, date: entry.date, postingDate: entry.postingDate, description: entry.description,
+      lines: entry.lines.map(({ accountId, amount, currency }) => JSON.stringify([accountId, amount, currency])).sort(),
+    })).sort((a, b) => String(a.type).localeCompare(String(b.type))),
+  }));
+  const reviewToken = createHash("sha256").update(JSON.stringify([rows, before, after, affected, outputs])).digest("hex");
+  return { report: { before, after, affected, reviewToken }, accountId: target.accountId, suffix, replacement };
+}
+
+function validateCorrection(input: TradeCorrection) {
+  if (!input || typeof input.activityId !== "string" || typeof input.date !== "string" || !isValidStandardDate(input.date)) throw new Error("Select a trade and valid correction date");
 }
 
 /** Preview uses the exact posting service, then forces rollback before returning output. */
 export async function previewInvestmentTradeCorrection(input: TradeCorrection) {
-  if (!input || typeof input.activityId !== "string" || typeof input.date !== "string" || !isValidStandardDate(input.date)) throw new Error("Select a trade and valid correction date");
+  validateCorrection(input);
   const rollback = new Error("Rollback investment correction preview");
   let preview: Awaited<ReturnType<typeof replayTradeCorrection>> | undefined;
   try {
     await investmentTransaction(async (tx) => { preview = await replayTradeCorrection(tx, input); throw rollback; });
   } catch (error) {
-    if (error === rollback && preview) return preview;
+    if (error === rollback && preview) return preview.report;
     throw error;
   }
   throw new Error("Correction preview did not roll back");
+}
+
+export async function saveInvestmentTradeCorrection(input: TradeCorrection, reviewToken: string, reason: string) {
+  validateCorrection(input);
+  if (typeof reason !== "string" || !reason.trim() || reason.length > 2000) throw new Error("Enter a correction reason (up to 2000 characters)");
+  if (typeof reviewToken !== "string" || !/^[a-f0-9]{64}$/.test(reviewToken)) throw new Error("Review the correction preview before saving");
+  return investmentTransaction(async (tx) => {
+    const replay = await replayTradeCorrection(tx, input);
+    if (reviewToken !== replay.report.reviewToken) throw new Error("The holding or correction changed; preview again before saving");
+    const revision = await tx.investmentCorrection.create({ data: {
+      accountId: replay.accountId, activityId: input.activityId, reason: reason.trim(),
+      beforeJson: JSON.stringify(replay.suffix), afterJson: JSON.stringify(replay.replacement),
+    } });
+    return { ...replay.report, revisionId: revision.id };
+  });
 }

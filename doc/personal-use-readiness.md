@@ -9,6 +9,22 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 48 — Save investment corrections with revision history
+
+- A reviewed trade correction can now save through the service. It reruns the same posting
+  rules in one transaction and compares the result and source history to the reviewed preview.
+  An intervening event, changed input, verification failure, or failed audit write prevents
+  the entire save. Changes that cross an affected account's checkpoint are refused.
+- Revision records retain the original affected activities and linked journals, the replacement
+  records, and a required reason. Statement origins keep their original fingerprint and follow
+  the equivalent replacement journal, so an unchanged statement cannot duplicate a corrected
+  trade. The migration adds the audit table without modifying existing financial records.
+- This batch provides the service save and durable provenance. The in-app review and save flow,
+  voiding activity, and inserting history before later activity remain open.
+- TypeScript passed. The full native run passed 1,192 tests and exposed a checkpoint test fixture
+  that selected a category account instead of settlement cash. After binding the fixture to
+  the actual settlement account, all 20 targeted native and encrypted checks passed in each mode.
+
 ### Batch 47 — Transactional investment correction preview
 
 - Added a service preview for changing a recorded buy or sale's date, quantity, price or fee.
