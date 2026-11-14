@@ -2,7 +2,8 @@ import { databaseService } from "./database";
 import { createHolding } from "./securityHolding";
 import type { NewHoldingInput } from "../shared/securityHolding";
 import { recordInvestmentCash } from "./investmentCash";
-import { investmentIncomeReport, realizedGainReport, investmentReportingBundle } from "./investmentIncomeReporting";
+import { investmentIncomeReport, realizedGainReport, investmentReportingBundle, investmentReportRange } from "./investmentIncomeReporting";
+import { investmentPeriodReturn } from "./investmentPeriodReturn";
 import { investmentCashFlows } from "./investmentCashFlows";
 import type { InvestmentCashFlows } from "../shared/investmentReporting";
 import { importInvestments } from "./investmentImport";
@@ -942,7 +943,7 @@ class InvestmentService {
           targetCurrency: reportingCurrency,
           asOfDate: effectiveAsOfDate,
         });
-        conversionRateCache.set(cacheKey, conversion.rate);
+        conversionRateCache.set(cacheKey, conversion.source === "latest_fallback" || conversion.source === "unavailable" ? null : conversion.rate);
       }
 
       const rate = conversionRateCache.get(cacheKey);
@@ -987,7 +988,7 @@ class InvestmentService {
     return this.getPortfolioAtDate(portfolioId, cutoff, reportingCurrency);
   }
 
-  private async getPortfolioAtDate(portfolioId: string, asOfDate: string, reportingCurrency: string): Promise<PortfolioValuation> {
+  private async getPortfolioAtDate(portfolioId: string, asOfDate: string, reportingCurrency: string, requireDatedHistory = false): Promise<PortfolioValuation> {
 
     const conversionRateCache = new Map<string, { rate: number | null; source: string; pair: string | null }>();
 
@@ -1015,15 +1016,18 @@ class InvestmentService {
         conversionRateCache.set(cacheKey, conversion);
       }
 
-      if (conversion.source === "unavailable" || conversion.rate === null) {
+      if (conversion.source === "unavailable" || conversion.source === "latest_fallback" || conversion.rate === null) {
         return null;
       }
 
       return amount * conversion.rate;
     };
 
-    // Get all trade cash Account balances
-    const portfolioAccounts = await this.getPortfolioAccounts(portfolioId);
+    // Ownership and properties define valuation scope. Editable cash-account names do not.
+    const portfolio = await databaseService.prismaClient.accountGroup.findUnique({ where: { id: portfolioId }, include: { accounts: { include: { investmentProperties: true } } } });
+    if (!portfolio || portfolio.accountType !== AccountType.User) throw new Error("Investment portfolio not found");
+    const owned = portfolio.accounts.filter((account) => account.type === AccountType.User);
+    const portfolioAccounts = { tradeCashAccounts: owned.filter((account) => !account.investmentProperties), securities: owned.filter((account) => account.investmentProperties) };
 
     let cashBalance = 0;
     let cashSummaryUnavailable = false;
@@ -1031,13 +1035,19 @@ class InvestmentService {
 
     for (const tradeCashAccount of portfolioAccounts.tradeCashAccounts) {
       const balance = await databaseService.getAccountBalanceAtDate(tradeCashAccount.id, asOfDate);
+      if (requireDatedHistory) {
+        const ledger = await databaseService.prismaClient.journalLine.groupBy({ by: ["currency"], where: { accountId: tradeCashAccount.id, entry: { date: { lte: asOfDate } } }, _sum: { amount: true } });
+        if (ledger.some((row) => row.currency !== tradeCashAccount.currency)) throw new Error("Portfolio cash journal currency requires review");
+        const ledgerBalance = ledger.reduce((sum, row) => sum + (row._sum.amount ?? 0), 0);
+        if (Math.round(ledgerBalance * 100) !== Math.round(balance * 100)) cashSummaryUnavailable = true;
+      }
       const convertedBalance = await convertToBaseCurrency(balance, tradeCashAccount.currency);
       if (convertedBalance === null) {
         cashSummaryUnavailable = true;
       } else {
         cashBalance += convertedBalance;
       }
-      cashBalancesByCurrency[tradeCashAccount.currency] = balance;
+      cashBalancesByCurrency[tradeCashAccount.currency] = (cashBalancesByCurrency[tradeCashAccount.currency] ?? 0) + balance;
     }
 
     // Get all Security Account balances (cost basis) and position market values
@@ -1049,7 +1059,7 @@ class InvestmentService {
     const securityMarketValueByCurrency: Record<string, number | null> = {};
 
     for (const securityAccount of portfolioAccounts.securities) {
-      const positionDetails = await this.getPositionAtDate(securityAccount.id, asOfDate, false);
+      const positionDetails = await this.getPositionAtDate(securityAccount.id, asOfDate, requireDatedHistory);
 
       const nativeMarketValue = positionDetails.marketValue;
 
@@ -1120,7 +1130,8 @@ class InvestmentService {
    * Requirements: 13.3
    */
   public async getAssetAllocation(
-    portfolioId: string
+    portfolioId: string,
+    asOfDate?: string
   ): Promise<Array<{
     accountId: string;
     tickerSymbol: string;
@@ -1128,12 +1139,12 @@ class InvestmentService {
     percentOfPortfolio: number | null;
   }>> {
     // Get all positions with market values
-    const cutoff = resolveValuationDate();
+    const cutoff = resolveValuationDate(asOfDate);
     const reportingCurrency = (await appSettingsService.getBaseCurrency()) || "USD";
-    const positions = await this.getPositionsAtDate(portfolioId, cutoff, false, reportingCurrency);
+    const positions = await this.getPositionsAtDate(portfolioId, cutoff, asOfDate !== undefined, reportingCurrency);
 
     // Calculate total portfolio value
-    const portfolioValue = await this.getPortfolioAtDate(portfolioId, cutoff, reportingCurrency);
+    const portfolioValue = await this.getPortfolioAtDate(portfolioId, cutoff, reportingCurrency, asOfDate !== undefined);
     const totalValue = portfolioValue.totalMarketValue === null || portfolioValue.cashBalance === null ? null : portfolioValue.totalMarketValue + portfolioValue.cashBalance;
 
     // Calculate each position as percentage of total
@@ -1212,7 +1223,7 @@ class InvestmentService {
     portfolioId: string,
     startDate: string,
     endDate: string
-  ): Promise<{
+  ): Promise<Awaited<ReturnType<typeof investmentPeriodReturn>> & {
     baseCurrency: string;
     incomeByCurrency: { dividends: Record<string, number>; interest: Record<string, number>; fees: Record<string, number> };
     totalReturn: number | null;
@@ -1228,32 +1239,32 @@ class InvestmentService {
     currentValue: number | null;
   }> {
     const baseCurrency = (await appSettingsService.getBaseCurrency()) || "USD";
-    // Capture reporting currency and the current valuation cutoff once per request.
-    const portfolioValue = await this.getPortfolioAtDate(portfolioId, resolveValuationDate(), baseCurrency);
-    const currentValue = portfolioValue.totalMarketValue === null || portfolioValue.cashBalance === null ? null : portfolioValue.totalMarketValue + portfolioValue.cashBalance;
-
+    const range = investmentReportRange(startDate, endDate);
     const cashFlows = await investmentCashFlows(portfolioId, startDate, endDate, baseCurrency);
     const { deposits, withdrawals } = cashFlows;
+    const valuations = new Map<string, Promise<PortfolioValuation | null>>();
+    const valuation = (date: string) => {
+      if (!valuations.has(date)) valuations.set(date, this.getPortfolioAtDate(portfolioId, date, baseCurrency, true).catch((error) => {
+        if (error instanceof InvestmentHistoryUnavailableError) return null;
+        throw error;
+      }));
+      return valuations.get(date)!;
+    };
+    const period = await investmentPeriodReturn(range.startDate, range.endDate, cashFlows, async (date) => {
+      const snapshot = await valuation(date);
+      return !snapshot || snapshot.totalMarketValue === null || snapshot.cashBalance === null ? null : snapshot.totalMarketValue + snapshot.cashBalance;
+    });
+    const portfolioValue = await valuation(range.endDate);
 
     const income = await investmentReportingBundle(portfolioId, startDate, endDate, baseCurrency);
     const realizedGains = income.gains.reduce<number | null>((sum, row) => sum === null || row.realizedGainBase === null ? null : sum + row.realizedGainBase, 0);
-    const unrealizedGains = portfolioValue.totalUnrealizedGain;
+    const unrealizedGains = portfolioValue?.totalUnrealizedGain ?? null;
     const dividendIncome = income.dividends.total, interestIncome = income.interest.total, fees = income.fees.total;
-
-    // Calculate total return: (current value + withdrawals - deposits) / deposits
-    const totalReturn = currentValue === null || deposits === null || withdrawals === null ? null : deposits > 0
-      ? currentValue + withdrawals - deposits 
-      : 0;
-    
-    const totalReturnPercent = totalReturn === null || deposits === null ? null : deposits > 0
-      ? (totalReturn / deposits) * 100 
-      : 0;
 
     return {
       baseCurrency,
+      ...period,
       incomeByCurrency: { dividends: income.dividends.byCurrency, interest: income.interest.byCurrency, fees: income.fees.byCurrency },
-      totalReturn: totalReturn === null ? null : Math.round(totalReturn * 100) / 100,
-      totalReturnPercent: totalReturnPercent === null ? null : Math.round(totalReturnPercent * 100) / 100,
       realizedGains: realizedGains === null ? null : Math.round(realizedGains * 100) / 100,
       unrealizedGains: unrealizedGains === null ? null : Math.round(unrealizedGains * 100) / 100,
       dividendIncome: dividendIncome === null ? null : Math.round(dividendIncome * 100) / 100,
@@ -1262,7 +1273,7 @@ class InvestmentService {
       deposits,
       withdrawals,
       cashFlows,
-      currentValue: currentValue === null ? null : Math.round(currentValue * 100) / 100,
+      currentValue: period.closingValue,
     };
   }
 

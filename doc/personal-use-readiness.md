@@ -9,6 +9,39 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 40 — Dated portfolio values and time-weighted returns (2026-11-13)
+
+- Performance now values the close before the inclusive start and the selected end date,
+  using dated holdings and all owned cash accounts. Editable settlement names no longer omit
+  cash, and multiple accounts in one currency aggregate. Future FX cannot supply historical values.
+- Economic gain subtracts opening value and net external funding from closing value, aggregating
+  full-precision converted flows before cent rounding. Percentage returns compound across funding
+  boundaries with a documented start-day deposit/end-day withdrawal convention. Long idle periods
+  need only boundary valuations. The report shows values, dates, method and availability reasons;
+  positions and allocation share its selected end date. Unrealized gain is labeled as an end level.
+- Missing historical prices/FX, incomplete legacy activity and checkpoint/journal disagreement
+  remain unavailable. A known endpoint gain can remain visible when an intermediate missing value
+  prevents calculating a percentage. Empty capital is distinct from zero return; complete losses,
+  complete withdrawals, negative capital and nonfinite inputs have explicit coverage.
+- Failing service, math and renderer contracts drove the changes. Registered IPC coverage checks
+  returned boundaries and dated allocation forwarding. Both new/extended packaged scenarios passed
+  three repetitions after correcting their expected gain-card CAD spelling to its existing `CA$`
+  formatter; no product change or weakened numeric assertion was used. Their fixtures prove the
+  documented CAD 225 close/CAD 45 gain/22.5% return and exclude a later sale/quote from a historical
+  CAD 100 opening/CAD 120 close/20% return. The historical report screenshot was visually inspected.
+- **1,133 tests across 137 files passed in each native and encrypted storage mode**, plus TypeScript
+  checking and Apple Silicon packaging with pinned Node 22. All **22 packaged acceptance cases
+  passed** together. Development E2E passed **77 of 78 checks** with three repetitions per scenario;
+  the existing currency-banner timeout recurred before dismissal. Its new diagnostics establish
+  that USD was selected and saved despite the test selecting EUR, with no reconciliation pending.
+  Preserved evidence is in `/tmp/bucky-period-banner-failure`; investigate the settings loader's
+  unguarded Strict Mode responses with a deterministic regression next. This is not a return failure
+  or a successful complete development run.
+- See the [period-performance contract](F-007-investment-account-management/period-performance.md).
+  Same-ticker statement selection, reviewed baselines/replay/corrections, exact decimals,
+  whole-book verification and personal/native acceptance remain open. This does not rewrite legacy
+  history or establish global checkpoint reconciliation semantics.
+
 ### Batch 39 — External portfolio cash flows and native opening funding (2026-11-07)
 
 - Performance cash-flow facts now follow journal ownership across all portfolio cash currencies,

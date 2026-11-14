@@ -48,7 +48,11 @@ test("packaged cash-flow reports retain native funding, exclude internal FX and 
     ] }); } finally { await fixture.$disconnect(); key.fill(0); }
     page = await app.launch(); await unlock(page); await report(); flows = page.getByTestId("portfolio-cash-flows");
     const result = await invoke("get-portfolio-performance", range); expect(result.success).toBe(true);
-    expect(result.performance).toMatchObject({ deposits: 200, withdrawals: 20 }); expect(result.performance.cashFlows.rows).toHaveLength(3);
+    expect(result.performance).toMatchObject({ deposits: 200, withdrawals: 20, openingDate: "2025-12-31", openingValue: 0, closingValue: 225, currentValue: 225, totalReturn: 45, totalReturnPercent: 22.5, returnMethod: "time_weighted", returnIssue: null }); expect(result.performance.cashFlows.rows).toHaveLength(3);
+    await expect(page.getByText("Opening Value", { exact: true }).locator("..")).toContainText(/CAD\s*0\.00/);
+    await expect(page.getByText("Closing Value", { exact: true }).locator("..")).toContainText(/CAD\s*225\.00/);
+    await expect(page.getByText("Period Gain/Loss", { exact: true }).locator("..")).toContainText("CA$45.00");
+    await expect(page.getByText("Period Gain/Loss", { exact: true }).locator("..")).toContainText("22.50%");
     await expect(flows.getByText("Deposits", { exact: true }).locator("..")).toContainText(/CAD\s*200\.00/);
     await expect(flows.getByText("Withdrawals", { exact: true }).locator("..")).toContainText(/CAD\s*20\.00/);
     const withdrawal = flows.getByRole("row").filter({ hasText: "Withdrawal" });

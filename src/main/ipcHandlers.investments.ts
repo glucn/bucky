@@ -412,10 +412,11 @@ export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
   );
 
   // Analytics
-  ipcMain.handle("get-asset-allocation", async (_, portfolioId: string) => {
+  ipcMain.handle("get-asset-allocation", async (_, input: string | { portfolioId: string; asOfDate?: string }) => {
+    const portfolioId = typeof input === "string" ? input : input?.portfolioId;
     console.log("Handling get-asset-allocation request for:", portfolioId);
     try {
-      const allocation = await investmentService.getAssetAllocation(portfolioId);
+      const allocation = await investmentService.getAssetAllocation(portfolioId, typeof input === "string" ? undefined : input?.asOfDate);
       return { success: true, allocation };
     } catch (error) {
       console.error("Error getting asset allocation:", error);

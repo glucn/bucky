@@ -20,6 +20,12 @@ interface PerformanceData {
   withdrawals: number | null;
   cashFlows?: InvestmentCashFlows;
   currentValue: number | null;
+  openingDate?: string;
+  openingValue?: number | null;
+  closingValue?: number | null;
+  endDate?: string;
+  returnMethod?: "time_weighted";
+  returnIssue?: string | null;
 }
 
 interface AssetAllocation {
@@ -82,7 +88,7 @@ export const PerformanceReportsPage: React.FC = () => {
           startDate,
           endDate,
         }),
-        window.electron.ipcRenderer.invoke('get-asset-allocation', portfolioId),
+        window.electron.ipcRenderer.invoke('get-asset-allocation', { portfolioId, asOfDate: endDate }),
         window.electron.ipcRenderer.invoke('get-realized-gains', {
           portfolioId,
           startDate,
@@ -90,6 +96,7 @@ export const PerformanceReportsPage: React.FC = () => {
         }),
         window.electron.ipcRenderer.invoke('get-all-positions', {
           portfolioId,
+          asOfDate: endDate,
         }),
       ]);
 
@@ -207,9 +214,17 @@ export const PerformanceReportsPage: React.FC = () => {
       {performance && (
         <div className="bg-white shadow rounded-lg p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Portfolio Performance</h3>
+          {performance.returnMethod === "time_weighted" ? <>
+            <p className="text-sm text-gray-600 mb-3">Time-weighted return: deposits at the start of their posting day, withdrawals at the end. Returns are compounded across funding boundaries; prices and FX use the latest verified values at or before each required date.</p>
+            <div className="flex flex-wrap gap-8 mb-4">
+              <div><p className="text-sm text-gray-500">Opening Value</p><p>{formatValuationAmount(performance.openingValue, reportCurrency, { disambiguate: true })}</p><p className="text-xs text-gray-500">Close of {performance.openingDate ? formatDateString(performance.openingDate) : "—"}</p></div>
+              <div><p className="text-sm text-gray-500">Closing Value</p><p>{formatValuationAmount(performance.closingValue, reportCurrency, { disambiguate: true })}</p><p className="text-xs text-gray-500">Close of {formatDateString(performance.endDate || endDate)}</p></div>
+            </div>
+          </> : null}
+          {performance.returnIssue ? <p role="status" className="rounded bg-amber-50 p-3 text-sm text-amber-800 mb-4">{performance.returnIssue}</p> : null}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div>
-              <p className="text-sm text-gray-500">Total Return</p>
+              <p className="text-sm text-gray-500">Period Gain/Loss</p>
               <p className={`text-xl font-semibold ${
                 (performance.totalReturn ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
@@ -220,6 +235,7 @@ export const PerformanceReportsPage: React.FC = () => {
               }`}>
                 {performance.totalReturnPercent === null ? "N/A" : formatPercent(performance.totalReturnPercent)}
               </p>
+              {performance.returnMethod === "time_weighted" ? <p className="text-xs text-gray-500">Time-weighted return</p> : null}
             </div>
             <div>
               <p className="text-sm text-gray-500">Realized Gains</p>
@@ -231,6 +247,7 @@ export const PerformanceReportsPage: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-gray-500">Unrealized Gains</p>
+              {performance.returnMethod === "time_weighted" ? <p className="text-xs text-gray-500">At period end</p> : null}
               <p className={`text-xl font-semibold ${
                 (performance.unrealizedGains ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
@@ -269,6 +286,7 @@ export const PerformanceReportsPage: React.FC = () => {
       {/* Asset Allocation */}
       <div className="bg-white shadow rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Asset Allocation</h3>
+        <p className="text-sm text-gray-500 mb-3">As of {formatDateString(performance?.endDate || endDate)}</p>
         {!allocationAvailable ? <p className="text-sm text-gray-500">Allocation data is unavailable</p> : assetAllocation.length === 0 ? (
           <p className="text-sm text-gray-500">No positions</p>
         ) : (

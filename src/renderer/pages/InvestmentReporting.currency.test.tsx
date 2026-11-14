@@ -55,6 +55,27 @@ it("keeps native external cash-flow facts visible when historical FX leaves the 
   const row = within(section).getByText("Broker settlement").closest("tr")!;
   expect(row.textContent).toContain("1/2/2026"); expect(row.textContent).toContain("N/A");
 });
+
+it("labels period boundaries and time-weighted return, and requests allocation at the same selected end date", async () => {
+  const invoke = bridge(), original = invoke.getMockImplementation()!;
+  invoke.mockImplementation(async (channel: string, ...args: any[]) => {
+    const result = await original(channel, ...args);
+    return channel === "get-portfolio-performance" ? { ...result, performance: { ...result.performance,
+      openingDate: "2025-12-31", openingValue: 100, closingValue: 120, startDate: "2026-01-01", endDate: "2026-01-03", returnMethod: "time_weighted", totalReturn: 20, totalReturnPercent: null,
+      returnIssue: "Historical portfolio value is unavailable at 2026-01-02.",
+    } } : result;
+  });
+  show(true);
+  const section = (await screen.findByRole("heading", { name: "Portfolio Performance" })).parentElement!;
+  expect(section.textContent).toContain("Time-weighted return");
+  expect(section.textContent).toContain("12/31/2025"); expect(section.textContent).toContain("1/3/2026");
+  expect(within(section).getByText("Opening Value").parentElement!.textContent).toMatch(/CAD\s*100\.00/);
+  expect(within(section).getByText("Closing Value").parentElement!.textContent).toMatch(/CAD\s*120\.00/);
+  expect(section.textContent).toContain("Historical portfolio value is unavailable at 2026-01-02.");
+  const request = invoke.mock.calls.find(([channel]) => channel === "get-portfolio-performance")![1] as any;
+  expect(invoke).toHaveBeenCalledWith("get-asset-allocation", { portfolioId: "book", asOfDate: request.endDate });
+  expect(invoke).toHaveBeenCalledWith("get-all-positions", { portfolioId: "book", asOfDate: request.endDate });
+});
 it("shows an unavailable gain total when any conversion is missing", async () => {
   bridge([{ ...gain, realizedGainBase: null }]); show();
   expect((await screen.findByText("Realized Gain/Loss")).parentElement!.textContent).toContain("N/A");
