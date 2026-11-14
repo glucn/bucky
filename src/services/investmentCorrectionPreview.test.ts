@@ -54,6 +54,8 @@ it("commits the reviewed replay and retains original source journals and revisio
   const revision = await databaseService.prismaClient.investmentCorrection.findUniqueOrThrow({ where: { id: saved.revisionId } });
   expect(revision).toMatchObject({ accountId: holding.id, activityId: activity.id, reason: "Corrected broker trade confirmation" });
   const original = JSON.parse(revision.beforeJson);
+  const replacement = JSON.parse(revision.afterJson);
+  expect(replacement[0].event.journalLinks[0].entry.description).toBe("Buy 10 shares of ABC @ 12");
   expect(original.map((row: { id: string }) => row.id)).toEqual(before.activities.map((row) => row.id));
   expect(original[0].journalLinks[0].entry.lines.map((line: { amount: number }) => line.amount).sort((a: number,b: number) => a-b)).toEqual([-100, 100]);
   await expect(correction.saveInvestmentTradeCorrection(change, preview.reviewToken, "Duplicate save")).rejects.toThrow();

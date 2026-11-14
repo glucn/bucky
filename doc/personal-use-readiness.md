@@ -9,6 +9,22 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 49 — Review and save corrections from a holding
+
+- Transaction History opens a correction form for a tracked buy or sale. It displays the
+  effects on later activity, units, basis, cash and realized gain in the holding's currency.
+  Saving requires a reason and a current preview. Edits invalidate the preview; a refused
+  save keeps the draft and asks for another preview.
+- Replacement journals refresh automatically generated descriptions to reflect the corrected
+  trade, while keeping custom descriptions. Original descriptions and postings remain in
+  the revision. Authenticated IPC locates the original trade by holding and journal identity.
+- The full native run passed 1,193 tests and reproduced the stale generated description.
+  After fixing it, 32 targeted native and 9 targeted encrypted checks passed. TypeScript
+  and Apple Silicon packaging passed. The packaged review/save/restart scenario passed
+  three times, including validation of the new gain and original journal audit record.
+- Standalone backdated insertion and voiding, a revision-history viewer, exact decimals,
+  whole-book verification, and personal/native acceptance remain open.
+
 ### Batch 48 — Save investment corrections with revision history
 
 - A reviewed trade correction can now save through the service. It reruns the same posting

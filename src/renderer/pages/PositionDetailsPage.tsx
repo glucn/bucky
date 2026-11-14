@@ -5,6 +5,7 @@ import { useAccounts } from "../context/AccountsContext";
 import { formatValuationAmount } from "../utils/valuationFormatting";
 const SecurityPriceModal = React.lazy(() => import("../components/SecurityPriceModal").then((module) => ({ default: module.SecurityPriceModal })));
 const InvestmentBaselineModal = React.lazy(() => import("../components/InvestmentBaselineModal"));
+const InvestmentCorrectionModal = React.lazy(() => import("../components/InvestmentCorrectionModal"));
 
 interface PositionDetails {
   needsBaselineReview?: boolean;
@@ -52,12 +53,14 @@ export const PositionDetailsPage: React.FC = () => {
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showPrices, setShowPrices] = useState(false);
   const [baselineAccount, setBaselineAccount] = useState<string | null>(null);
+  const [correction, setCorrection] = useState<{ accountId: string; entryId: string } | null>(null);
   const [selectedTransactionType, setSelectedTransactionType] = useState<TransactionType>('buy');
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [positionValuation, setPositionValuation] = useState<PositionValuationSnapshot | null>(null);
 
   useEffect(() => {
     setBaselineAccount(null);
+    setCorrection(null);
     void fetchPositionData();
     let disposed = false;
     void window.electron.getBaseCurrencyImpactState().then((state) => {
@@ -271,6 +274,7 @@ export const PositionDetailsPage: React.FC = () => {
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Amount
                   </th>
+                  <th scope="col" className="px-3 py-3 text-left text-sm">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -293,6 +297,9 @@ export const PositionDetailsPage: React.FC = () => {
                       {formatValuationAmount(Math.abs(txn.amount), txn.currency, { disambiguate: true })}
                       {txn.amount >= 0 ? ' (debit)' : ' (credit)'}
                     </td>
+                    <td className="px-3 py-4 text-sm">
+                      {accountId && (txn.type === "investment_buy" || txn.type === "investment_sell") ? <button type="button" className="underline" onClick={() => setCorrection({ accountId, entryId: txn.id })}>Correct trade</button> : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -313,6 +320,7 @@ export const PositionDetailsPage: React.FC = () => {
       {/* Transaction Modal */}
       {showPrices && accountId ? <React.Suspense fallback={<p role="status">Loading price controls…</p>}><SecurityPriceModal isOpen accountId={accountId} onClose={() => setShowPrices(false)} onChanged={() => { void handleTransactionCreated(); }} /></React.Suspense> : null}
       {baselineAccount && accountId === baselineAccount ? <React.Suspense fallback={<p role="status">Loading baseline review…</p>}><InvestmentBaselineModal accountId={baselineAccount} onClose={() => setBaselineAccount(null)} onSaved={() => { setBaselineAccount(null); void fetchPositionData(); }} /></React.Suspense> : null}
+      {correction && accountId === correction.accountId ? <React.Suspense fallback={<p role="status">Loading correction…</p>}><InvestmentCorrectionModal {...correction} onCancel={() => setCorrection(null)} onSaved={() => { setCorrection(null); void handleTransactionCreated(); }} /></React.Suspense> : null}
       {portfolioId && (
         <TransactionEntryModal
           isOpen={showTransactionModal}

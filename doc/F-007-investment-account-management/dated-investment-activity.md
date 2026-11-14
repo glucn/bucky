@@ -1,7 +1,8 @@
 # Dated investment activity
 
-Chronological activity, dated quantity and basis reads, and reviewed legacy cutovers are
-implemented. Backdated replay and investment correction controls remain open.
+Chronological activity, dated quantity and basis reads, reviewed legacy cutovers, and
+reviewed corrections to tracked buys and sales are implemented. Standalone insertion or
+voiding of historical activity remains open.
 
 `InvestmentActivity` is the source for dated quantities and basis in newly tracked security
 accounts. Each event stores account identity, currency, effective date, a per-account sequence,
@@ -41,7 +42,12 @@ bypass a reviewed baseline; later attempts to post before the cutover still requ
 
 Ordinary journal edit/delete cannot change linked events or legacy investment buy/sell,
 distribution/reinvestment and split entries. Money, lots and units must be corrected together.
-Dedicated correction/void/replay is still required; this guard is not a substitute for that workflow.
+From **Transaction History** on a holding, choose **Correct trade** on a tracked buy or sale.
+Change the date, quantity, price, or fee and preview the resulting activity, units, native
+cash, basis and realized gain. Saving needs the reviewed preview and a reason. A changed
+draft or ledger requires another preview. The original entries are preserved in a revision
+record, and statement import origins retain their original fingerprints. Corrections cannot
+cross the verified cutover or a retained checkpoint on an affected account.
 Development reset deletes links/activity along with the rest of the book in one transaction.
 
 Posting a date before the account's latest activity is refused until replay can recompute later

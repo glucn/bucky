@@ -5,8 +5,24 @@ import { getSecurityPriceContext, previewSecurityPrices, saveSecurityPrices, sea
 import { bindSecurityMarket } from "../services/securityMarketBinding";
 import { appSettingsService } from "../services/appSettingsService";
 import { confirmInvestmentBaseline, getInvestmentBaselineReview } from "../services/investmentActivity";
+import { getInvestmentTradeCorrection, previewInvestmentTradeCorrection, saveInvestmentTradeCorrection } from "../services/investmentCorrectionPreview";
 
 export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
+  ipcMain.removeHandler("get-investment-trade-correction");
+  ipcMain.removeHandler("preview-investment-trade-correction");
+  ipcMain.removeHandler("save-investment-trade-correction");
+  ipcMain.handle("get-investment-trade-correction", async (_, input) => {
+    try { return { success: true, trade: await getInvestmentTradeCorrection(input.accountId, input.entryId) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to load trade" }; }
+  });
+  ipcMain.handle("preview-investment-trade-correction", async (_, input) => {
+    try { return { success: true, preview: await previewInvestmentTradeCorrection(input) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to preview correction" }; }
+  });
+  ipcMain.handle("save-investment-trade-correction", async (_, input) => {
+    try { return { success: true, result: await saveInvestmentTradeCorrection(input.correction, input.reviewToken, input.reason) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to save correction" }; }
+  });
   ipcMain.removeHandler("get-investment-baseline-review");
   ipcMain.removeHandler("confirm-investment-baseline");
   ipcMain.handle("get-investment-baseline-review", async (_, accountId: string) => {

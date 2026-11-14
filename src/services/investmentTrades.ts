@@ -15,6 +15,8 @@ export type InvestmentTrade = {
   securityAccountId?: string;
   tradeCashAccountId?: string;
 };
+export const defaultTradeDescription = (kind: "buy" | "sell", ticker: string, quantity: number, price: number) =>
+  `${kind === "buy" ? "Buy" : "Sell"} ${quantity} shares of ${ticker} @ ${price}`;
 /** Journal, implicit account creation and position changes share one database transaction.
  * Acquisition fees are capitalized; disposal fees reduce proceeds and realized gains.
  * Neither is posted a second time as a separate expense.
@@ -67,7 +69,7 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
       }
     }
     if (!Number.isSafeInteger(basis)) throw new Error("Cost basis exceeds supported precision");
-    const description = input.description || `${kind === "buy" ? "Buy" : "Sell"} ${input.quantity} shares of ${ticker} @ ${input.pricePerShare}`;
+    const description = input.description || defaultTradeDescription(kind, ticker, input.quantity, input.pricePerShare);
     const line = (accountId: string, amount: number) => ({ accountId, amount: amount / 100, currency: cash.currency, description });
     const lines = [line(security.id, kind === "buy" ? consideration : -basis), line(cash.id, kind === "buy" ? -consideration : consideration)];
     if (kind === "sell" && consideration !== basis) {

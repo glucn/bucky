@@ -5,7 +5,7 @@ import { isValidStandardDate } from "../shared/dateUtils";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
 import { recordCashDividend, recordReinvestment, recordSplit } from "./investmentDistributions";
 import { cents, investmentTransaction } from "./investmentPosting";
-import { recordInvestmentTrade } from "./investmentTrades";
+import { defaultTradeDescription, recordInvestmentTrade } from "./investmentTrades";
 
 export type TradeCorrection = { activityId: string; date: string; quantity: number; pricePerShare: number; fee?: number };
 const journals = { orderBy: { entryId: "asc" }, include: { entry: { include: { investmentImportOrigin: true,
@@ -68,7 +68,8 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
     switch (row.kind) {
       case "buy": case "sell":
         await recordInvestmentTrade(row.kind, { ...common, ...(row.id === target.id
-          ? { quantity: input.quantity, pricePerShare: input.pricePerShare, fee: input.fee ?? row.fee ?? 0 }
+          ? { quantity: input.quantity, pricePerShare: input.pricePerShare, fee: input.fee ?? row.fee ?? 0,
+            description: posting.description === defaultTradeDescription(row.kind, row.ticker, row.units!, row.price!) ? undefined : posting.description }
           : { quantity: row.units!, pricePerShare: row.price!, fee: row.fee ?? 0 }) }, tx);
         break;
       case "split": await recordSplit(row.accountId, row.splitRatio!, date, posting.description, tx); break;
@@ -114,6 +115,20 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
 
 function validateCorrection(input: TradeCorrection) {
   if (!input || typeof input.activityId !== "string" || typeof input.date !== "string" || !isValidStandardDate(input.date)) throw new Error("Select a trade and valid correction date");
+}
+
+export async function getInvestmentTradeCorrection(accountId: string, entryId: string) {
+  if (typeof accountId !== "string" || typeof entryId !== "string") throw new Error("Select a recorded trade");
+  return investmentTransaction(async (tx) => {
+    const link = await tx.investmentActivityJournal.findUnique({ where: { entryId }, include: { activity: { include: { account: { include: { investmentProperties: true } } } } } });
+    const row = link?.activity;
+    if (!row || row.accountId !== accountId || (row.kind !== "buy" && row.kind !== "sell") || row.units === null || row.price === null || row.account.isArchived) {
+      throw new Error("Only a tracked buy or sale on this active holding can be corrected");
+    }
+    const baseline = await tx.investmentActivity.findFirst({ where: { accountId, kind: "baseline" }, select: { date: true } });
+    if (!row.account.investmentProperties?.hasCompleteActivityHistory || (baseline && row.date <= baseline.date)) throw new Error("This trade is outside the holding's verified history");
+    return { activityId: row.id, kind: row.kind, ticker: row.ticker, currency: row.currency, date: row.date, quantity: row.units, pricePerShare: row.price, fee: row.fee ?? 0 };
+  });
 }
 
 /** Preview uses the exact posting service, then forces rollback before returning output. */
