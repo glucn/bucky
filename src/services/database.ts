@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma, type Account } from "@prisma/client";
+import { PrismaClient, Prisma, type Account, type AccountGroup } from "@prisma/client";
 import path from "path";
 import {
   AccountType,
@@ -14,6 +14,7 @@ import { PrismaSession } from "./prismaSession";
 import { parseResetRequest, type ResetRequest } from "../shared/reset";
 import { SUPPORTED_CURRENCY_OPTIONS } from "../shared/currencies";
 import { hasLotHistory } from "./investmentLotHistory";
+import { guardPortfolioDeletion, guardPortfolioMembership, membershipAccounts } from "./portfolioMembership";
 
 // Type for transaction client
 type TransactionClient = Prisma.TransactionClient;
@@ -651,8 +652,10 @@ class DatabaseService {
   public async deleteAccountGroup(
     id: string,
     tx?: TransactionClient
-  ) {
-    const prisma = tx || this.prisma;
+  ): Promise<AccountGroup> {
+    if (!tx) return this.prisma.$transaction((trx) => this.deleteAccountGroup(id, trx));
+    const prisma = tx;
+    await guardPortfolioDeletion(prisma, id);
     
     return await prisma.accountGroup.delete({
       where: { id },
@@ -668,13 +671,14 @@ class DatabaseService {
     accountId: string,
     groupId: string,
     tx?: TransactionClient
-  ) {
-    const prisma = tx || this.prisma;
+  ): Promise<Account> {
+    if (!tx) return this.prisma.$transaction((trx) => this.addAccountToGroup(accountId, groupId, trx));
+    const prisma = tx;
     
     // Fetch the account and group
     const [account, group] = await Promise.all([
-      prisma.account.findUnique({ where: { id: accountId } }),
-      prisma.accountGroup.findUnique({ where: { id: groupId } }),
+      prisma.account.findUnique({ where: { id: accountId }, ...membershipAccounts }),
+      prisma.accountGroup.findUnique({ where: { id: groupId }, include: { accounts: membershipAccounts } }),
     ]);
     
     if (!account) {
@@ -691,6 +695,7 @@ class DatabaseService {
     }
     
     // Update the account's groupId
+    await guardPortfolioMembership(prisma, account, group);
     return await prisma.account.update({
       where: { id: accountId },
       data: { groupId },
@@ -704,8 +709,11 @@ class DatabaseService {
   public async removeAccountFromGroup(
     accountId: string,
     tx?: TransactionClient
-  ) {
-    const prisma = tx || this.prisma;
+  ): Promise<Account> {
+    if (!tx) return this.prisma.$transaction((trx) => this.removeAccountFromGroup(accountId, trx));
+    const prisma = tx;
+    const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId }, ...membershipAccounts });
+    await guardPortfolioMembership(prisma, account, null);
     
     return await prisma.account.update({
       where: { id: accountId },

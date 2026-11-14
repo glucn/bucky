@@ -9,6 +9,22 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 45 — Preserve historical portfolio membership
+
+- Moving accounts into or out of a portfolio, ungrouping them, and deleting the portfolio group
+  now check retained financial history inside the same transaction as the membership change.
+  Journal lines, checkpoints, structured investment activity, quantities and retained lot data
+  all count. Refused changes leave balances, group assignments and report attribution intact.
+- Moving the first or last holding of a group recognized by its holdings also checks the other
+  accounts, whose historical interpretation would otherwise change. Ordinary bank grouping,
+  unused portfolio accounts and assigning an account to its current group remain supported.
+- The report regression started with a CAD 100 external deposit that could be reclassified as
+  internal through regrouping. The guarded paths preserve the original deposit. A second failing
+  case showed dividend activity can exist without a journal line on the holding itself.
+- This protects generic grouping operations. It does not provide a dated ownership transfer,
+  rewrite previous activity, or replace explicit review when designating a legacy group.
+- Verification: all **1,180 native tests**, **110 relevant encrypted tests**, and TypeScript passed.
+
 ### Batch 44 — Explicit, currency-aware and atomic portfolio funding (2026-11-14)
 
 - Replaced the funding shortcuts' first-account destination and separate tagging write with a
@@ -1245,7 +1261,7 @@ remains necessary.
 
 The original recommended first tasks were transaction correctness hardening and personal storage
 with recovery. See the implementation log for delivered portions. The next implementation work
-is **portfolio membership history protection, reviewed investment baselines/corrections/replay,
+is **reviewed investment baselines/corrections/replay,
 exact decimals and whole-book verification**,
 alongside full installed/native recovery/conversion acceptance. Real OS-authentication
 acceptance and the manual recovery drill remain acceptance

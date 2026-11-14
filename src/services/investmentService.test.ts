@@ -144,6 +144,9 @@ describe("InvestmentService - Portfolio Management", () => {
         currency: "USD",
       });
 
+      // Place the unused account before seeding retained position state.
+      await databaseService.addAccountToGroup(securityAccount.id, group.id);
+
       // Add investment properties to make it a security account
       await databaseService.prismaClient.investmentProperties.create({
         data: {
@@ -153,9 +156,6 @@ describe("InvestmentService - Portfolio Management", () => {
           costBasisMethod: "FIFO",
         },
       });
-
-      // Link security account to the portfolio
-      await databaseService.addAccountToGroup(securityAccount.id, group.id);
 
       const accounts = await investmentService.getPortfolioAccounts(group.id);
 
