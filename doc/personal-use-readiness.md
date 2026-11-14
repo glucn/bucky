@@ -9,6 +9,20 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 47 — Transactional investment correction preview
+
+- Added a service preview for changing a recorded buy or sale's date, quantity, price or fee.
+  The preview verifies the starting holding, restores the unaffected prefix and replays the
+  affected suffix in date and original sequence order with the normal posting services. It
+  reports changes in quantities, basis, cash and realized gain. It refuses inconsistent source
+  history, changes at or before a reviewed baseline, and corrections that cause overselling.
+- The simulation deliberately rolls back before returning. Tests verify the existing holding,
+  journals, activity and import origin links are unchanged after success and failure. Regressions
+  cover date reordering, FIFO, splits, cash distributions, capital returns and both reinvestment
+  classifications. Native and targeted encrypted tests plus TypeScript passed.
+- This is a service foundation only. Saving corrections, revision history, the renderer
+  workflow and insertion or void of historical activity remain open.
+
 ### Batch 46 — Reviewed legacy investment cutover
 
 - The holding page can review a legacy starting position against retained units and native

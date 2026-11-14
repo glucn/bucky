@@ -55,7 +55,7 @@ function validActivity(row: Activity): boolean {
   return securityDelta === cents(row.basisAfter) - cents(row.basisBefore);
 }
 
-async function snapshot(tx: Prisma.TransactionClient, accountId: string, date: string): Promise<InvestmentSnapshot> {
+export async function verifyInvestmentSnapshot(tx: Prisma.TransactionClient, accountId: string, date: string): Promise<InvestmentSnapshot> {
   const account = await tx.account.findUnique({ where: { id: accountId }, include: { investmentProperties: true } });
   if (!account?.investmentProperties) throw new Error("Security account not found");
   const props = account.investmentProperties;
@@ -150,7 +150,7 @@ export async function confirmInvestmentBaseline(input: InvestmentBaselineReview)
       lotsAfter: lots, journalLinks: { create: entryIds.filter((id) => !linkedIds.has(id)).map((entryId) => ({ entryId })) },
     } });
     await tx.investmentProperties.update({ where: { accountId: account.id }, data: { hasCompleteActivityHistory: true, lots } });
-    const verified = await snapshot(tx, account.id, input.date);
+    const verified = await verifyInvestmentSnapshot(tx, account.id, input.date);
     if (verified.status !== "available") throw new Error("Retained investment history failed cutover verification");
     return verified;
   });
@@ -162,7 +162,7 @@ export async function confirmInvestmentBaseline(input: InvestmentBaselineReview)
 export async function getInvestmentSnapshot(accountId: string, asOfDate: string): Promise<InvestmentSnapshot> {
   const date = typeof asOfDate === "string" ? parseToStandardDate(asOfDate) : null;
   if (!date) throw new Error("Invalid investment history date");
-  return databaseService.prismaClient.$transaction((tx) => snapshot(tx, accountId, date), { timeout: 30000 });
+  return databaseService.prismaClient.$transaction((tx) => verifyInvestmentSnapshot(tx, accountId, date), { timeout: 30000 });
 }
 
 export async function beginInvestmentActivity(tx: Prisma.TransactionClient, accountId: string, date: string) {
@@ -177,7 +177,7 @@ export async function beginInvestmentActivity(tx: Prisma.TransactionClient, acco
   if (last && date < last.date) throw new Error("Backdated investment posting requires dated replay of subsequent activity");
   const basis = (await tx.journalLine.aggregate({ where: { accountId }, _sum: { amount: true } }))._sum.amount ?? 0;
   if (props.hasCompleteActivityHistory) {
-    const verified = await snapshot(tx, accountId, "9999-12-31");
+    const verified = await verifyInvestmentSnapshot(tx, accountId, "9999-12-31");
     if (verified.status !== "available") throw new Error("Investment activity is inconsistent; review the position before posting");
   } else if (last && (!close(last.quantityAfter, props.quantity) || cents(last.basisAfter) !== cents(basis))) {
     throw new Error("Investment activity is inconsistent; review the position before posting");
@@ -195,7 +195,7 @@ export async function finishInvestmentActivity(tx: Prisma.TransactionClient, bef
     quantityBefore: before.props.quantity, quantityAfter: props.quantity, basisBefore: cents(before.basis) / 100, basisAfter: cents(basis) / 100,
     lotsAfter: props.lots, journalLinks: { create: entryIds.map((entryId) => ({ entryId })) },
   } });
-  if (props.hasCompleteActivityHistory && (await snapshot(tx, before.account.id, "9999-12-31")).status !== "available") {
+  if (props.hasCompleteActivityHistory && (await verifyInvestmentSnapshot(tx, before.account.id, "9999-12-31")).status !== "available") {
     throw new Error("Investment activity failed consistency verification");
   }
   return activity;
