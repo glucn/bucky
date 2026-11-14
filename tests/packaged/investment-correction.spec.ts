@@ -28,7 +28,7 @@ test("reviewed trade correction updates later gains and retains the original jou
     expect((await invoke("record-sell", { ...identity, date: "2026-01-03", quantity: 5, pricePerShare: 15 })).success).toBe(true);
     await page.evaluate(({ portfolioId, accountId }) => { window.location.hash = `/investments/${portfolioId}/holding/${accountId}`; }, { portfolioId, accountId });
     await page.getByRole("row").filter({ hasText: "2026-01-01" }).getByRole("button", { name: "Correct trade" }).click();
-    const dialog = page.getByRole("dialog", { name: "Correct investment trade" });
+    let dialog = page.getByRole("dialog", { name: "Correct investment trade" });
     await dialog.getByLabel("Price per share (CAD)", { exact: true }).fill("12");
     await dialog.getByLabel("Correction reason", { exact: true }).fill("Broker confirmed execution price");
     await dialog.getByRole("button", { name: "Preview correction" }).click();
@@ -43,12 +43,28 @@ test("reviewed trade correction updates later gains and retains the original jou
     await app.stop(); page = await app.launch(); await unlock(page);
     expect(await invoke("get-position-details", { accountId, asOfDate: "2026-01-04" })).toMatchObject({ success: true, position: { quantity: 5, costBasis: 60 } });
     expect(await invoke("get-portfolio-performance", { portfolioId, startDate: "2026-01-01", endDate: "2026-01-04" })).toMatchObject({ success: true, performance: { realizedGains: 15 } });
+    await page.evaluate(({ portfolioId, accountId }) => { window.location.hash = `/investments/${portfolioId}/holding/${accountId}`; }, { portfolioId, accountId });
+    await page.getByRole("row").filter({ hasText: "2026-01-03" }).getByRole("button", { name: "Correct trade" }).click();
+    dialog = page.getByRole("dialog", { name: "Correct investment trade" });
+    await dialog.getByLabel("Action", { exact: true }).selectOption("void");
+    await dialog.getByLabel("Correction reason", { exact: true }).fill("Broker reversed the sale");
+    await expect(dialog.getByRole("button", { name: "Void trade", exact: true })).toBeDisabled();
+    await dialog.getByRole("button", { name: "Preview void" }).click();
+    await expect(dialog.getByRole("row", { name: /will be voided/i })).toContainText("CAD 15.00");
+    await dialog.getByRole("button", { name: "Void trade", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await app.stop(); page = await app.launch(); await unlock(page);
+    expect(await invoke("get-position-details", { accountId, asOfDate: "2026-01-04" })).toMatchObject({ success: true, position: { quantity: 10, costBasis: 120 } });
+    expect(await invoke("get-portfolio-performance", { portfolioId, startDate: "2026-01-01", endDate: "2026-01-04" })).toMatchObject({ success: true, performance: { realizedGains: 0 } });
     await app.stop();
     const profile = await readProtectedProfile(app.directory), key = unlockWithRecovery(profile.envelope, pending.recoverySecret, "default"), db = createEncryptedPrisma(profile.databaseFile, key);
     try {
-      const revision = await db.investmentCorrection.findFirstOrThrow({ where: { accountId } });
+      const revision = await db.investmentCorrection.findFirstOrThrow({ where: { accountId, reason: "Broker confirmed execution price" } });
       expect(revision.reason).toBe("Broker confirmed execution price");
       expect(JSON.parse(revision.beforeJson)[0].journalLinks[0].entry.id).toBe(buy.entry.id);
+      const voidRevision = await db.investmentCorrection.findFirstOrThrow({ where: { accountId, reason: "Broker reversed the sale" } });
+      expect(JSON.parse(voidRevision.beforeJson)[0].kind).toBe("sell");
+      expect(JSON.parse(voidRevision.afterJson)).toEqual([{ replaces: voidRevision.activityId, event: null }]);
     } finally { await db.$disconnect(); key.fill(0); }
   } finally { await app.dispose(); }
 });

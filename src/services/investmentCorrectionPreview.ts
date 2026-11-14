@@ -7,7 +7,10 @@ import { recordCashDividend, recordReinvestment, recordSplit } from "./investmen
 import { cents, investmentTransaction } from "./investmentPosting";
 import { defaultTradeDescription, recordInvestmentTrade } from "./investmentTrades";
 
-export type TradeCorrection = { activityId: string; date: string; quantity: number; pricePerShare: number; fee?: number };
+export type TradeCorrection = { activityId: string } & (
+  { operation?: "correct"; date: string; quantity: number; pricePerShare: number; fee?: number } |
+  { operation: "void" }
+);
 const journals = { orderBy: { entryId: "asc" }, include: { entry: { include: { investmentImportOrigin: true,
   lines: { orderBy: { id: "asc" }, include: { account: true } } } } } } as const;
 type Event = Prisma.InvestmentActivityGetPayload<{ include: { journalLinks: typeof journals } }>;
@@ -40,13 +43,14 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
   if (!target || (target.kind !== "buy" && target.kind !== "sell") || !target.account.groupId || target.account.isArchived) throw new Error("Select an active holding's recorded buy or sell");
   const before = await verifyInvestmentSnapshot(tx, target.accountId, "9999-12-31");
   if (before.status !== "available") throw new Error("Verify the holding history before replaying corrections");
-  const earliest = input.date < target.date ? input.date : target.date;
+  const correctedDate = input.operation === "void" ? target.date : input.date;
+  const earliest = correctedDate < target.date ? correctedDate : target.date;
   const rows = await tx.investmentActivity.findMany({ where: { accountId: target.accountId }, orderBy: { sequence: "asc" }, include: { journalLinks: journals } });
   const baseline = rows.find(({ kind }) => kind === "baseline");
   if (baseline && earliest <= baseline.date) throw new Error("Corrections must be after the reviewed closing baseline");
   const index = rows.findIndex((row) => row.date > earliest || (row.date === earliest && (earliest !== target.date || row.sequence >= target.sequence)));
   const previous = rows[index - 1], suffix = rows.slice(index);
-  const planned = suffix.map((row) => ({ row, posting: readPosting(row), date: row.id === target.id ? input.date : row.date }));
+  const planned = suffix.map((row) => ({ row, date: row.id === target.id ? correctedDate : row.date }));
   planned.sort((a, b) => a.date.localeCompare(b.date) || a.row.sequence - b.row.sequence);
 
   const entryIds = suffix.flatMap((row) => row.journalLinks.map(({ entryId }) => entryId));
@@ -61,13 +65,19 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
     lots: previous ? previous.lotsAfter : target.costBasisMethod === "FIFO" ? "[]" : null,
   } });
 
-  const affected = [], replacement = [];
-  for (const { row, posting, date } of planned) {
+  const affected = [], replacement: Array<{ replaces: string; event: Event | null }> = [];
+  for (const { row, date } of planned) {
+    if (row.id === target.id && input.operation === "void") {
+      affected.push({ activityId: row.id, kind: row.kind, before: summary(row), after: null });
+      replacement.push({ replaces: row.id, event: null });
+      continue;
+    }
+    const posting = readPosting(row);
     const common = { portfolioId: target.account.groupId, tickerSymbol: row.ticker, securityAccountId: row.accountId,
       tradeCashAccountId: posting.cashId, description: posting.description, date };
     switch (row.kind) {
       case "buy": case "sell":
-        await recordInvestmentTrade(row.kind, { ...common, ...(row.id === target.id
+        await recordInvestmentTrade(row.kind, { ...common, ...(row.id === target.id && input.operation !== "void"
           ? { quantity: input.quantity, pricePerShare: input.pricePerShare, fee: input.fee ?? row.fee ?? 0,
             description: posting.description === defaultTradeDescription(row.kind, row.ticker, row.units!, row.price!) ? undefined : posting.description }
           : { quantity: row.units!, pricePerShare: row.price!, fee: row.fee ?? 0 }) }, tx);
@@ -102,7 +112,7 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
   }
   const after = await verifyInvestmentSnapshot(tx, target.accountId, "9999-12-31");
   if (after.status !== "available") throw new Error("Replayed history did not verify");
-  const outputs = replacement.map(({ replaces, event }) => ({
+  const outputs = replacement.map(({ replaces, event }) => event === null ? { replaces, event } : ({
     replaces, lots: event.lotsAfter, units: event.units, price: event.price, fee: event.fee,
     journals: event.journalLinks.map(({ entry }) => ({
       type: entry.type, date: entry.date, postingDate: entry.postingDate, description: entry.description,
@@ -114,7 +124,9 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
 }
 
 function validateCorrection(input: TradeCorrection) {
-  if (!input || typeof input.activityId !== "string" || typeof input.date !== "string" || !isValidStandardDate(input.date)) throw new Error("Select a trade and valid correction date");
+  if (!input || typeof input.activityId !== "string" || !input.activityId) throw new Error("Select a recorded trade");
+  if (input.operation === "void") return;
+  if ((input.operation !== undefined && input.operation !== "correct") || typeof input.date !== "string" || !isValidStandardDate(input.date)) throw new Error("Select a trade and valid correction date");
 }
 
 export async function getInvestmentTradeCorrection(accountId: string, entryId: string) {

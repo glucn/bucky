@@ -1,8 +1,8 @@
 # Dated investment activity
 
 Chronological activity, dated quantity and basis reads, reviewed legacy cutovers, and
-reviewed corrections to tracked buys and sales are implemented. Standalone insertion or
-voiding of historical activity remains open.
+reviewed corrections and voids of tracked buys and sales are implemented. Standalone
+backdated insertion remains open.
 
 `InvestmentActivity` is the source for dated quantities and basis in newly tracked security
 accounts. Each event stores account identity, currency, effective date, a per-account sequence,
@@ -48,6 +48,12 @@ cash, basis and realized gain. Saving needs the reviewed preview and a reason. A
 draft or ledger requires another preview. The original entries are preserved in a revision
 record, and statement import origins retain their original fingerprints. Corrections cannot
 cross the verified cutover or a retained checkpoint on an affected account.
+
+The same dialog's **Void trade** action previews removing the selected trade and replaying
+subsequent events. It needs its own preview and reason. The revision keeps the original
+postings and records that the trade has no replacement. A statement origin for a voided
+trade retains its fingerprint and holding identity, without a live journal link. Importing
+the original statement again skips the voided row by default.
 Development reset deletes links/activity along with the rest of the book in one transaction.
 
 Posting a date before the account's latest activity is refused until replay can recompute later

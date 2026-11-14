@@ -45,6 +45,48 @@ it("rejects a correction that would make a later sale impossible and keeps the o
   expect(await ledger()).toEqual(before);
 });
 
+it.each(["broker ID", "no broker ID"])("voids a sale without resurrecting the original statement row (%s)", async (identity) => {
+  const { holding, activity } = await setup();
+  const portfolioId = (await databaseService.prismaClient.account.findUniqueOrThrow({ where: { id: holding.id } })).groupId!;
+  const mapping = { date: "Date", type: "Type", ticker: "Ticker", quantity: "Quantity", price: "Price", amount: "Amount", sourceId: identity === "broker ID" ? "Id" : undefined };
+  const csv = "Date,Type,Ticker,Quantity,Price,Amount,Id\n2026-01-04,sell,ABC,4,15,60,void-me";
+  expect(await investmentService.importInvestmentTransactions(portfolioId, csv, mapping)).toMatchObject({ imported: 1, errors: [] });
+  const sale = await databaseService.prismaClient.investmentActivity.findFirstOrThrow({ where: { accountId: holding.id, date: "2026-01-04" } });
+  const voidSale = { activityId: sale.id, operation: "void" } as const;
+  const before = await ledger();
+  await expect(correction.previewInvestmentTradeCorrection({ activityId: activity.id, operation: "void" })).rejects.toThrow(/insufficient shares/i);
+  const preview = await correction.previewInvestmentTradeCorrection(voidSale);
+  expect(preview).toMatchObject({ before: { quantity: 6, costBasis: 30 }, after: { quantity: 10, costBasis: 50 },
+    affected: [{ activityId: sale.id, kind: "sell", after: null }] });
+  expect(await ledger()).toEqual(before);
+  const saved = await correction.saveInvestmentTradeCorrection(voidSale, preview.reviewToken, "Broker reversed this sale");
+  expect(saved.after.quantity).toBe(10);
+  const origin = await databaseService.prismaClient.investmentImportOrigin.findUniqueOrThrow({ where: { id: before.origins[0].id } });
+  expect(origin).toMatchObject({ entryId: null, fingerprint: before.origins[0].fingerprint, payload: before.origins[0].payload });
+  const revision = await databaseService.prismaClient.investmentCorrection.findUniqueOrThrow({ where: { id: saved.revisionId } });
+  expect(JSON.parse(revision.beforeJson)[0].id).toBe(sale.id);
+  expect(JSON.parse(revision.afterJson)).toEqual([{ replaces: sale.id, event: null }]);
+  expect(await investmentService.importInvestmentTransactions(portfolioId, csv, mapping)).toMatchObject({ imported: 0, skipped: 1, errors: [] });
+});
+
+it("recomputes later FIFO consumption when an earlier sale is voided", async () => {
+  const portfolio = await investmentService.createInvestmentPortfolio("Void FIFO", "CAD");
+  const identity = { portfolioId: portfolio.group.id, tickerSymbol: "ABC" };
+  await investmentService.recordBuy({ ...identity, date: "2026-01-01", quantity: 5, pricePerShare: 10 });
+  await investmentService.recordBuy({ ...identity, date: "2026-01-02", quantity: 5, pricePerShare: 20 });
+  await investmentService.recordSell({ ...identity, date: "2026-01-03", quantity: 5, pricePerShare: 25 });
+  await investmentService.recordSell({ ...identity, date: "2026-01-04", quantity: 5, pricePerShare: 25 });
+  const sale = await databaseService.prismaClient.investmentActivity.findFirstOrThrow({ where: { kind: "sell", date: "2026-01-03" } });
+  const change = { activityId: sale.id, operation: "void" } as const;
+  const preview = await correction.previewInvestmentTradeCorrection(change);
+  expect(preview.affected).toMatchObject([
+    { after: null },
+    { kind: "sell", before: { realizedGain: 25 }, after: { realizedGain: 75, basisAfter: 100 } },
+  ]);
+  await correction.saveInvestmentTradeCorrection(change, preview.reviewToken, "Early sale canceled");
+  expect(await investmentService.getPositionDetails(sale.accountId, "2026-01-04")).toMatchObject({ quantity: 5, costBasis: 100 });
+});
+
 it("commits the reviewed replay and retains original source journals and revision provenance", async () => {
   const { activity, holding } = await setup(), before = await ledger();
   const change = { activityId: activity.id, date: activity.date, quantity: 10, pricePerShare: 12 };
@@ -100,7 +142,7 @@ it("replays in corrected date order and keeps durable import identity linked to 
   const before = await ledger();
   expect(before.origins[0].entryId).not.toBeNull();
   const preview = await correction.previewInvestmentTradeCorrection({ activityId: first.id, date: "2026-01-03", quantity: 10, pricePerShare: 10 });
-  expect(preview.affected.map(({ after }) => after.date)).toEqual(["2026-01-02", "2026-01-03", "2026-01-04"]);
+  expect(preview.affected.map(({ after }) => after?.date)).toEqual(["2026-01-02", "2026-01-03", "2026-01-04"]);
   expect(preview.affected[2]).toMatchObject({ before: { realizedGain: 200 }, after: { realizedGain: 100 } });
   expect(await ledger()).toEqual(before);
   await correction.saveInvestmentTradeCorrection({ activityId: first.id, date: "2026-01-03", quantity: 10, pricePerShare: 10 }, preview.reviewToken, "Confirmed corrected date");
@@ -124,7 +166,7 @@ it("replays retained distributions and both reinvestment classifications from th
   const activity = await databaseService.prismaClient.investmentActivity.findFirstOrThrow({ where: { kind: "buy" } }), before = await ledger();
   const preview = await correction.previewInvestmentTradeCorrection({ activityId: activity.id, date: activity.date, quantity: 10, pricePerShare: 12 });
   expect(preview.after).toMatchObject({ quantity: 14, costBasis: 120 });
-  expect(preview.affected.map(({ kind, after }) => [kind, after.cashAmount, after.basisAfter])).toEqual([
+  expect(preview.affected.map(({ kind, after }) => [kind, after?.cashAmount, after?.basisAfter])).toEqual([
     ["buy", -120, 120], ["dividend", 5, 120], ["return_of_capital", 10, 110], ["income_reinvestment", 0, 120], ["capital_reinvestment", 0, 120],
   ]);
   expect(await ledger()).toEqual(before);

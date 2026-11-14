@@ -36,3 +36,22 @@ it("invalidates reviewed changes when edited and preserves the correction draft 
   expect((price as HTMLInputElement).value).toBe("13");
   expect(onSaved).not.toHaveBeenCalled();
 });
+
+it("requires a separate preview for voiding and shows the transaction being removed", async () => {
+  const invoke = vi.fn(async (channel: string, _params: unknown) => channel === "get-investment-trade-correction"
+    ? { success: true, trade: { activityId: "trade", date: "2026-01-01", quantity: 5, pricePerShare: 10, fee: 0, currency: "CAD", ticker: "ABC", kind: "sell" } }
+    : { success: true, preview: { reviewToken: "void-review", before: { quantity: 5, costBasis: 50 }, after: { quantity: 10, costBasis: 100 },
+      affected: [{ activityId: "trade", kind: "sell", before: { date: "2026-01-01", quantityAfter: 5, basisAfter: 50, cashAmount: 50, realizedGain: 0 }, after: null }] } });
+  Object.defineProperty(window, "electron", { configurable: true, value: { ipcRenderer: { invoke } } });
+  render(<InvestmentCorrectionModal accountId="holding" entryId="entry" onCancel={vi.fn()} onSaved={vi.fn()} />);
+  fireEvent.change(await screen.findByLabelText("Action"), { target: { value: "void" } });
+  const save = screen.getByRole("button", { name: "Void trade" }) as HTMLButtonElement;
+  fireEvent.change(screen.getByLabelText("Correction reason"), { target: { value: "Trade reversed" } });
+  expect(save.disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Preview void" }));
+  expect((await screen.findByRole("row", { name: /will be voided/i })).textContent).toContain("CAD 50.00");
+  fireEvent.click(save);
+  expect(invoke).toHaveBeenLastCalledWith("save-investment-trade-correction", {
+    correction: { activityId: "trade", operation: "void" }, reviewToken: "void-review", reason: "Trade reversed",
+  });
+});

@@ -9,6 +9,19 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 50 — Review and void a tracked trade
+
+- The holding's correction dialog can preview a void, recalculate later activity, and save
+  with a reason. Switching between correction and void clears prior review. A void refuses
+  inconsistent histories, checkpoint crossings and any replay that leaves too few units for
+  a later sale. The original trade is retained in the revision without a replacement.
+- Reimporting the original statement skips the voided row with or without a broker ID.
+  Regressions verify rollback, provenance and recomputed FIFO gains when voiding an earlier sale.
+- All 1,198 native tests, 12 targeted encrypted checks, TypeScript and Apple Silicon packaging
+  passed. The packaged correction/void workflow passed three restart repetitions after rebinding
+  a test locator to the relaunched window.
+- Backdated insertion and an in-app revision viewer remain open.
+
 ### Batch 49 — Review and save corrections from a holding
 
 - Transaction History opens a correction form for a tracked buy or sale. It displays the
