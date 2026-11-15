@@ -9,6 +9,34 @@ describe("Opening Balance Workflow", () => {
     await resetTestDatabase();
   });
 
+  it("leaves an ordinary Opening Balance memo intact during reads and writes", async () => {
+    const account = await databaseService.createAccount({ name: "Checking", type: AccountType.User, currency: "USD" });
+    const other = await databaseService.createAccount({ name: "Other", type: AccountType.User, currency: "USD" });
+    const memo = await databaseService.createJournalEntry({
+      fromAccountId: other.id, toAccountId: account.id, amount: 10, date: "2026-01-01", description: "Opening Balance",
+    });
+    expect(await databaseService.getOpeningBalanceForAccount(account.id)).toBeNull();
+    await databaseService.setOpeningBalance({ accountId: account.id, displayAmount: 100, asOfDate: "2026-01-02" });
+    expect(await databaseService.getJournalEntry(memo.entry!.id)).toMatchObject({ entryType: null, description: "Opening Balance" });
+    expect(await databaseService.prismaClient.journalEntry.count()).toBe(2);
+  });
+
+  it("preserves both opening journals when the account needs duplicate review", async () => {
+    const account = await databaseService.createAccount({ name: "Checking", type: AccountType.User, currency: "USD" });
+    const first = await databaseService.setOpeningBalance({ accountId: account.id, displayAmount: 100, asOfDate: "2026-01-02" });
+    const equity = first.lines.find((line: JournalLine) => line.accountId !== account.id).accountId;
+    const db = databaseService.prismaClient;
+    await db.journalEntry.create({ data: { date: "2026-01-03", description: "Opening Balance", lines: { create: [
+      { accountId: account.id, amount: 10, currency: "USD" },
+      { accountId: equity, amount: -10, currency: "USD" },
+    ] } } });
+    const before = await db.journalEntry.findMany({ orderBy: { id: "asc" }, include: { lines: true } });
+    await expect(databaseService.getOpeningBalanceForAccount(account.id)).rejects.toThrow(/more than one opening balance/i);
+    await expect(databaseService.setOpeningBalance({ accountId: account.id, displayAmount: 200, asOfDate: "2026-01-02" }))
+      .rejects.toThrow(/more than one opening balance/i);
+    expect(await db.journalEntry.findMany({ orderBy: { id: "asc" }, include: { lines: true } })).toEqual(before);
+  });
+
   it("posts both sides of foreign opening funding in its native currency, preserving the system account default", async () => {
     const equity = await databaseService.prismaClient.account.findFirstOrThrow({ where: { name: "Opening Balances", type: AccountType.System } });
     await databaseService.updateAccount(equity.id, { currency: "CAD" });

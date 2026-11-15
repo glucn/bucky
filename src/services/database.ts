@@ -7,7 +7,7 @@ import {
 } from "../shared/accountTypes";
 import { localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
 import { autoCategorizationService } from "./autoCategorizationService";
-import { hasValidExchangePostings, isCurrencyExchange, resolveCurrencyTransferAmounts } from "./journalValidation";
+import { hasValidExchangePostings, isCurrencyExchange, isOpeningBalanceEntry, resolveCurrencyTransferAmounts } from "./journalValidation";
 import { resolveCheckpointAdjustment } from "./checkpointAdjustment";
 import { checkpointBalance, journalAmountFromCents, postingAmountFromCents, readCheckpointCents, readPostingCents, roundJournalAmount, sumJournalCents, toJournalCents, withPostingCents } from "./journalPrecision";
 import { resolveDatabaseFile } from "./localDatabase";
@@ -1449,33 +1449,13 @@ class DatabaseService {
           some: { accountId },
         },
       },
-      include: { lines: true },
+      include: { lines: { include: { account: { select: { type: true, name: true } } } } },
       orderBy: { createdAt: "desc" },
     });
 
-    if (entries.length === 0) {
-      return null;
-    }
-
-    const [primary, ...extras] = entries;
-    if (extras.length > 0) {
-      await prisma.journalLine.deleteMany({
-        where: { entryId: { in: extras.map((entry) => entry.id) } },
-      });
-      await prisma.journalEntry.deleteMany({
-        where: { id: { in: extras.map((entry) => entry.id) } },
-      });
-    }
-
-    if (primary.entryType !== "opening-balance") {
-      return prisma.journalEntry.update({
-        where: { id: primary.id },
-        data: { entryType: "opening-balance" },
-        include: { lines: true },
-      });
-    }
-
-    return primary;
+    const openings = entries.filter(isOpeningBalanceEntry);
+    if (openings.length > 1) throw new Error("More than one opening balance posts to this account. Review the journals before making changes.");
+    return openings[0] ?? null;
   }
 
   public async getOpeningBalanceForAccount(
@@ -1936,7 +1916,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
 
     const entry = await prisma.journalEntry.findUnique({
       where: { id: entryId },
-      include: { lines: true },
+      include: { lines: { include: { account: { select: { type: true, name: true } } } } },
     });
 
     if (!entry) {
@@ -1949,10 +1929,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       throw new Error("Investment corrections must update quantities and cost basis together; ordinary journal changes are unavailable");
     }
 
-    const isOpeningBalanceEntry =
-      entry.entryType === "opening-balance" || entry.description === "Opening Balance";
-
-    if (!isOpeningBalanceEntry) {
+    if (!isOpeningBalanceEntry(entry)) {
       await this.adjustOpeningBalanceForEntryChange(
         {
           entryDate: parseToStandardDate(entry.date) || entry.date,
@@ -2616,7 +2593,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     // Find the journal line and its entry
     const line = await prisma.journalLine.findUnique({
       where: { id: data.lineId },
-      include: { entry: { include: { lines: true } } },
+      include: { entry: { include: { lines: { include: { account: { select: { type: true, name: true } } } } } } },
     });
     if (!line) throw new Error("Journal line not found");
     const entry = line.entry;
@@ -2633,8 +2610,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     if (lines.length !== 2) throw new Error("Expected double-entry transaction");
 
     const originalEntryDate = parseToStandardDate(entry.date) || entry.date;
-    const isOpeningBalanceEntry =
-      entry.entryType === "opening-balance" || entry.description === "Opening Balance";
+    const isOpening = isOpeningBalanceEntry(entry);
 
     // Keep posting identities stable, including when the counterparty changes or the
     // transfer was opened from its destination account.
@@ -2687,7 +2663,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       include: { lines: true },
     });
 
-    if (!isOpeningBalanceEntry && updatedEntry) {
+    if (!isOpening && updatedEntry) {
       const updatedEntryDate = parseToStandardDate(updatedEntry.date) || updatedEntry.date;
       await this.adjustOpeningBalanceForEntryChange(
         {

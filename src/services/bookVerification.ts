@@ -4,7 +4,7 @@ import type { BookFinding, BookVerificationReport, JournalVerificationCode } fro
 import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
-import { hasValidExchangePostings, isCurrencyExchange } from "./journalValidation";
+import { hasValidExchangePostings, isCurrencyExchange, isOpeningBalanceEntry } from "./journalValidation";
 import { resolveCheckpointAdjustment } from "./checkpointAdjustment";
 import { journalAmountFromCents, readCheckpointCents, readPostingCents, sumJournalCents } from "./journalPrecision";
 import { securityMarketData } from "./securityMarketData";
@@ -28,10 +28,7 @@ const journalSelect = {
 type Entry = Prisma.JournalEntryGetPayload<{ select: typeof journalSelect }>;
 
 function verifyOpeningBalance(entry: Entry, openings: Map<string, Entry | null>, findings: BookFinding[]) {
-  const isLegacyOpening = entry.entryType === null && entry.description === "Opening Balance" &&
-    entry.lines.some(({ account }) => account.type === AccountType.System &&
-      (account.name === "Opening Balances" || account.name === "Opening Balance Equity"));
-  if (entry.entryType !== "opening-balance" && !isLegacyOpening) return;
+  if (!isOpeningBalanceEntry(entry)) return;
   const report = (record: Entry, message: string) => findings.push({
     severity: "error", code: "journal-opening-balance", entryId: record.id, date: record.date, description: record.description, message,
   });

@@ -9,6 +9,15 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 81 — Keep opening-balance lookup read-only
+
+- Opening-balance lookup no longer retags or deletes journal entries. Legacy
+  openings require the recognized system offset alongside the original memo.
+  Ordinary transactions with the same memo keep their classification.
+- When more than one opening is present, reads and edits report the conflict
+  and retain both journals for review. The verifier uses the same classification.
+- Verification covered 37 focused native tests, 37 encrypted tests, and TypeScript.
+
 ### Batch 80 — Verify opening-balance entries
 
 - The verifier reports duplicate opening balances by account and checks that a

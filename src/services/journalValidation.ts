@@ -1,4 +1,14 @@
 import { decimalRatio, journalAmountFromCents, readPostingCents, roundDecimalRatio, toJournalCents } from "./journalPrecision";
+import { AccountType } from "../shared/accountTypes";
+
+export function isOpeningBalanceEntry(entry: {
+  entryType: string | null; description: string | null;
+  lines: Array<{ account: { type: string; name: string } }>;
+}): boolean {
+  return entry.entryType === "opening-balance" ||
+    (entry.entryType === null && entry.description === "Opening Balance" && entry.lines.some(({ account }) =>
+      account.type === AccountType.System && (account.name === "Opening Balances" || account.name === "Opening Balance Equity")));
+}
 
 export interface CurrencyTransferAmounts {
   amountFrom?: number;
