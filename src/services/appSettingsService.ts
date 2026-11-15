@@ -75,8 +75,8 @@ const parseBaseCurrencyReconciliationState = (
 };
 
 class AppSettingsService {
-  async getAppSetting(key: string): Promise<JsonValue | null> {
-    const row = await databaseService.prismaClient.appSetting.findUnique({
+  async getAppSetting(key: string, db: Pick<typeof databaseService.prismaClient, "appSetting"> = databaseService.prismaClient): Promise<JsonValue | null> {
+    const row = await db.appSetting.findUnique({
       where: { key },
     });
 
@@ -118,8 +118,8 @@ class AppSettingsService {
     await this.setAppSetting(BASE_CURRENCY_RECONCILIATION_KEY, state as unknown as JsonValue);
   }
 
-  async getBaseCurrency(): Promise<string | null> {
-    const value = await this.getAppSetting("baseCurrency");
+  async getBaseCurrency(db?: Pick<typeof databaseService.prismaClient, "appSetting">): Promise<string | null> {
+    const value = await this.getAppSetting("baseCurrency", db);
 
     if (typeof value !== "string") {
       return null;

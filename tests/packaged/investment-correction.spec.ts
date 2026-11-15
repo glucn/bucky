@@ -88,7 +88,8 @@ test("reviewed trade correction updates later gains and retains the original jou
     await history.getByRole("button", { name: "Close" }).click();
     await page.getByRole("link", { name: "Verify books" }).click();
     await page.getByRole("button", { name: "Run verification" }).click();
-    await expect(page.getByText("No issues found in the checks run.")).toBeVisible();
+    await expect(page.getByText("Verification complete. 0 issues and 1 warning.")).toBeVisible();
+    await expect(page.getByText(/ABC.*No completed raw price/)).toBeVisible();
     await app.stop();
     const profile = await readProtectedProfile(app.directory), key = unlockWithRecovery(profile.envelope, pending.recoverySecret, "default"), db = createEncryptedPrisma(profile.databaseFile, key);
     try {

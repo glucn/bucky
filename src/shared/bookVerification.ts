@@ -5,6 +5,8 @@ export type BookFinding =
   | { severity: "error"; code: "checkpoint-balance"; checkpointId: string; accountId: string; date: string;
       expected: number; actual: number; currency: string; message: string }
   | { severity: "error"; code: "investment-inconsistent"; accountId: string; message: string }
-  | { severity: "warning"; code: "investment-legacy"; accountId: string; message: string };
+  | { severity: "warning"; code: "investment-legacy"; accountId: string; message: string }
+  | { severity: "warning"; code: "valuation-price"; accountId: string; date: string; message: string }
+  | { severity: "warning"; code: "valuation-fx"; accountId: string; date: string; message: string };
 
 export type BookVerificationReport = { findings: BookFinding[] };

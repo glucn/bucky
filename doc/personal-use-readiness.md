@@ -9,6 +9,19 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 57 — Check current valuation coverage
+
+- Book verification warns when a nonzero holding has no completed raw price for its
+  confirmed listing and quote currency. It reads `SecurityDailyPrice` through the
+  valuation service and uses the same cutoff for holdings, prices, and FX.
+- Nonzero foreign cash and priced holdings are checked against `FxDailyRate`. Later
+  rates produce a warning instead of establishing coverage for the requested date.
+  Transfer postings and ticker-only price history never supply valuation coverage.
+- These checks cover the current valuation date in the UI. They do not certify
+  historical price coverage or replace statement reconciliation.
+- Verification covered 16 focused tests, five encrypted verifier tests, TypeScript,
+  Apple Silicon packaging, and three packaged restart runs.
+
 ### Batch 56 — Run verification from the app
 
 - **Verify books** runs on demand from the main navigation. It shows accounting issues and

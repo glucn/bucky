@@ -13,6 +13,9 @@ function FindingDetails({ finding }: { finding: BookFinding }) {
     <p>Journal balance {formatValuationAmount(finding.actual, finding.currency, { disambiguate: true })}</p>
     <p>Account {finding.accountId}</p>
   </>;
+  if (finding.code === "valuation-fx" || finding.code === "valuation-price") {
+    return <p>{finding.date} · Account {finding.accountId}</p>;
+  }
   return <p>Holding {finding.accountId}</p>;
 }
 
@@ -55,14 +58,14 @@ export function BookVerification() {
   const warnings = report?.findings.filter((finding) => finding.severity === "warning") ?? [];
   return <div className="max-w-3xl space-y-4">
     <h1 className="text-2xl font-bold text-gray-900">Verify books</h1>
-    <p className="text-sm text-gray-600">Check journal postings, exchange rates on transfers, balance checkpoints, and investment activity. This check leaves your records intact.</p>
+    <p className="text-sm text-gray-600">Check journal postings, transfers, checkpoints, investment activity, and today’s valuation coverage. This check leaves your records intact.</p>
     <button type="button" disabled={running} onClick={() => void run()}
       className="rounded bg-primary-600 px-3 py-2 text-white hover:bg-primary-700 disabled:opacity-50">Run verification</button>
     {running && <p role="status">Checking your books…</p>}
     {error && <p role="alert" className="text-red-700">{error}</p>}
     {report && <p role="status">{report.findings.length === 0
       ? "No issues found in the checks run."
-      : `Verification complete. ${issues.length} issues and ${warnings.length} warnings.`}</p>}
+      : `Verification complete. ${issues.length} ${issues.length === 1 ? "issue" : "issues"} and ${warnings.length} ${warnings.length === 1 ? "warning" : "warnings"}.`}</p>}
     <FindingList title="Issues" findings={issues} />
     <FindingList title="Warnings" findings={warnings} />
   </div>;

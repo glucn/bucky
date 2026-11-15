@@ -1,10 +1,14 @@
 import type { Prisma } from "@prisma/client";
 import { AccountType } from "../shared/accountTypes";
 import type { BookFinding, BookVerificationReport, JournalVerificationCode } from "../shared/bookVerification";
-import { localCalendarDate } from "../shared/dateUtils";
+import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
+import { securityMarketData } from "./securityMarketData";
+import { securityQuoteCurrency } from "./securityQuoteCurrency";
+import { createValuationConversionService, type ConversionResult } from "./valuationConversionService";
+import { resolveValuationDate } from "./valuationDate";
 
 const journalSelect = {
   id: true,
@@ -91,14 +95,25 @@ function verifyJournal(entry: Entry, findings: BookFinding[]) {
   }
 }
 
-async function verifyHoldings(tx: Prisma.TransactionClient, findings: BookFinding[]) {
+async function verifyHoldings(tx: Prisma.TransactionClient, findings: BookFinding[], date: string) {
   const holdings = await tx.investmentProperties.findMany({
-    select: { accountId: true }, orderBy: { accountId: "asc" },
+    select: { accountId: true, tickerSymbol: true, market: true, account: { select: { currency: true } } },
+    orderBy: { accountId: "asc" },
   });
-  const today = localCalendarDate();
-  for (const { accountId } of holdings) {
-    const snapshot = await verifyInvestmentSnapshot(tx, accountId, today);
-    if (snapshot.status === "available") continue;
+  const valued: Array<{ accountId: string; currency: string }> = [];
+  for (const { accountId, tickerSymbol, market, account: { currency } } of holdings) {
+    const snapshot = await verifyInvestmentSnapshot(tx, accountId, date);
+    if (snapshot.status === "available") {
+      if (snapshot.quantity === 0) continue;
+      const { quoteCurrencyIssue } = await securityQuoteCurrency(tx, tickerSymbol, market, currency);
+      const quote = market && !quoteCurrencyIssue ? await securityMarketData.latest({ ticker: tickerSymbol, market }, date, tx) : null;
+      if (!quote) findings.push({
+        severity: "warning", code: "valuation-price", accountId, date,
+        message: `${tickerSymbol}${market ? ` (${market})` : ""} · ${quoteCurrencyIssue ?? "No completed raw price on or before the valuation date"}`,
+      });
+      else if (quote.price !== 0) valued.push({ accountId, currency });
+      continue;
+    }
     if (snapshot.reason === "legacy_history") findings.push({
       severity: "warning", code: "investment-legacy", accountId,
       message: "A reviewed investment baseline is needed to verify this holding's history",
@@ -108,10 +123,47 @@ async function verifyHoldings(tx: Prisma.TransactionClient, findings: BookFindin
       message: "Investment activity, lots, position or linked journal postings disagree",
     });
   }
+  return valued;
+}
+
+async function verifyValuationFx(tx: Prisma.TransactionClient, findings: BookFinding[], date: string,
+  valued: Array<{ accountId: string; currency: string }>) {
+  const base = await appSettingsService.getBaseCurrency(tx);
+  if (!base) return;
+  const accounts = await tx.account.findMany({
+    where: { type: AccountType.User, currency: { not: base }, investmentProperties: null },
+    select: { id: true, currency: true }, orderBy: { id: "asc" },
+  });
+  const balances = await tx.journalLine.groupBy({
+    by: ["accountId"], _sum: { amount: true },
+    where: { account: { type: AccountType.User, currency: { not: base }, investmentProperties: null }, entry: { date: { lte: date } } },
+  });
+  const nonzero = new Set(balances.filter(({ _sum }) => Math.round((_sum.amount ?? 0) * 100) !== 0).map(({ accountId }) => accountId));
+  const exposures = [...valued, ...accounts.filter(({ id }) => nonzero.has(id)).map(({ id, currency }) => ({ accountId: id, currency }))];
+  const rates = () => tx.fxDailyRate.findMany({ orderBy: { marketDate: "asc" },
+    select: { sourceCurrency: true, targetCurrency: true, marketDate: true, rate: true } });
+  let readRates: ReturnType<typeof rates> | undefined;
+  const conversion = createValuationConversionService({ findFxRates: () => readRates ??= rates() });
+  const checked = new Map<string, ConversionResult["source"]>();
+  for (const { accountId, currency } of exposures) {
+    if (currency === base) continue;
+    let source = checked.get(currency);
+    if (!source) {
+      source = /^[A-Z]{3}$/.test(currency)
+        ? (await conversion.convertAmount({ amount: 1, sourceCurrency: currency, targetCurrency: base, asOfDate: date })).source
+        : "unavailable";
+      checked.set(currency, source);
+    }
+    if (source !== "as_of") findings.push({
+      severity: "warning", code: "valuation-fx", accountId, date,
+      message: `${currency} → ${base} · ${source === "latest_fallback" ? "Only a later FX rate is available" : "No valuation FX rate is available"}`,
+    });
+  }
 }
 
 /** Verify persisted accounting records in a consistent read transaction using today's cent policy. */
-export async function verifyBook(): Promise<BookVerificationReport> {
+export async function verifyBook(asOfDate?: string): Promise<BookVerificationReport> {
+  const date = resolveValuationDate(asOfDate);
   return databaseService.prismaClient.$transaction(async (tx) => {
     const findings: BookFinding[] = [];
     const pageSize = 500;
@@ -128,7 +180,8 @@ export async function verifyBook(): Promise<BookVerificationReport> {
       after = entries[entries.length - 1].id;
     }
     await verifyCheckpoints(tx, findings);
-    await verifyHoldings(tx, findings);
+    const valued = await verifyHoldings(tx, findings, date);
+    await verifyValuationFx(tx, findings, date, valued);
     return { findings };
   }, { timeout: 30000 });
 }

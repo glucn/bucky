@@ -19,9 +19,9 @@ function point(row: { marketDate: string; close: number; source: string }): Cano
 
 /** SecurityDailyPrice is the only price source. Never infer a market or fall back to ticker-only history. */
 export const securityMarketData = {
-  async latest(identity: SecurityIdentity, asOfDate?: string): Promise<CanonicalSecurityPrice | null> {
+  async latest(identity: SecurityIdentity, asOfDate?: string, tx: Prisma.TransactionClient = databaseService.prismaClient): Promise<CanonicalSecurityPrice | null> {
     const key = parseSecurityIdentity(identity), cutoff = resolveValuationDate(asOfDate);
-    const row = await databaseService.prismaClient.securityDailyPrice.findFirst({
+    const row = await tx.securityDailyPrice.findFirst({
       where: { ...key, priceBasis: "raw", barStatus: "complete", marketDate: { lte: cutoff } }, orderBy: { marketDate: "desc" },
     });
     return row ? point(row) : null;

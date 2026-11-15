@@ -8,7 +8,7 @@ import { investmentService } from "./investmentService";
 const db = () => databaseService.prismaClient;
 beforeEach(async () => { await resetTestDatabase(); });
 
-async function fixture() {
+async function fixture(date = "2026-11-01") {
   const [cad, usd, category, equity] = await Promise.all([
     db().account.create({ data: { name: "Checker CAD", currency: "CAD", type: AccountType.User } }),
     db().account.create({ data: { name: "Checker USD", currency: "USD", type: AccountType.User } }),
@@ -16,7 +16,7 @@ async function fixture() {
     db().account.create({ data: { name: "Checker equity", currency: "USD", type: AccountType.System } }),
   ]);
   const entry = (lines: Array<{ accountId: string; amount: number; currency: string; exchangeRate?: number }>, type?: string) =>
-    db().journalEntry.create({ data: { date: "2026-11-01", type, lines: { create: lines } }, include: { lines: true } });
+    db().journalEntry.create({ data: { date, type, lines: { create: lines } }, include: { lines: true } });
   return { cad, usd, category, equity, entry };
 }
 
@@ -74,11 +74,45 @@ it("checks retained investment activity and distinguishes legacy history from in
     date: "2026-01-01", quantity: 10, pricePerShare: 10 });
   await db().investmentProperties.update({ where: { accountId: legacy.id }, data: { hasCompleteActivityHistory: false } });
   const historyGap = expect.objectContaining({ code: "investment-legacy", accountId: legacy.id, severity: "warning" });
-  expect((await verifyBook()).findings).toEqual([historyGap]);
+  expect((await verifyBook()).findings).toEqual(expect.arrayContaining([historyGap]));
 
   await db().investmentProperties.update({ where: { accountId: holding.id }, data: { lots: "[]" } });
   expect((await verifyBook()).findings).toEqual(expect.arrayContaining([
     historyGap,
     expect.objectContaining({ code: "investment-inconsistent", accountId: holding.id, severity: "error" }),
   ]));
+});
+
+it("uses completed raw prices for the exact listing and dated FX for current exposures", async () => {
+  const date = "2026-02-10";
+  await db().appSetting.upsert({ where: { key: "baseCurrency" },
+    create: { key: "baseCurrency", jsonValue: '"CAD"' }, update: { jsonValue: '"CAD"' } });
+  const portfolio = await investmentService.createInvestmentPortfolio("Coverage", "USD");
+  const holding = await investmentService.createMarketHolding({
+    portfolioId: portfolio.group.id, tickerSymbol: "ABC", market: "NASDAQ", quoteCurrency: "USD",
+    tradeCashAccountId: portfolio.tradeCashAccount.id, costBasisMethod: "FIFO",
+  });
+  await investmentService.recordBuy({ portfolioId: portfolio.group.id, securityAccountId: holding.id,
+    tickerSymbol: "ABC", date: "2026-02-01", quantity: 10, pricePerShare: 10 });
+  const { cad, usd, entry } = await fixture(date);
+  await entry([{ accountId: usd.id, amount: -12, currency: "USD", exchangeRate: 1.25 },
+    { accountId: cad.id, amount: 15, currency: "CAD", exchangeRate: 1.25 }], "currency_transfer");
+  await db().securityPriceHistory.create({ data: { tickerSymbol: "ABC", date, price: 30 } });
+  const price = { ticker: "ABC", market: "NASDAQ", marketDate: date, close: 20, priceBasis: "raw", barStatus: "complete" };
+  await db().securityDailyPrice.createMany({ data: [
+    { ...price, market: "TSX" }, { ...price, priceBasis: "split_adjusted" },
+    { ...price, marketDate: "2026-02-11" },
+  ] });
+  const priceGap = expect.objectContaining({ code: "valuation-price", accountId: holding.id, severity: "warning" });
+  const fxGap = expect.objectContaining({ code: "valuation-fx", accountId: usd.id, severity: "warning" });
+  expect((await verifyBook(date)).findings).toEqual(expect.arrayContaining([priceGap, fxGap]));
+  const rate = { sourceCurrency: "CAD", targetCurrency: "USD", marketDate: "2026-02-11", rate: 0.8 };
+  await db().fxDailyRate.create({ data: rate });
+  expect((await verifyBook(date)).findings).toEqual(expect.arrayContaining([priceGap, fxGap]));
+
+  await db().securityPriceHistory.deleteMany();
+  await db().securityDailyPrice.update({ where: { ticker_market_marketDate: { ticker: "ABC", market: "NASDAQ", marketDate: date } },
+    data: { priceBasis: "raw" } });
+  await db().fxDailyRate.create({ data: { ...rate, marketDate: date } });
+  expect(await verifyBook(date)).toEqual({ findings: [] });
 });
