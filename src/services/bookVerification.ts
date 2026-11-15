@@ -5,7 +5,7 @@ import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
-import { journalAmountFromCents, sumJournalCents, toJournalCents } from "./journalPrecision";
+import { journalAmountFromCents, readCheckpointCents, sumJournalCents, toJournalCents } from "./journalPrecision";
 import { securityMarketData } from "./securityMarketData";
 import { securityQuoteCurrency } from "./securityQuoteCurrency";
 import { createValuationConversionService, type ConversionResult } from "./valuationConversionService";
@@ -40,28 +40,32 @@ function validExchange(entry: Entry): boolean {
 async function verifyCheckpoints(tx: Prisma.TransactionClient, findings: BookFinding[]) {
   const checkpoints = await tx.checkpoint.findMany({
     orderBy: [{ date: "asc" }, { id: "asc" }],
-    select: { id: true, date: true, accountId: true, balance: true, account: { select: { currency: true } } },
+    select: { id: true, date: true, accountId: true, balance: true, balanceCents: true, account: { select: { currency: true } } },
   });
-  for (const { id, date, accountId, balance, account } of checkpoints) {
+  for (const checkpoint of checkpoints) {
+    const { id, date, accountId, account } = checkpoint;
+    if (checkpoint.balanceCents === null) findings.push({
+      severity: "warning", code: "checkpoint-legacy-precision", checkpointId: id, accountId, date,
+      message: "The original checkpoint balance needs review before it can be stored in exact cents",
+    });
     // Include the recorded adjustment and other postings through the end of the checkpoint date.
     // The projected account balance takes this checkpoint as an input, so it cannot verify it.
     const lines = await tx.journalLine.findMany({
       where: { accountId, currency: account.currency, entry: { date: { lte: date } } },
       select: { amount: true },
     });
-    let actual: number;
     try {
-      actual = journalAmountFromCents(sumJournalCents(lines));
+      const expected = readCheckpointCents(checkpoint);
+      const actual = sumJournalCents(lines);
+      if (actual !== expected) findings.push({
+        severity: "error", code: "checkpoint-balance", checkpointId: id, accountId, date,
+        expected: journalAmountFromCents(expected), actual: journalAmountFromCents(actual), currency: account.currency,
+        message: "The journal balance through the checkpoint date differs from the recorded balance",
+      });
     } catch {
       findings.push({ severity: "error", code: "checkpoint-precision", checkpointId: id, accountId, date,
-        message: "The checkpoint's journal balance exceeds the supported cent range" });
-      continue;
+        message: "The checkpoint assertion or its journal balance falls outside the supported cent range" });
     }
-    if (actual !== balance) findings.push({
-      severity: "error", code: "checkpoint-balance", checkpointId: id, accountId, date,
-      expected: balance, actual, currency: account.currency,
-      message: "The journal balance through the checkpoint date differs from the recorded balance",
-    });
   }
 }
 

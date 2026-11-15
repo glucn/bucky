@@ -148,6 +148,7 @@ model Checkpoint {
   accountId     String
   date          String
   balance       Float    // The target balance for the account
+  balanceCents  String?  // Canonical signed integer cents; null for legacy values awaiting review
   description   String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

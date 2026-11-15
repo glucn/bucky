@@ -45,3 +45,15 @@ export function roundJournalAmount(value: number): number {
 export function sumJournalCents(postings: ReadonlyArray<{ amount: number }>): bigint {
   return postings.reduce((total, posting) => total + BigInt(toJournalCents(posting.amount)), 0n);
 }
+
+export function readCheckpointCents(checkpoint: { balance: number; balanceCents: string | null }): bigint {
+  if (checkpoint.balanceCents === null) return BigInt(toJournalCents(checkpoint.balance));
+  if (!/^(?:0|-?[1-9][0-9]{0,15})$/.test(checkpoint.balanceCents)) throw precisionError();
+  const cents = BigInt(checkpoint.balanceCents);
+  if (cents < -maxCents || cents > maxCents) throw precisionError();
+  return cents;
+}
+
+export function checkpointBalance(checkpoint: { balance: number; balanceCents: string | null }): number {
+  return checkpoint.balanceCents === null ? checkpoint.balance : journalAmountFromCents(readCheckpointCents(checkpoint));
+}

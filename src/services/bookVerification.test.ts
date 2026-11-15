@@ -77,6 +77,27 @@ it("preserves a cent between large offsetting postings when creating and verifyi
   expect(await verifyBook("2026-02-01")).toEqual({ findings: [] });
 });
 
+it("uses persisted exact checkpoint cents and calls out a legacy checkpoint awaiting review", async () => {
+  const { cad } = await fixture();
+  const { checkpoint } = await databaseService.createCheckpoint({ accountId: cad.id, date: "2026-11-01", balance: 10.01 });
+  expect(checkpoint.balanceCents).toBe("1001");
+  await db().checkpoint.update({ where: { id: checkpoint.id }, data: { balance: 99 } });
+  expect(await databaseService.getAccountBalanceAtDate(cad.id, "2026-11-01")).toBe(10.01);
+  expect((await databaseService.getLatestCheckpointForAccount(cad.id))?.balance).toBe(10.01);
+  expect(await verifyBook()).toEqual({ findings: [] });
+  const legacy = await db().checkpoint.create({ data: { accountId: cad.id, date: "2026-11-02", balance: 10.011 } });
+  expect((await verifyBook()).findings).toContainEqual(expect.objectContaining({
+    severity: "warning", code: "checkpoint-legacy-precision", checkpointId: legacy.id,
+  }));
+});
+
+it("requires review before replacing a checkpoint with ambiguous legacy precision", async () => {
+  const { cad } = await fixture();
+  const legacy = await db().checkpoint.create({ data: { accountId: cad.id, date: "2026-11-02", balance: 10.011 } });
+  await expect(databaseService.reconcileCheckpoint(legacy.id)).rejects.toThrow(/review.*statement/i);
+  expect(await db().checkpoint.findUnique({ where: { id: legacy.id } })).toEqual(legacy);
+});
+
 it("checks retained investment activity and distinguishes legacy history from inconsistent lots", async () => {
   const portfolio = await investmentService.createInvestmentPortfolio("Verifier portfolio", "CAD");
   const holding = await investmentService.createSecurityAccount(portfolio.group.id, "ABC");

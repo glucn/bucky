@@ -60,6 +60,10 @@ describe("Personal database lifecycle", () => {
     await initializePersonalDatabase(filename, partial);
     await sql(`INSERT INTO Account (id,name,type,subtype,currency,updatedAt)
       VALUES ('keep','Keep through upgrade','user','asset','CAD',CURRENT_TIMESTAMP)`);
+    await sql(`INSERT INTO Checkpoint (id,accountId,date,balance,updatedAt) VALUES
+      ('whole-cents','keep','2026-01-02',-12.34,CURRENT_TIMESTAMP),
+      ('sub-cent','keep','2026-01-03',12.345,CURRENT_TIMESTAMP),
+      ('large','keep','2026-01-04',80000000000000.06,CURRENT_TIMESTAMP)`);
     await sql(`INSERT INTO InvestmentProperties (id,accountId,tickerSymbol,quantity,costBasisMethod,lots,updatedAt)
       VALUES ('legacy-holding','keep','ABC',3,'FIFO','[]',CURRENT_TIMESTAMP)`);
     await sql(`INSERT INTO SecurityPriceHistory (id,tickerSymbol,date,price,source) VALUES ('legacy-price','ABC','2026-01-02',999,'manual')`);
@@ -70,6 +74,12 @@ describe("Personal database lifecycle", () => {
     const result = await initializePersonalDatabase(filename, migrations);
     expect(await sql("SELECT count(*) AS count FROM InvestmentCorrection")).toEqual([{ count: 0 }]);
     expect(result.backupPath).toBeTruthy();
+    expect(await sql("SELECT id,balance,balanceCents FROM Checkpoint ORDER BY id")).toEqual([
+      { id: "large", balance: 80000000000000.06, balanceCents: null },
+      { id: "sub-cent", balance: 12.345, balanceCents: null },
+      { id: "whole-cents", balance: -12.34, balanceCents: "-1234" },
+    ]);
+    expect(await sql("SELECT balance FROM Checkpoint WHERE id='sub-cent'", result.backupPath!)).toEqual([{ balance: 12.345 }]);
     expect(await sql("SELECT name FROM Account WHERE id='keep'"))
       .toEqual([{ name: "Keep through upgrade" }]);
     expect(await sql("SELECT name FROM Account WHERE id='keep'", result.backupPath!))

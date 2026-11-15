@@ -8,7 +8,7 @@ import {
 import { localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
 import { autoCategorizationService } from "./autoCategorizationService";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
-import { journalAmountFromCents, roundJournalAmount, sumJournalCents, toJournalCents } from "./journalPrecision";
+import { checkpointBalance, journalAmountFromCents, readCheckpointCents, roundJournalAmount, sumJournalCents, toJournalCents } from "./journalPrecision";
 import { resolveDatabaseFile } from "./localDatabase";
 import { createEncryptedPrisma, initializeEncryptedDatabase } from "./encryptedDatabase";
 import { PrismaSession } from "./prismaSession";
@@ -2265,12 +2265,14 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     }
 
     // 2. Create the checkpoint record
-    const balance = roundJournalAmount(data.balance);
+    const balanceCents = BigInt(toJournalCents(data.balance));
+    const balance = journalAmountFromCents(balanceCents);
     const checkpoint = await tx.checkpoint.create({
       data: {
         accountId: data.accountId,
         date: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10),
         balance,
+        balanceCents: balanceCents.toString(),
         description: data.description,
       },
     });
@@ -2306,7 +2308,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     });
 
     const adjustmentAmount = journalAmountFromCents(
-      BigInt(toJournalCents(balance)) - sumJournalCents(linesBeforeCheckpoint)
+      balanceCents - sumJournalCents(linesBeforeCheckpoint)
     );
 
     const linesData = [];
@@ -2351,11 +2353,12 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     tx?: TransactionClient
   ) {
     const prisma = tx || this.prisma;
-    return prisma.checkpoint.findMany({
+    const checkpoints = await prisma.checkpoint.findMany({
       where: { accountId },
       orderBy: { date: "desc" },
       include: { account: true },
     });
+    return checkpoints.map((checkpoint) => ({ ...checkpoint, balance: checkpointBalance(checkpoint) }));
   }
 
   /**
@@ -2366,11 +2369,12 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     tx?: TransactionClient
   ) {
     const prisma = tx || this.prisma;
-    return prisma.checkpoint.findFirst({
+    const checkpoint = await prisma.checkpoint.findFirst({
       where: { accountId },
       orderBy: { date: "desc" },
       include: { account: true },
     });
+    return checkpoint && { ...checkpoint, balance: checkpointBalance(checkpoint) };
   }
 
   /**
@@ -2466,7 +2470,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       where: { accountId, entry: { date: { gt: checkpoint?.date, lte: cutoff } } },
       select: { amount: true },
     });
-    const opening = checkpoint ? BigInt(toJournalCents(checkpoint.balance)) : 0n;
+    const opening = checkpoint ? readCheckpointCents(checkpoint) : 0n;
     return journalAmountFromCents(opening + sumJournalCents(lines));
   }
 
@@ -2537,6 +2541,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       where: { id: checkpointId },
     });
     if (!checkpoint) throw new Error("Checkpoint not found");
+    if (checkpoint.balanceCents === null) throw new Error("Review the original statement before replacing this checkpoint");
     console.log("Found checkpoint:", checkpoint);
 
     // --- Multi-currency reconciliation validation ---
@@ -2592,7 +2597,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     // --- End multi-currency validation ---
 
     // Store the original balance before deleting
-    const originalBalance = checkpoint.balance;
+    const originalBalance = checkpointBalance(checkpoint);
     const originalDescription = checkpoint.description;
 
     await this.deleteCheckpoint(checkpointId, tx);

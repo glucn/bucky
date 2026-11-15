@@ -9,6 +9,21 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 61 — Persist exact checkpoint cents
+
+- Checkpoints now store canonical signed integer cents as text. Balance calculations
+  and checkpoint verification use this value. The numeric mirror remains for the
+  current service and renderer contracts.
+- The upgrade backfills only values within the conservative Float range that
+  round-trip through whole cents. Sub-cent and large legacy values are retained.
+  **Verify books** identifies those records, and reconciliation asks for statement
+  review before replacing them.
+- Upgrade tests exercise populated native and encrypted books and confirm that the
+  pre-upgrade snapshots retain the original balances. Journal postings and other
+  financial fields still need exact storage and migration.
+- Verification covered 1,217 native tests, 28 targeted encrypted tests, TypeScript,
+  Apple Silicon packaging, and three packaged funding and recovery tests.
+
 ### Batch 60 — Compare portfolio cash in exact cents
 
 - Portfolio withdrawals and dated valuations now compare the checkpoint-derived balance
