@@ -63,8 +63,8 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
           return taken === lot.quantity ? [] : [{ ...lot, quantity: lot.quantity - taken, amount: (oldCost - releasedCost) / 100 }];
         });
       } else {
-        const balance = await tx.journalLine.aggregate({ where: { accountId: security.id }, _sum: { amount: true } });
-        const oldCost = cents(balance._sum.amount ?? 0);
+        const oldCost = Number(history.basisCents);
+        if (!Number.isSafeInteger(oldCost)) throw new Error("Cost basis exceeds supported precision");
         if (oldCost < 0) throw new Error("Account has negative cost basis");
         basis = input.quantity === props.quantity ? oldCost : Math.round(oldCost * (input.quantity / props.quantity));
       }

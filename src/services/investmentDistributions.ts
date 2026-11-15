@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
-import { cents, readLots, resolveInvestmentAccounts, investmentTransaction, type InvestmentSelection, type Lot } from "./investmentPosting";
+import { cents, readInvestmentBasisCents, readLots, resolveInvestmentAccounts, investmentTransaction, type InvestmentSelection, type Lot } from "./investmentPosting";
 
 export type DividendInput = InvestmentSelection & { amount: number; date: string; isReturnOfCapital?: boolean; description?: string };
 export type ReinvestmentInput = InvestmentSelection & { dividendAmount: number; reinvestmentPrice: number; date: string; recordAsIncome: boolean; description?: string };
@@ -52,10 +52,9 @@ function reduceLots(lots: Lot[], reduction: number): Lot[] {
   return lots.map((lot, index) => ({ ...lot, amount: (costs[index] - portions[index].reduction) / 100 }));
 }
 async function reducedBasis(tx: Prisma.TransactionClient, accountId: string, lots: Lot[] | null, amount: number) {
-  const balance = await tx.journalLine.aggregate({ where: { accountId }, _sum: { amount: true } });
-  const basis = cents(balance._sum.amount ?? 0);
-  if (basis < amount) throw new Error("Return of capital exceeds available cost basis; classify excess explicitly");
-  if (lots && lots.reduce((sum, lot) => sum + cents(lot.amount), 0) !== basis) throw new Error("FIFO lot basis does not match journal basis");
+  const basis = await readInvestmentBasisCents(tx, accountId);
+  if (basis < BigInt(amount)) throw new Error("Return of capital exceeds available cost basis; classify excess explicitly");
+  if (lots && lots.reduce((sum, lot) => sum + BigInt(cents(lot.amount)), 0n) !== basis) throw new Error("FIFO lot basis does not match journal basis");
   return lots ? reduceLots(lots, amount) : null;
 }
 function journal(tx: Prisma.TransactionClient, date: string, description: string, type: string, currency: string,

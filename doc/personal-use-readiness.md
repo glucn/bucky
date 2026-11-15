@@ -9,6 +9,15 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 64 — Use exact posting cents for investment basis and replay
+
+- Position verification, baseline review, trades, return-of-capital calculations,
+  and replay use the retained journal cents for basis and posting checks. Reinvestment
+  replay reads its original cash amount from the retained posting.
+- Verification covered 99 native tests, 28 encrypted tests, and TypeScript. Investment
+  activity quantities, prices, and lot and basis fields still require their own
+  storage and arithmetic migration.
+
 ### Batch 63 — Read exact postings in dashboard and spending reports
 
 - Net worth sums stored posting cents before converting currencies. Dashboard trends,

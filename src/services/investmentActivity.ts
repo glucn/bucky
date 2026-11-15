@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { databaseService } from "./database";
-import { cents, investmentTransaction, readLots, type Lot } from "./investmentPosting";
+import { cents, investmentTransaction, readInvestmentBasisCents, readLots, type Lot } from "./investmentPosting";
+import { journalAmountFromCents, sumJournalCents } from "./journalPrecision";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { isValidStandardDate, localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
 import { securityQuoteCurrency } from "./securityQuoteCurrency";
@@ -24,8 +25,8 @@ function validLots(method: string, quantity: number, basis: number, lots: string
 }
 
 function baselineBasis(activity: Activity, preceding: Activity[]) {
-  return [...preceding, activity].flatMap((row) => row.journalLinks.flatMap(({ entry }) => entry.lines))
-    .filter((line) => line.accountId === activity.accountId).reduce((sum, line) => sum + cents(line.amount), 0);
+  const postings = [...preceding, activity].flatMap((row) => row.journalLinks.flatMap(({ entry }) => entry.lines));
+  return sumJournalCents(postings.filter((line) => line.accountId === activity.accountId));
 }
 
 function validActivity(row: Activity): boolean {
@@ -47,13 +48,13 @@ function validActivity(row: Activity): boolean {
   } else if (row.costBasisMethod !== "AVERAGE_COST" || row.lotsAfter !== null) return false;
   const expectedEntries = ["income_reinvestment", "capital_reinvestment"].includes(row.kind) ? 2 : 1;
   if (row.journalLinks.length !== expectedEntries) return false;
-  let securityDelta = 0;
+  let securityDelta = 0n;
   for (const { entry } of row.journalLinks) {
     if (entry.date !== row.date || entry.lines.some((line) => line.currency !== row.currency)) return false;
-    if (entry.lines.reduce((sum, line) => sum + cents(line.amount), 0) !== 0) return false;
-    securityDelta += entry.lines.filter((line) => line.accountId === row.accountId).reduce((sum, line) => sum + cents(line.amount), 0);
+    if (sumJournalCents(entry.lines) !== 0n) return false;
+    securityDelta += sumJournalCents(entry.lines.filter((line) => line.accountId === row.accountId));
   }
-  return securityDelta === cents(row.basisAfter) - cents(row.basisBefore);
+  return securityDelta === BigInt(cents(row.basisAfter)) - BigInt(cents(row.basisBefore));
 }
 
 export async function verifyInvestmentSnapshot(tx: Prisma.TransactionClient, accountId: string, date: string): Promise<InvestmentSnapshot> {
@@ -86,16 +87,16 @@ export async function verifyInvestmentSnapshot(tx: Prisma.TransactionClient, acc
           !validLots(row.costBasisMethod, row.quantityAfter, row.basisAfter, row.lotsAfter, row.date) ||
           row.journalLinks.some(({ entry }) => !isValidStandardDate(entry.date) || entry.date > row.date ||
             !entry.lines.some((line) => line.accountId === accountId) || entry.lines.some((line) => line.currency !== row.currency) ||
-            entry.lines.reduce((sum, line) => sum + cents(line.amount), 0) !== 0) ||
-          baselineBasis(row, activities.slice(0, index)) !== cents(row.basisAfter)) return unavailable;
+            sumJournalCents(entry.lines) !== 0n) ||
+          baselineBasis(row, activities.slice(0, index)) !== BigInt(cents(row.basisAfter))) return unavailable;
       } else if (!close(row.quantityBefore, quantity) || cents(row.basisBefore) !== cents(basis) || !validActivity(row)) return unavailable;
       quantity = row.quantityAfter; basis = row.basisAfter; lots = row.lotsAfter; previousDate = row.date;
       if (index >= baselineIndex && row.date <= date) selected = { status: "available", quantity, costBasis: basis, lots };
     }
     const linkedIds = activities.flatMap((row) => row.journalLinks.map((link) => link.entryId));
     const untracked = await tx.journalLine.count({ where: { accountId, entryId: { notIn: linkedIds } } });
-    const actualBasis = (await tx.journalLine.aggregate({ where: { accountId }, _sum: { amount: true } }))._sum.amount ?? 0;
-    if (untracked || !close(props.quantity, quantity) || cents(actualBasis) !== cents(basis) || props.lots !== lots) return unavailable;
+    const actualBasis = await readInvestmentBasisCents(tx, accountId);
+    if (untracked || !close(props.quantity, quantity) || actualBasis !== BigInt(cents(basis)) || props.lots !== lots) return unavailable;
     return selected;
   } catch { return unavailable; }
 }
@@ -107,7 +108,7 @@ export async function getInvestmentBaselineReview(accountId: string) {
     const account = await tx.account.findUnique({ where: { id: accountId }, include: { investmentProperties: true } });
     const props = account?.investmentProperties;
     if (!account || !props || props.hasCompleteActivityHistory || account.isArchived) throw new Error("This holding does not need a legacy baseline");
-    const lines = await tx.journalLine.findMany({ where: { accountId }, select: { amount: true, entry: { select: { date: true } } } });
+    const lines = await tx.journalLine.findMany({ where: { accountId }, select: { amount: true, amountCents: true, entry: { select: { date: true } } } });
     const recent = await tx.investmentActivity.findFirst({ where: { accountId }, orderBy: { date: "desc" }, select: { date: true } });
     const earliestDate = lines.reduce((max, { entry }) => entry.date > max ? entry.date : max, recent?.date ?? "");
     let lots: Lot[] | null = null;
@@ -115,7 +116,7 @@ export async function getInvestmentBaselineReview(accountId: string) {
       try { lots = readLots(props.lots, props.quantity); } catch { /* Require review from statements if retained lots cannot be read. */ }
     }
     return { accountId, ticker: props.tickerSymbol, currency: account.currency, quantity: props.quantity,
-      costBasis: lines.reduce((sum, line) => sum + cents(line.amount), 0) / 100, earliestDate, method: props.costBasisMethod, lots };
+      costBasis: journalAmountFromCents(sumJournalCents(lines)), earliestDate, method: props.costBasisMethod, lots };
   });
 }
 
@@ -133,8 +134,7 @@ export async function confirmInvestmentBaseline(input: InvestmentBaselineReview)
     if (account.currency !== input.currency) throw new Error("Holding currency changed; review again");
     if (props.quantity !== input.quantity) throw new Error("Reviewed quantity differs from the retained position");
     const lines = await tx.journalLine.findMany({ where: { accountId: account.id }, include: { entry: true } });
-    const basis = lines.reduce((sum, line) => sum + cents(line.amount), 0);
-    if (basis !== cents(input.costBasis)) throw new Error("Reviewed cost basis does not match the holding journal");
+    if (sumJournalCents(lines) !== BigInt(cents(input.costBasis))) throw new Error("Reviewed cost basis does not match the holding journal");
     if (lines.some((line) => line.currency !== account.currency || !isValidStandardDate(line.entry.date) || line.entry.date > input.date)) throw new Error("Cutover date or journal currency conflicts with retained postings");
     const last = await tx.investmentActivity.findFirst({ where: { accountId: account.id }, orderBy: { sequence: "desc" } });
     if (last && last.date > input.date) throw new Error("Cutover date precedes retained investment activity");
@@ -176,24 +176,24 @@ export async function beginInvestmentActivity(tx: Prisma.TransactionClient, acco
   const last = await tx.investmentActivity.findFirst({ where: { accountId }, orderBy: { sequence: "desc" } });
   if (last?.kind === "baseline" && date === last.date) throw new Error("Post new activity after the reviewed closing date; activity on the cutover date requires review");
   if (last && date < last.date) throw new InvestmentReplayRequiredError("Backdated investment posting requires dated replay of subsequent activity");
-  const basis = (await tx.journalLine.aggregate({ where: { accountId }, _sum: { amount: true } }))._sum.amount ?? 0;
+  const basisCents = await readInvestmentBasisCents(tx, accountId);
   if (props.hasCompleteActivityHistory) {
     const verified = await verifyInvestmentSnapshot(tx, accountId, "9999-12-31");
     if (verified.status !== "available") throw new Error("Investment activity is inconsistent; review the position before posting");
-  } else if (last && (!close(last.quantityAfter, props.quantity) || cents(last.basisAfter) !== cents(basis))) {
+  } else if (last && (!close(last.quantityAfter, props.quantity) || BigInt(cents(last.basisAfter)) !== basisCents)) {
     throw new Error("Investment activity is inconsistent; review the position before posting");
   }
-  return { account, props, date, basis, sequence: (last?.sequence ?? 0) + 1 };
+  return { account, props, date, basisCents, sequence: (last?.sequence ?? 0) + 1 };
 }
 
 export async function finishInvestmentActivity(tx: Prisma.TransactionClient, before: Awaited<ReturnType<typeof beginInvestmentActivity>>,
   details: Details, entryIds: string[]) {
   const props = await tx.investmentProperties.findUniqueOrThrow({ where: { accountId: before.account.id } });
-  const basis = (await tx.journalLine.aggregate({ where: { accountId: before.account.id }, _sum: { amount: true } }))._sum.amount ?? 0;
+  const basis = await readInvestmentBasisCents(tx, before.account.id);
   const activity = await tx.investmentActivity.create({ data: {
     accountId: before.account.id, sequence: before.sequence, date: before.date, ...details,
     ticker: before.props.tickerSymbol, market: before.props.market, currency: before.account.currency, costBasisMethod: before.props.costBasisMethod,
-    quantityBefore: before.props.quantity, quantityAfter: props.quantity, basisBefore: cents(before.basis) / 100, basisAfter: cents(basis) / 100,
+    quantityBefore: before.props.quantity, quantityAfter: props.quantity, basisBefore: journalAmountFromCents(before.basisCents), basisAfter: journalAmountFromCents(basis),
     lotsAfter: props.lots, journalLinks: { create: entryIds.map((entryId) => ({ entryId })) },
   } });
   if (props.hasCompleteActivityHistory && (await verifyInvestmentSnapshot(tx, before.account.id, "9999-12-31")).status !== "available") {

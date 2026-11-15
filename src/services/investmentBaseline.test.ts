@@ -57,7 +57,7 @@ it("accepts existing tracked suffix activity before the cutover and refuses a se
 it("validates the retained journal and rolls back the cutover if its counterposting does not balance", async () => {
   const { holding, lots } = await legacy();
   const line = await databaseService.prismaClient.journalLine.findFirstOrThrow({ where: { accountId: { not: holding.id } } });
-  await databaseService.prismaClient.journalLine.update({ where: { id: line.id }, data: { amount: -99 } });
+  await databaseService.prismaClient.journalLine.update({ where: { id: line.id }, data: { amount: -99, amountCents: "-9900" } });
   await expect(confirm(reviewed(holding.id, lots))).rejects.toThrow(/cutover verification/i);
   expect(await databaseService.prismaClient.investmentActivity.count({ where: { accountId: holding.id } })).toBe(0);
   expect(await history.getInvestmentSnapshot(holding.id, "2026-01-03")).toEqual({ status: "unavailable", reason: "legacy_history" });

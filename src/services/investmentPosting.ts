@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
 import { databaseService } from "./database";
+import { sumJournalCents } from "./journalPrecision";
 import { hasPortfolioIdentity, isSettlementCash } from "../shared/investmentAccounts";
 
 export function investmentTransaction<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>, tx?: Prisma.TransactionClient): Promise<T> {
@@ -17,6 +18,11 @@ export function cents(value: number): number {
   const result = Math.round(value * 100);
   if (!Number.isFinite(value) || !Number.isSafeInteger(result)) throw new Error("Trade amount exceeds supported precision");
   return result;
+}
+
+export async function readInvestmentBasisCents(tx: Prisma.TransactionClient, accountId: string): Promise<bigint> {
+  const postings = await tx.journalLine.findMany({ where: { accountId }, select: { amount: true, amountCents: true } });
+  return sumJournalCents(postings);
 }
 export function readLots(value: string | null, quantity: number): Lot[] {
   const lots: Lot[] = value ? JSON.parse(value) : [];

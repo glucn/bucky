@@ -4,6 +4,7 @@ import { AccountType } from "../shared/accountTypes";
 import { isValidStandardDate } from "../shared/dateUtils";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
 import { recordCashDividend, recordReinvestment, recordSplit } from "./investmentDistributions";
+import { readPostingAmount } from "./journalPrecision";
 import { cents, investmentTransaction } from "./investmentPosting";
 import { defaultTradeDescription, recordInvestmentTrade } from "./investmentTrades";
 import type { TradeInsertion } from "../shared/investmentReplay";
@@ -33,7 +34,8 @@ function readPosting(row: Event) {
   const description = primary.description ?? undefined;
   if (reinvested && !description?.endsWith(suffix)) throw new Error("Retained reinvestment journal needs review before replay");
   const receipt = reinvested ? entries.find(({ type }) => type === "dividend_cash") : null;
-  const dividendAmount = receipt?.lines.find((line) => line.accountId === [...cash][0])?.amount;
+  const receiptLine = receipt?.lines.find((line) => line.accountId === [...cash][0]);
+  const dividendAmount = receiptLine && readPostingAmount(receiptLine);
   if (reinvested && (!dividendAmount || dividendAmount <= 0)) throw new Error("Cannot establish original reinvestment amount");
   return { description: reinvested ? description!.slice(0, -suffix.length) : description, cashId: [...cash][0], dividendAmount };
 }

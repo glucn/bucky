@@ -24,6 +24,17 @@ async function ledger() {
     origins: await db.investmentImportOrigin.findMany(),
   };
 }
+
+it("checks investment basis and replays trades using retained posting cents", async () => {
+  const { holding, activity } = await setup();
+  await databaseService.prismaClient.journalLine.updateMany({ where: { accountId: holding.id }, data: { amount: 0 } });
+  const position = await investmentService.getPositionDetails(holding.id, "2026-01-03");
+  expect(position.costBasis).toBe(50);
+  const preview = await correction.previewInvestmentTradeCorrection({
+    activityId: activity.id, date: "2026-01-01", quantity: 10, pricePerShare: 12,
+  });
+  expect(preview.after.costBasis).toBe(60);
+});
 it("inserts a missed trade and recalculates future FIFO without a duplicate retry", async () => {
   const { holding, cash } = await setup(), before = await ledger();
   const change = { operation: "insert", kind: "buy", accountId: holding.id, tradeCashAccountId: cash.id,
