@@ -9,6 +9,20 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 52 — Read retained investment revisions from the holding
+
+- Open **Revision history** from the holding's Transaction History. The list shows saved
+  reasons and timestamps. Open an individual revision to compare original and replacement
+  units, basis, cash, realized gain, and journal postings. Insertions and voids identify
+  which side is absent.
+- The main process reads only revisions for the selected holding. The detail reader uses the
+  retained snapshots and reports unreadable records without changing either the audit trail
+  or the current book.
+- Bulk backdated statement review, exact decimals, whole-book verification, and personal
+  acceptance remain open.
+- Verification covered 1,202 native tests, 12 encrypted replay tests, TypeScript, Apple
+  Silicon packaging, and three packaged restart runs that opened all three revision types.
+
 ### Batch 51 — Review and insert a missed backdated trade
 
 - Ordinary entry still refuses to append a buy or sale out of order. Its structured response

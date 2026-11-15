@@ -125,6 +125,12 @@ it("commits the reviewed replay and retains original source journals and revisio
   expect(replacement[0].event.journalLinks[0].entry.description).toBe("Buy 10 shares of ABC @ 12");
   expect(original.map((row: { id: string }) => row.id)).toEqual(before.activities.map((row) => row.id));
   expect(original[0].journalLinks[0].entry.lines.map((line: { amount: number }) => line.amount).sort((a: number,b: number) => a-b)).toEqual([-100, 100]);
+  const { listInvestmentRevisions, readInvestmentRevision } = await import("./investmentRevisionHistory");
+  expect(await listInvestmentRevisions(holding.id, 0)).toMatchObject({ hasMore: false, revisions: [{ id: saved.revisionId, reason: revision.reason }] });
+  await expect(readInvestmentRevision("unrelated-holding", saved.revisionId)).rejects.toThrow(/not found/i);
+  const detail = await readInvestmentRevision(holding.id, saved.revisionId);
+  expect(detail).toMatchObject({ action: "Correction", changes: [{ before: { basisAfter: 100 }, after: { basisAfter: 120 } }, {}, {}] });
+  expect(await databaseService.prismaClient.investmentCorrection.findUniqueOrThrow({ where: { id: revision.id } })).toEqual(revision);
   await expect(correction.saveInvestmentTradeCorrection(change, preview.reviewToken, "Duplicate save")).rejects.toThrow();
 });
 

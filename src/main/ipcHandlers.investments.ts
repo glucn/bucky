@@ -6,11 +6,22 @@ import { bindSecurityMarket } from "../services/securityMarketBinding";
 import { appSettingsService } from "../services/appSettingsService";
 import { confirmInvestmentBaseline, getInvestmentBaselineReview, InvestmentReplayRequiredError } from "../services/investmentActivity";
 import { getInvestmentTradeCorrection, previewInvestmentTradeCorrection, saveInvestmentTradeCorrection } from "../services/investmentCorrectionPreview";
+import { listInvestmentRevisions, readInvestmentRevision } from "../services/investmentRevisionHistory";
 
 export function setupInvestmentIpcHandlers(ipcMain: IpcRegistrar) {
   ipcMain.removeHandler("get-investment-trade-correction");
   ipcMain.removeHandler("preview-investment-trade-correction");
   ipcMain.removeHandler("save-investment-trade-correction");
+  ipcMain.removeHandler("list-investment-revisions");
+  ipcMain.removeHandler("read-investment-revision");
+  ipcMain.handle("list-investment-revisions", async (_, input) => {
+    try { return { success: true, ...await listInvestmentRevisions(input.accountId, input.page) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to list revisions" }; }
+  });
+  ipcMain.handle("read-investment-revision", async (_, input) => {
+    try { return { success: true, revision: await readInvestmentRevision(input.accountId, input.revisionId) }; }
+    catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to read revision" }; }
+  });
   ipcMain.handle("get-investment-trade-correction", async (_, input) => {
     try { return { success: true, trade: await getInvestmentTradeCorrection(input.accountId, input.entryId) }; }
     catch (error) { return { success: false, error: error instanceof Error ? error.message : "Unable to load trade" }; }

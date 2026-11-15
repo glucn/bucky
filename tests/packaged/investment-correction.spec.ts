@@ -72,6 +72,19 @@ test("reviewed trade correction updates later gains and retains the original jou
     await expect(insertion).toHaveCount(0);
     await app.stop(); page = await app.launch(); await unlock(page);
     expect(await invoke("get-position-details", { accountId, asOfDate: "2026-01-04" })).toMatchObject({ success: true, position: { quantity: 12, costBasis: 130 } });
+    await page.evaluate(({ portfolioId, accountId }) => { window.location.hash = `/investments/${portfolioId}/holding/${accountId}`; }, { portfolioId, accountId });
+    await page.getByRole("button", { name: "Revision history", exact: true }).click();
+    const history = page.getByRole("dialog", { name: "Investment revision history" });
+    await history.getByRole("button", { name: /Missed year-end purchase/ }).click();
+    await expect(history).toContainText("No original — inserted");
+    await history.getByRole("button", { name: "Back to revisions" }).click();
+    await history.getByRole("button", { name: /Broker reversed the sale/ }).click();
+    await expect(history).toContainText("No replacement — voided");
+    await expect(history).toContainText("Realized gain CAD 15.00");
+    await history.getByRole("button", { name: "Back to revisions" }).click();
+    await history.getByRole("button", { name: /Broker confirmed execution price/ }).click();
+    await expect(history).toContainText("Ending basis CAD 100.00");
+    await expect(history).toContainText("Ending basis CAD 120.00");
     await app.stop();
     const profile = await readProtectedProfile(app.directory), key = unlockWithRecovery(profile.envelope, pending.recoverySecret, "default"), db = createEncryptedPrisma(profile.databaseFile, key);
     try {

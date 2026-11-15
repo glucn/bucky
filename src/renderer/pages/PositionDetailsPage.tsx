@@ -6,6 +6,7 @@ import { formatValuationAmount } from "../utils/valuationFormatting";
 const SecurityPriceModal = React.lazy(() => import("../components/SecurityPriceModal").then((module) => ({ default: module.SecurityPriceModal })));
 const InvestmentBaselineModal = React.lazy(() => import("../components/InvestmentBaselineModal"));
 const InvestmentCorrectionModal = React.lazy(() => import("../components/InvestmentCorrectionModal"));
+const InvestmentRevisionModal = React.lazy(() => import("../components/InvestmentRevisionModal"));
 
 interface PositionDetails {
   needsBaselineReview?: boolean;
@@ -54,6 +55,7 @@ export const PositionDetailsPage: React.FC = () => {
   const [showPrices, setShowPrices] = useState(false);
   const [baselineAccount, setBaselineAccount] = useState<string | null>(null);
   const [correction, setCorrection] = useState<{ accountId: string; entryId: string } | null>(null);
+  const [revisionAccount, setRevisionAccount] = useState<string | null>(null);
   const [selectedTransactionType, setSelectedTransactionType] = useState<TransactionType>('buy');
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [positionValuation, setPositionValuation] = useState<PositionValuationSnapshot | null>(null);
@@ -61,6 +63,7 @@ export const PositionDetailsPage: React.FC = () => {
   useEffect(() => {
     setBaselineAccount(null);
     setCorrection(null);
+    setRevisionAccount(null);
     void fetchPositionData();
     let disposed = false;
     void window.electron.getBaseCurrencyImpactState().then((state) => {
@@ -253,7 +256,10 @@ export const PositionDetailsPage: React.FC = () => {
 
       {/* Transaction History */}
       <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Transaction History</h3>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Transaction History</h3>
+          {accountId && <button type="button" className="underline" onClick={() => setRevisionAccount(accountId)}>Revision history</button>}
+        </div>
         
         {transactions.length === 0 ? (
           <p className="text-sm text-gray-500">No transactions yet.</p>
@@ -321,6 +327,9 @@ export const PositionDetailsPage: React.FC = () => {
       {showPrices && accountId ? <React.Suspense fallback={<p role="status">Loading price controls…</p>}><SecurityPriceModal isOpen accountId={accountId} onClose={() => setShowPrices(false)} onChanged={() => { void handleTransactionCreated(); }} /></React.Suspense> : null}
       {baselineAccount && accountId === baselineAccount ? <React.Suspense fallback={<p role="status">Loading baseline review…</p>}><InvestmentBaselineModal accountId={baselineAccount} onClose={() => setBaselineAccount(null)} onSaved={() => { setBaselineAccount(null); void fetchPositionData(); }} /></React.Suspense> : null}
       {correction && accountId === correction.accountId ? <React.Suspense fallback={<p role="status">Loading correction…</p>}><InvestmentCorrectionModal {...correction} onCancel={() => setCorrection(null)} onSaved={() => { setCorrection(null); void handleTransactionCreated(); }} /></React.Suspense> : null}
+      {revisionAccount && accountId === revisionAccount && <React.Suspense fallback={<p role="status">Loading revision history…</p>}>
+        <InvestmentRevisionModal key={revisionAccount} accountId={revisionAccount} onClose={() => setRevisionAccount(null)} />
+      </React.Suspense>}
       {portfolioId && (
         <TransactionEntryModal
           isOpen={showTransactionModal}

@@ -53,6 +53,11 @@ subsequent events. It needs its own preview and reason. The revision keeps the o
 postings and records that the trade has no replacement. A statement origin for a voided
 trade retains its fingerprint and holding identity, without a live journal link. Importing
 the original statement again skips the voided row by default.
+
+Open **Revision history** from a holding's Transaction History to inspect saved reasons,
+timestamps, and the original and replacement activity and journal lines. The view reads the
+retained snapshots so later trades or revisions do not change the values displayed for an
+earlier revision.
 Development reset deletes links/activity along with the rest of the book in one transaction.
 
 For a missed buy or sale, enter it in the normal transaction form. If later activity exists,

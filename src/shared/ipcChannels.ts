@@ -67,6 +67,8 @@ export const APP_IPC_CHANNELS = [
   "get-investment-trade-correction",
   "preview-investment-trade-correction",
   "save-investment-trade-correction",
+  "list-investment-revisions",
+  "read-investment-revision",
   "get-latest-checkpoint-for-account",
   "get-latest-market-price",
   "get-liability-metrics",
