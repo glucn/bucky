@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { databaseService } from "./database";
-import { cents, investmentTransaction, readInvestmentBasisCents, readLots, type Lot } from "./investmentPosting";
+import { cents, investmentQuantityFields, investmentTransaction, readInvestmentBasisCents, readInvestmentQuantity, readLots, type Lot } from "./investmentPosting";
 import { journalAmountFromCents, sumJournalCents } from "./journalPrecision";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { isValidStandardDate, localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
@@ -64,8 +64,11 @@ export async function verifyInvestmentSnapshot(tx: Prisma.TransactionClient, acc
   if (!props.hasCompleteActivityHistory) return { status: "unavailable", reason: "legacy_history" };
   const unavailable = { status: "unavailable", reason: "inconsistent_history" } as const;
   try {
-    const activities = await tx.investmentActivity.findMany({ where: { accountId }, orderBy: { sequence: "asc" },
-      include: { journalLinks: linkedJournals } });
+    const activities = (await tx.investmentActivity.findMany({ where: { accountId }, orderBy: { sequence: "asc" },
+      include: { journalLinks: linkedJournals } })).map((row) => ({ ...row,
+      quantityBefore: readInvestmentQuantity(row.quantityBefore, row.quantityBeforeDecimal),
+      quantityAfter: readInvestmentQuantity(row.quantityAfter, row.quantityAfterDecimal),
+    }));
     const baselineIndex = activities.findIndex((row) => row.kind === "baseline");
     let quantity = 0, basis = 0, previousDate = "0000-00-00", lots: string | null = props.costBasisMethod === "FIFO" ? "[]" : null;
     let selected = { status: "available", quantity, costBasis: basis, lots } as InvestmentSnapshot;
@@ -96,7 +99,8 @@ export async function verifyInvestmentSnapshot(tx: Prisma.TransactionClient, acc
     const linkedIds = activities.flatMap((row) => row.journalLinks.map((link) => link.entryId));
     const untracked = await tx.journalLine.count({ where: { accountId, entryId: { notIn: linkedIds } } });
     const actualBasis = await readInvestmentBasisCents(tx, accountId);
-    if (untracked || !close(props.quantity, quantity) || actualBasis !== BigInt(cents(basis)) || props.lots !== lots) return unavailable;
+    if (untracked || !close(readInvestmentQuantity(props.quantity, props.quantityDecimal), quantity) ||
+      actualBasis !== BigInt(cents(basis)) || props.lots !== lots) return unavailable;
     return selected;
   } catch { return unavailable; }
 }
@@ -108,14 +112,15 @@ export async function getInvestmentBaselineReview(accountId: string) {
     const account = await tx.account.findUnique({ where: { id: accountId }, include: { investmentProperties: true } });
     const props = account?.investmentProperties;
     if (!account || !props || props.hasCompleteActivityHistory || account.isArchived) throw new Error("This holding does not need a legacy baseline");
+    const quantity = readInvestmentQuantity(props.quantity, props.quantityDecimal);
     const lines = await tx.journalLine.findMany({ where: { accountId }, select: { amount: true, amountCents: true, entry: { select: { date: true } } } });
     const recent = await tx.investmentActivity.findFirst({ where: { accountId }, orderBy: { date: "desc" }, select: { date: true } });
     const earliestDate = lines.reduce((max, { entry }) => entry.date > max ? entry.date : max, recent?.date ?? "");
     let lots: Lot[] | null = null;
     if (props.costBasisMethod === "FIFO") {
-      try { lots = readLots(props.lots, props.quantity); } catch { /* Require review from statements if retained lots cannot be read. */ }
+      try { lots = readLots(props.lots, quantity); } catch { /* Require review from statements if retained lots cannot be read. */ }
     }
-    return { accountId, ticker: props.tickerSymbol, currency: account.currency, quantity: props.quantity,
+    return { accountId, ticker: props.tickerSymbol, currency: account.currency, quantity,
       costBasis: journalAmountFromCents(sumJournalCents(lines)), earliestDate, method: props.costBasisMethod, lots };
   });
 }
@@ -132,7 +137,7 @@ export async function confirmInvestmentBaseline(input: InvestmentBaselineReview)
     if (!account || !props || account.type !== AccountType.User || account.subtype !== AccountSubtype.Asset || account.isArchived) throw new Error("Select an active security holding");
     if (props.hasCompleteActivityHistory) throw new Error("This holding already has verified activity history");
     if (account.currency !== input.currency) throw new Error("Holding currency changed; review again");
-    if (props.quantity !== input.quantity) throw new Error("Reviewed quantity differs from the retained position");
+    if (readInvestmentQuantity(props.quantity, props.quantityDecimal) !== input.quantity) throw new Error("Reviewed quantity differs from the retained position");
     const lines = await tx.journalLine.findMany({ where: { accountId: account.id }, include: { entry: true } });
     if (sumJournalCents(lines) !== BigInt(cents(input.costBasis))) throw new Error("Reviewed cost basis does not match the holding journal");
     if (lines.some((line) => line.currency !== account.currency || !isValidStandardDate(line.entry.date) || line.entry.date > input.date)) throw new Error("Cutover date or journal currency conflicts with retained postings");
@@ -147,10 +152,12 @@ export async function confirmInvestmentBaseline(input: InvestmentBaselineReview)
     await tx.investmentActivity.create({ data: {
       accountId: account.id, kind: "baseline", date: input.date, sequence: (last?.sequence ?? 0) + 1,
       ticker: props.tickerSymbol, market: props.market, currency: account.currency, costBasisMethod: props.costBasisMethod,
-      quantityBefore: input.quantity, quantityAfter: input.quantity, basisBefore: input.costBasis, basisAfter: input.costBasis, cashAmount: 0,
+      quantityBefore: input.quantity, quantityAfter: input.quantity,
+      quantityBeforeDecimal: input.quantity.toString(), quantityAfterDecimal: input.quantity.toString(),
+      basisBefore: input.costBasis, basisAfter: input.costBasis, cashAmount: 0,
       lotsAfter: lots, journalLinks: { create: entryIds.filter((id) => !linkedIds.has(id)).map((entryId) => ({ entryId })) },
     } });
-    await tx.investmentProperties.update({ where: { accountId: account.id }, data: { hasCompleteActivityHistory: true, lots } });
+    await tx.investmentProperties.update({ where: { accountId: account.id }, data: { ...investmentQuantityFields(input.quantity), hasCompleteActivityHistory: true, lots } });
     const verified = await verifyInvestmentSnapshot(tx, account.id, input.date);
     if (verified.status !== "available") throw new Error("Retained investment history failed cutover verification");
     return verified;
@@ -180,7 +187,8 @@ export async function beginInvestmentActivity(tx: Prisma.TransactionClient, acco
   if (props.hasCompleteActivityHistory) {
     const verified = await verifyInvestmentSnapshot(tx, accountId, "9999-12-31");
     if (verified.status !== "available") throw new Error("Investment activity is inconsistent; review the position before posting");
-  } else if (last && (!close(last.quantityAfter, props.quantity) || BigInt(cents(last.basisAfter)) !== basisCents)) {
+  } else if (last && (!close(readInvestmentQuantity(last.quantityAfter, last.quantityAfterDecimal),
+    readInvestmentQuantity(props.quantity, props.quantityDecimal)) || BigInt(cents(last.basisAfter)) !== basisCents)) {
     throw new Error("Investment activity is inconsistent; review the position before posting");
   }
   return { account, props, date, basisCents, sequence: (last?.sequence ?? 0) + 1 };
@@ -190,10 +198,15 @@ export async function finishInvestmentActivity(tx: Prisma.TransactionClient, bef
   details: Details, entryIds: string[]) {
   const props = await tx.investmentProperties.findUniqueOrThrow({ where: { accountId: before.account.id } });
   const basis = await readInvestmentBasisCents(tx, before.account.id);
+  const quantityBefore = readInvestmentQuantity(before.props.quantity, before.props.quantityDecimal);
+  const quantityAfter = readInvestmentQuantity(props.quantity, props.quantityDecimal);
   const activity = await tx.investmentActivity.create({ data: {
     accountId: before.account.id, sequence: before.sequence, date: before.date, ...details,
     ticker: before.props.tickerSymbol, market: before.props.market, currency: before.account.currency, costBasisMethod: before.props.costBasisMethod,
-    quantityBefore: before.props.quantity, quantityAfter: props.quantity, basisBefore: journalAmountFromCents(before.basisCents), basisAfter: journalAmountFromCents(basis),
+    quantityBefore, quantityAfter,
+    quantityBeforeDecimal: before.props.quantityDecimal ?? quantityBefore.toString(),
+    quantityAfterDecimal: props.quantityDecimal ?? quantityAfter.toString(),
+    basisBefore: journalAmountFromCents(before.basisCents), basisAfter: journalAmountFromCents(basis),
     lotsAfter: props.lots, journalLinks: { create: entryIds.map((entryId) => ({ entryId })) },
   } });
   if (props.hasCompleteActivityHistory && (await verifyInvestmentSnapshot(tx, before.account.id, "9999-12-31")).status !== "available") {

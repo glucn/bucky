@@ -40,7 +40,7 @@ export async function createHolding(input: Omit<NewHoldingInput, "market" | "quo
       name: input.market === undefined ? identity.ticker : `${identity.ticker} (${identity.market})`,
       type: AccountType.User, subtype: AccountSubtype.Asset, currency: cash.currency, groupId: portfolio.id,
       investmentProperties: { create: { tickerSymbol: identity.ticker, securityType: input.securityType,
-        quantity: 0, hasCompleteActivityHistory: true, costBasisMethod: input.costBasisMethod,
+        quantity: 0, quantityDecimal: "0", hasCompleteActivityHistory: true, costBasisMethod: input.costBasisMethod,
         lots: input.costBasisMethod === "FIFO" ? "[]" : null } },
     } });
     if (input.market !== undefined) await bindSecurityMarket({ accountId: account.id, market: identity.market, quoteCurrency: cash.currency, expectedMarket: null }, tx);

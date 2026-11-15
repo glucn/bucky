@@ -5,7 +5,7 @@ import { isValidStandardDate } from "../shared/dateUtils";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
 import { recordCashDividend, recordReinvestment, recordSplit } from "./investmentDistributions";
 import { readPostingAmount } from "./journalPrecision";
-import { cents, investmentTransaction } from "./investmentPosting";
+import { cents, investmentTransaction, readInvestmentQuantity } from "./investmentPosting";
 import { defaultTradeDescription, recordInvestmentTrade } from "./investmentTrades";
 import type { TradeInsertion } from "../shared/investmentReplay";
 
@@ -17,8 +17,8 @@ const journals = { orderBy: { entryId: "asc" }, include: { entry: { include: { i
   lines: { orderBy: { id: "asc" }, include: { account: true } } } } } } as const;
 type Event = Prisma.InvestmentActivityGetPayload<{ include: { journalLinks: typeof journals } }>;
 
-function summary(row: Pick<Event, "date" | "quantityAfter" | "basisAfter" | "cashAmount" | "kind" | "basisBefore">) {
-  return { date: row.date, quantityAfter: row.quantityAfter, basisAfter: row.basisAfter, cashAmount: row.cashAmount,
+function summary(row: Pick<Event, "date" | "quantityAfter" | "quantityAfterDecimal" | "basisAfter" | "cashAmount" | "kind" | "basisBefore">) {
+  return { date: row.date, quantityAfter: readInvestmentQuantity(row.quantityAfter, row.quantityAfterDecimal), basisAfter: row.basisAfter, cashAmount: row.cashAmount,
     realizedGain: row.kind === "sell" ? (cents(row.cashAmount) + cents(row.basisAfter) - cents(row.basisBefore)) / 100 : null };
 }
 
@@ -69,7 +69,8 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
   await tx.journalLine.deleteMany({ where: { entryId: { in: entryIds } } });
   await tx.journalEntry.deleteMany({ where: { id: { in: entryIds } } });
   await tx.investmentProperties.update({ where: { accountId }, data: {
-    quantity: previous?.quantityAfter ?? 0,
+    quantity: readInvestmentQuantity(previous?.quantityAfter ?? 0, previous?.quantityAfterDecimal),
+    quantityDecimal: previous ? previous.quantityAfterDecimal : "0",
     lots: previous ? previous.lotsAfter : account.investmentProperties.costBasisMethod === "FIFO" ? "[]" : null,
   } });
 

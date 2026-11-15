@@ -43,6 +43,22 @@ it("closes all units after splitting a fractional lot", async () => {
   expect(await investmentService.getPositionDetails(holding.id, "2026-01-04")).toMatchObject({ quantity: 0, costBasis: 0 });
 });
 
+it("uses stored decimal quantities instead of their numeric mirrors during valuation and sale", async () => {
+  const { group } = await investmentService.createInvestmentPortfolio("Stored fractional balance");
+  const common = { ...trade, portfolioId: group.id };
+  await investmentService.recordBuy({ ...common, quantity: 0.3 });
+  const holding = await investmentService.getSecurityAccount(group.id, "ABC");
+  const db = databaseService.prismaClient;
+  expect(await db.investmentProperties.findUniqueOrThrow({ where: { accountId: holding.id } })).toMatchObject({ quantityDecimal: "0.3" });
+  const activity = await db.investmentActivity.findFirstOrThrow({ where: { accountId: holding.id } });
+  expect(activity).toMatchObject({ quantityBeforeDecimal: "0", quantityAfterDecimal: "0.3" });
+  await db.investmentProperties.update({ where: { accountId: holding.id }, data: { quantity: 0 } });
+  await db.investmentActivity.update({ where: { id: activity.id }, data: { quantityAfter: 0 } });
+  expect((await investmentService.getPositionDetails(holding.id, "2026-01-02")).quantity).toBe(0.3);
+  await investmentService.recordSell({ ...common, date: "2026-01-03", quantity: 0.3 });
+  expect(await investmentService.getPositionDetails(holding.id, "2026-01-03")).toMatchObject({ quantity: 0, costBasis: 0 });
+});
+
 it("rounds fractional trade consideration and fees at the exact half-cent boundary", async () => {
   const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Fractional trade");
   const common = { ...trade, portfolioId: group.id, quantity: 0.5, pricePerShare: 2.01, fee: 0.145 };

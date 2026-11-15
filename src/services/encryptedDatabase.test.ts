@@ -92,7 +92,8 @@ describe("encrypted personal database lifecycle", () => {
     expect((await query("SELECT name FROM Account"))[0].name).toBe(sentinel);
     expect((await query("SELECT name FROM Account", result.backupPath!))[0].name).toBe(sentinel);
     expect((await query("SELECT market FROM InvestmentProperties WHERE id='legacy-holding'"))[0].market).toBeNull();
-    expect((await query("SELECT quantity FROM InvestmentProperties WHERE id='legacy-holding'"))[0].quantity).toBe(3);
+    expect(await query("SELECT quantity,quantityDecimal FROM InvestmentProperties WHERE id='legacy-holding'"))
+      .toEqual([{ quantity: 3, quantityDecimal: "3.0" }]);
     expect((await query("SELECT close,closeDecimal,source FROM SecurityDailyPrice WHERE id='canonical-price'"))[0])
       .toMatchObject({ close: 12.345678, closeDecimal: "12.345678", source: "provider" });
     expect((await query("SELECT priceBasis,barStatus,basisAsOf FROM SecurityDailyPrice WHERE id='canonical-price'"))[0]).toEqual({ priceBasis: "unknown", barStatus: "unknown", basisAsOf: null });

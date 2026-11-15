@@ -9,6 +9,18 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 73 — Store decimal holding quantities and activity balances
+
+- Current holdings and before/after activity balances store the decimal value
+  alongside the existing numeric field. Trades, distributions, valuation,
+  baseline review, and correction replay prefer the retained decimal.
+- The upgrade backfills quantities that round-trip safely through SQLite's
+  decimal rendering. Other legacy quantities retain their numeric value.
+- Quantity input and service output still cross a numeric boundary. FIFO lot
+  fields, activity prices and historical review remain part of precision work.
+- Verification covered 1,238 native tests, 50 targeted encrypted tests, TypeScript,
+  Apple Silicon packaging, and four packaged restart tests.
+
 ### Batch 72 — Use decimal arithmetic for fractional holding changes
 
 - Trades, FIFO lot consumption, reinvestments, and stock splits calculate finite

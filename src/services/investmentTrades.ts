@@ -2,7 +2,8 @@ import { postingAmountFromCents } from "./journalPrecision";
 import type { Prisma } from "@prisma/client";
 import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
-import { addInvestmentUnits, cents, proportionalBasisCents, readLots, resolveInvestmentAccounts, investmentTransaction, tradeGrossCents } from "./investmentPosting";
+import { addInvestmentUnits, cents, investmentQuantityFields, proportionalBasisCents, readInvestmentQuantity, readLots,
+  resolveInvestmentAccounts, investmentTransaction, tradeGrossCents } from "./investmentPosting";
 import { parseToStandardDate } from "../shared/dateUtils";
 
 export type InvestmentTrade = {
@@ -40,12 +41,12 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
     if (!security) throw new Error("Security account not found");
     const history = await beginInvestmentActivity(tx, security.id, date);
     const props = security.investmentProperties!;
-    if (!Number.isFinite(props.quantity) || props.quantity < 0) throw new Error("Invalid stored position quantity");
+    const held = readInvestmentQuantity(props.quantity, props.quantityDecimal);
     if (!["FIFO", "AVERAGE_COST"].includes(props.costBasisMethod)) throw new Error("Invalid cost basis method");
-    let lots = props.costBasisMethod === "FIFO" ? readLots(props.lots, props.quantity) : null;
+    let lots = props.costBasisMethod === "FIFO" ? readLots(props.lots, held) : null;
     let basis = consideration;
-    if (kind === "sell" && input.quantity > props.quantity) throw new Error(`Insufficient shares: trying to sell ${input.quantity} but only ${props.quantity} available`);
-    const newQuantity = addInvestmentUnits(props.quantity, kind === "buy" ? input.quantity : -input.quantity);
+    if (kind === "sell" && input.quantity > held) throw new Error(`Insufficient shares: trying to sell ${input.quantity} but only ${held} available`);
+    const newQuantity = addInvestmentUnits(held, kind === "buy" ? input.quantity : -input.quantity);
     if (!Number.isFinite(newQuantity)) throw new Error("Position quantity exceeds supported precision");
     if (kind === "buy") {
       lots?.push({ date, quantity: input.quantity, pricePerShare: input.pricePerShare, amount: consideration / 100 });
@@ -65,7 +66,7 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
         const oldCost = Number(history.basisCents);
         if (!Number.isSafeInteger(oldCost)) throw new Error("Cost basis exceeds supported precision");
         if (oldCost < 0) throw new Error("Account has negative cost basis");
-        basis = input.quantity === props.quantity ? oldCost : proportionalBasisCents(oldCost, input.quantity, props.quantity);
+        basis = input.quantity === held ? oldCost : proportionalBasisCents(oldCost, input.quantity, held);
       }
     }
     if (!Number.isSafeInteger(basis)) throw new Error("Cost basis exceeds supported precision");
@@ -80,7 +81,7 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
     const entry = await tx.journalEntry.create({ data: {
       date, description, type: kind === "buy" ? "investment_buy" : "investment_sell", displayOrder: Date.now(), lines: { create: lines },
     }, include: { lines: true } });
-    await tx.investmentProperties.update({ where: { id: props.id }, data: { quantity: newQuantity, lots: lots ? JSON.stringify(lots) : null } });
+    await tx.investmentProperties.update({ where: { id: props.id }, data: { ...investmentQuantityFields(newQuantity), lots: lots ? JSON.stringify(lots) : null } });
     await finishInvestmentActivity(tx, history, { kind, units: input.quantity, price: input.pricePerShare, fee: fee / 100, cashAmount: (kind === "buy" ? -consideration : consideration) / 100 }, [entry.id]);
     return entry;
   }, transaction);

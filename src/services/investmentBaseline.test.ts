@@ -11,7 +11,7 @@ async function legacy() {
   await databaseService.setOpeningBalance({ accountId: holding.id, displayAmount: 100, asOfDate: "2026-01-01" });
   const lots = [{ date: "2025-12-29", quantity: 10, pricePerShare: 10, amount: 100 }];
   await databaseService.prismaClient.investmentProperties.update({ where: { accountId: holding.id }, data: {
-    quantity: 10, lots: JSON.stringify(lots), hasCompleteActivityHistory: false,
+    quantity: 10, quantityDecimal: null, lots: JSON.stringify(lots), hasCompleteActivityHistory: false,
   } });
   return { portfolio, holding, lots };
 }

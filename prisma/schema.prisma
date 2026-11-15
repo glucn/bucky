@@ -257,6 +257,7 @@ model InvestmentProperties {
   
   // Quantity tracking (shares/units)
   quantity        Float    @default(0) // Current number of shares owned
+  quantityDecimal String?  // Canonical quantity when recoverable
   hasCompleteActivityHistory Boolean @default(false) // Legacy history is never inferred
   
   // Cost basis method
@@ -285,6 +286,8 @@ model InvestmentActivity {
   costBasisMethod String
   quantityBefore  Float
   quantityAfter   Float
+  quantityBeforeDecimal String?
+  quantityAfterDecimal  String?
   basisBefore     Float
   basisAfter      Float
   lotsAfter       String?

@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
 import { databaseService } from "./database";
-import { addDecimalRatios, decimalRatio, roundDecimalRatio, sumJournalCents, toJournalCents, type DecimalRatio } from "./journalPrecision";
+import { addDecimalRatios, decimalRatio, readUnsignedDecimal, roundDecimalRatio, sumJournalCents, toJournalCents, type DecimalRatio } from "./journalPrecision";
 import { hasPortfolioIdentity, isSettlementCash } from "../shared/investmentAccounts";
 
 export function investmentTransaction<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>, tx?: Prisma.TransactionClient): Promise<T> {
@@ -44,6 +44,16 @@ export function scaleInvestmentUnits(quantity: number, factor: number): number {
   return quantityFromDecimal({ numerator: units.numerator * scale.numerator, denominator: units.denominator * scale.denominator });
 }
 
+export function readInvestmentQuantity(quantity: number, decimal: string | null | undefined): number {
+  const units = readUnsignedDecimal(decimal ?? quantity);
+  if (!Number.isFinite(units) || units < 0) throw new Error("Invalid stored investment quantity");
+  return units;
+}
+
+export function investmentQuantityFields(quantity: number) {
+  return { quantity, quantityDecimal: readInvestmentQuantity(quantity, null).toString() };
+}
+
 export async function readInvestmentBasisCents(tx: Prisma.TransactionClient, accountId: string): Promise<bigint> {
   const postings = await tx.journalLine.findMany({ where: { accountId }, select: { amount: true, amountCents: true } });
   return sumJournalCents(postings);
@@ -83,7 +93,7 @@ export async function resolveInvestmentAccounts(tx: Prisma.TransactionClient, in
     if (!security && options.createSecurity) {
       security = await tx.account.create({ data: {
         name: ticker, type: AccountType.User, subtype: AccountSubtype.Asset, currency: cash.currency, groupId: portfolio.id,
-        investmentProperties: { create: { tickerSymbol: ticker, quantity: 0, hasCompleteActivityHistory: true, costBasisMethod: "FIFO", lots: "[]" } },
+        investmentProperties: { create: { tickerSymbol: ticker, quantity: 0, quantityDecimal: "0", hasCompleteActivityHistory: true, costBasisMethod: "FIFO", lots: "[]" } },
       }, include: { investmentProperties: true } });
     }
     return { security, cash };

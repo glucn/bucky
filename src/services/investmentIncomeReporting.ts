@@ -4,7 +4,7 @@ import { parseToStandardDate } from "../shared/dateUtils";
 import type { InvestmentIncomeReport, RealizedGainReportRow, ReportFxSource } from "../shared/investmentReporting";
 import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
-import { addInvestmentUnits, cents, readLots, tradeGrossCents } from "./investmentPosting";
+import { addInvestmentUnits, cents, readInvestmentQuantity, readLots, tradeGrossCents } from "./investmentPosting";
 import { journalAmountFromCents, readPostingCents, sumJournalCents } from "./journalPrecision";
 import { createValuationConversionService, valuationFxSelect, type ValuationQuote } from "./valuationConversionService";
 
@@ -108,9 +108,11 @@ async function incomeFromContext(ctx: Awaited<ReturnType<typeof context>>, kind:
 function holdingAge(activity: NonNullable<Entry["investmentActivityLink"]>["activity"], history: Awaited<ReturnType<typeof context>>["history"]): RealizedGainReportRow["holdingPeriod"] {
   if (activity.costBasisMethod !== "FIFO" || !(activity.units! > 0)) return "unknown";
   const previous = history.find((row) => row.accountId === activity.accountId && row.sequence === activity.sequence - 1);
-  if (!previous || previous.quantityAfter !== activity.quantityBefore || cents(previous.basisAfter) !== cents(activity.basisBefore)) return "unknown";
+  const before = readInvestmentQuantity(activity.quantityBefore, activity.quantityBeforeDecimal);
+  if (!previous || readInvestmentQuantity(previous.quantityAfter, previous.quantityAfterDecimal) !== before ||
+    cents(previous.basisAfter) !== cents(activity.basisBefore)) return "unknown";
   try {
-    const lots = readLots(previous.lotsAfter, activity.quantityBefore), ages = new Set<string>();
+    const lots = readLots(previous.lotsAfter, before), ages = new Set<string>();
     if (lots.reduce((sum, lot) => sum + cents(lot.amount), 0) !== cents(activity.basisBefore)) return "unknown";
     let remaining = activity.units!;
     for (const lot of lots) {
@@ -148,7 +150,8 @@ async function gainsFromContext(ctx: Awaited<ReturnType<typeof context>>, portfo
     if (basisCents < 0n || proceedsCents - basisCents + otherCategoryCents !== gainCents) throw new Error("Sale journal gain requires review");
     if (activity && (activity.kind !== "sell" || activity.accountId !== security.accountId || !(activity.units! > 0) ||
       !Number.isFinite(activity.units) || !Number.isFinite(activity.price) || activity.price! < 0 || !Number.isFinite(activity.fee ?? 0) || (activity.fee ?? 0) < 0 ||
-      Math.abs(activity.quantityBefore - activity.quantityAfter - activity.units!) > 1e-8 * Math.max(1, activity.units!) ||
+      Math.abs(readInvestmentQuantity(activity.quantityBefore, activity.quantityBeforeDecimal) -
+        readInvestmentQuantity(activity.quantityAfter, activity.quantityAfterDecimal) - activity.units!) > 1e-8 * Math.max(1, activity.units!) ||
       activity.ticker !== security.account.investmentProperties!.tickerSymbol ||
       // Older activities posted with binary rounding. Preserve the recorded proceeds
       // when either the current decimal policy or the original calculation explains them.

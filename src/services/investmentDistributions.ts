@@ -3,7 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
-import { addInvestmentUnits, cents, readInvestmentBasisCents, readLots, resolveInvestmentAccounts, investmentTransaction, scaleInvestmentUnits, type InvestmentSelection, type Lot } from "./investmentPosting";
+import { addInvestmentUnits, cents, investmentQuantityFields, readInvestmentBasisCents, readInvestmentQuantity,
+  readLots, resolveInvestmentAccounts, investmentTransaction, scaleInvestmentUnits, type InvestmentSelection, type Lot } from "./investmentPosting";
 
 export type DividendInput = InvestmentSelection & { amount: number; date: string; isReturnOfCapital?: boolean; description?: string };
 export type ReinvestmentInput = InvestmentSelection & { dividendAmount: number; reinvestmentPrice: number; date: string; recordAsIncome: boolean; description?: string };
@@ -18,9 +19,10 @@ function distributionAmount(value: number): number {
   if (amount <= 0) throw new Error("Dividend amount must round to a positive cent amount");
   return amount;
 }
-function positionLots(props: { quantity: number; costBasisMethod: string; lots: string | null }): Lot[] | null {
-  if (!Number.isFinite(props.quantity) || props.quantity < 0 || !["FIFO", "AVERAGE_COST"].includes(props.costBasisMethod)) throw new Error("Invalid stored investment position");
-  return props.costBasisMethod === "FIFO" ? readLots(props.lots, props.quantity) : null;
+function positionLots(props: { quantity: number; quantityDecimal: string | null; costBasisMethod: string; lots: string | null }): Lot[] | null {
+  const quantity = readInvestmentQuantity(props.quantity, props.quantityDecimal);
+  if (!["FIFO", "AVERAGE_COST"].includes(props.costBasisMethod)) throw new Error("Invalid stored investment position");
+  return props.costBasisMethod === "FIFO" ? readLots(props.lots, quantity) : null;
 }
 
 // Decimal representations of stored quantities provide integer weights without rounding units
@@ -110,10 +112,10 @@ export async function recordReinvestment(input: ReinvestmentInput, transaction?:
       [{ accountId: cash.id, cents: amount }, { accountId: sourceAccountId, cents: -amount }]);
     const entry = await journal(tx, date, `${description} - Purchase${input.recordAsIncome ? "" : " (Cost Basis Reduction)"}`, "dividend_reinvest", cash.currency,
       [{ accountId: security!.id, cents: amount }, { accountId: cash.id, cents: -amount }]);
-    const newQuantity = addInvestmentUnits(props.quantity, quantity);
+    const newQuantity = addInvestmentUnits(readInvestmentQuantity(props.quantity, props.quantityDecimal), quantity);
     if (!Number.isFinite(newQuantity)) throw new Error("Reinvestment quantity exceeds supported precision");
     lots?.push({ date, quantity, pricePerShare: input.reinvestmentPrice, amount: amount / 100 });
-    await tx.investmentProperties.update({ where: { id: props.id }, data: { quantity: newQuantity, lots: lots ? JSON.stringify(lots) : null } });
+    await tx.investmentProperties.update({ where: { id: props.id }, data: { ...investmentQuantityFields(newQuantity), lots: lots ? JSON.stringify(lots) : null } });
     await finishInvestmentActivity(tx, history, { kind: input.recordAsIncome ? "income_reinvestment" : "capital_reinvestment", units: quantity, price: input.reinvestmentPrice, cashAmount: 0 }, [receipt.id, entry.id]);
     return entry;
   }, transaction);
@@ -128,12 +130,13 @@ export async function recordSplit(accountId: string, splitRatio: number, inputDa
     if (!account?.investmentProperties || account.isArchived) throw new Error("Security account not found or archived");
     const history = await beginInvestmentActivity(tx, accountId, date);
     const props = account.investmentProperties, lots = positionLots(props);
-    const quantity = scaleInvestmentUnits(props.quantity, splitRatio);
+    const held = readInvestmentQuantity(props.quantity, props.quantityDecimal);
+    const quantity = scaleInvestmentUnits(held, splitRatio);
     const updatedLots = lots?.map((lot) => ({ ...lot, quantity: scaleInvestmentUnits(lot.quantity, splitRatio), pricePerShare: lot.pricePerShare / splitRatio }));
-    if (!Number.isFinite(quantity) || (props.quantity > 0 && quantity <= 0) || updatedLots?.some((lot) => !Number.isFinite(lot.quantity) || lot.quantity <= 0 || !Number.isFinite(lot.pricePerShare))) {
+    if (!Number.isFinite(quantity) || (held > 0 && quantity <= 0) || updatedLots?.some((lot) => !Number.isFinite(lot.quantity) || lot.quantity <= 0 || !Number.isFinite(lot.pricePerShare))) {
       throw new Error("Split result exceeds supported precision");
     }
-    await tx.investmentProperties.update({ where: { id: props.id }, data: { quantity, lots: updatedLots ? JSON.stringify(updatedLots) : null } });
+    await tx.investmentProperties.update({ where: { id: props.id }, data: { ...investmentQuantityFields(quantity), lots: updatedLots ? JSON.stringify(updatedLots) : null } });
     const entry = await tx.journalEntry.create({ data: { date, description: description || `Stock split ${splitRatio}:1 for ${props.tickerSymbol}`, type: "stock_split", displayOrder: Date.now() }, include: { lines: true } });
     await finishInvestmentActivity(tx, history, { kind: "split", splitRatio, cashAmount: 0 }, [entry.id]);
     return entry;

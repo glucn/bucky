@@ -1,5 +1,5 @@
 import { databaseService } from "./database";
-import { cents } from "./investmentPosting";
+import { cents, readInvestmentQuantity } from "./investmentPosting";
 import type { RevisionDetail, RevisionEvent, RevisionSummary } from "../shared/investmentRevision";
 
 const pageSize = 20;
@@ -19,7 +19,8 @@ function event(raw: unknown, accountId: string): RevisionEvent {
   const row = record(raw);
   if (row.accountId !== accountId) throw invalid();
   const kind = string(row.kind), basisAfter = amount(row.basisAfter), cashAmount = amount(row.cashAmount);
-  return { id: string(row.id), date: string(row.date), kind, currency: string(row.currency), quantityAfter: amount(row.quantityAfter),
+  const quantity = readInvestmentQuantity(amount(row.quantityAfter), row.quantityAfterDecimal == null ? null : string(row.quantityAfterDecimal));
+  return { id: string(row.id), date: string(row.date), kind, currency: string(row.currency), quantityAfter: quantity,
     basisAfter, cashAmount, realizedGain: kind === "sell" ? (cents(cashAmount) + cents(basisAfter) - cents(amount(row.basisBefore))) / 100 : null,
     journals: list(row.journalLinks).map((rawLink) => {
       const entry = record(record(rawLink).entry);

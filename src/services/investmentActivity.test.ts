@@ -55,7 +55,7 @@ it("reports legacy history unavailable rather than inferring a timeline from cur
 });
 it("refuses current and historical reads and further posting after an uncoordinated quantity change", async () => {
   const { group, security } = await purchased();
-  await databaseService.prismaClient.investmentProperties.update({ where: { accountId: security.id }, data: { quantity: 99 } });
+  await databaseService.prismaClient.investmentProperties.update({ where: { accountId: security.id }, data: { quantity: 99, quantityDecimal: "99" } });
   expect(await getInvestmentSnapshot(security.id, "2026-01-03")).toEqual({ status: "unavailable", reason: "inconsistent_history" });
   await expect(investmentService.getPositionDetails(security.id)).rejects.toThrow(/history does not match/i);
   await expect(investmentService.recordBuy({ portfolioId: group.id, tickerSymbol: "ABC", quantity: 1, pricePerShare: 10, date: "2026-01-04" })).rejects.toThrow(/inconsistent/i);

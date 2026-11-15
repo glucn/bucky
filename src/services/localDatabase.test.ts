@@ -72,6 +72,8 @@ describe("Personal database lifecycle", () => {
       ('long','USD','CAD','2026-01-03',1.2345678901234567)`);
     await sql(`INSERT INTO InvestmentProperties (id,accountId,tickerSymbol,quantity,costBasisMethod,lots,updatedAt)
       VALUES ('legacy-holding','keep','ABC',3,'FIFO','[]',CURRENT_TIMESTAMP)`);
+    await sql(`INSERT INTO InvestmentActivity (id,accountId,sequence,date,kind,ticker,currency,costBasisMethod,quantityBefore,quantityAfter,basisBefore,basisAfter,cashAmount)
+      VALUES ('quantity-upgrade','keep',1,'2026-01-02','buy','ABC','CAD','FIFO',0,0.3,0,3,-3)`);
     await sql(`INSERT INTO SecurityPriceHistory (id,tickerSymbol,date,price,source) VALUES ('legacy-price','ABC','2026-01-02',999,'manual')`);
     await sql(`INSERT INTO SecurityDailyPrice (id,ticker,market,marketDate,close) VALUES ('canonical-price','ABC','NASDAQ','2026-01-02',12.345678)`);
     await sql(`INSERT INTO AccountGroup (id,name,accountType,updatedAt) VALUES ('known','Recorded holdings','user',CURRENT_TIMESTAMP), ('cash','Cash-only broker','user',CURRENT_TIMESTAMP), ('bank','Bank group','user',CURRENT_TIMESTAMP)`);
@@ -97,8 +99,10 @@ describe("Personal database lifecycle", () => {
       .toEqual([{ name: "Keep through upgrade" }]);
     expect(await sql("SELECT name FROM Account WHERE id='keep'", result.backupPath!))
       .toEqual([{ name: "Keep through upgrade" }]);
-    expect(await sql("SELECT market,quantity FROM InvestmentProperties WHERE id='legacy-holding'"))
-      .toEqual([{ market: null, quantity: 3 }]);
+    expect(await sql("SELECT market,quantity,quantityDecimal FROM InvestmentProperties WHERE id='legacy-holding'"))
+      .toEqual([{ market: null, quantity: 3, quantityDecimal: "3.0" }]);
+    expect(await sql("SELECT quantityBeforeDecimal,quantityAfterDecimal FROM InvestmentActivity WHERE id='quantity-upgrade'"))
+      .toEqual([{ quantityBeforeDecimal: "0.0", quantityAfterDecimal: "0.3" }]);
     expect(await sql("SELECT close,closeDecimal,source FROM SecurityDailyPrice WHERE id='canonical-price'"))
       .toEqual([{ close: 12.345678, closeDecimal: "12.345678", source: "provider" }]);
     expect(await sql("SELECT priceBasis,barStatus,basisAsOf FROM SecurityDailyPrice WHERE id='canonical-price'"))
@@ -109,7 +113,7 @@ describe("Personal database lifecycle", () => {
       .toEqual([{ quantity: 3 }]);
     expect(await sql("SELECT hasCompleteActivityHistory FROM InvestmentProperties WHERE id='legacy-holding'"))
       .toEqual([{ hasCompleteActivityHistory: 0 }]);
-    expect(await sql("SELECT count(*) AS count FROM InvestmentActivity")).toEqual([{ count: 0 }]);
+    expect(await sql("SELECT count(*) AS count FROM InvestmentActivity")).toEqual([{ count: 1 }]);
     expect(await sql("SELECT count(*) AS count FROM InvestmentImportOrigin")).toEqual([{ count: 0 }]);
     expect(await sql("SELECT id,isInvestmentPortfolio FROM AccountGroup ORDER BY id")).toEqual([
       { id: "bank", isInvestmentPortfolio: 0 }, { id: "cash", isInvestmentPortfolio: 0 }, { id: "known", isInvestmentPortfolio: 1 },

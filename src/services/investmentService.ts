@@ -22,7 +22,7 @@ import { securityMarketData } from "./securityMarketData";
 import { securityQuoteCurrency } from "./securityQuoteCurrency";
 import { resolveValuationDate } from "./valuationDate";
 import { journalAmountFromCents, sumJournalCents, toJournalCents } from "./journalPrecision";
-import { tradeGrossCents } from "./investmentPosting";
+import { readInvestmentQuantity, tradeGrossCents } from "./investmentPosting";
 
 export type InvestmentPosition = {
   needsBaselineReview?: boolean;
@@ -617,7 +617,7 @@ class InvestmentService {
     const dated = await getInvestmentSnapshot(accountId, effectiveDate);
     if (dated.status === "unavailable" && dated.reason === "inconsistent_history") throw new Error("Investment history does not match the recorded position. Review the account before valuing it.");
     if (requireDatedHistory && dated.status !== "available") throw new InvestmentHistoryUnavailableError("This account predates tracked investment history. Its historical holdings need review before valuation.");
-    const quantity = dated.status === "available" ? dated.quantity : investmentProps.quantity;
+    const quantity = dated.status === "available" ? dated.quantity : readInvestmentQuantity(investmentProps.quantity, investmentProps.quantityDecimal);
     const costBasis = dated.status === "available" ? dated.costBasis : await databaseService.getAccountBalanceAtDate(accountId, effectiveDate);
     const costPerShare = quantity > 0 ? costBasis / quantity : 0;
 
