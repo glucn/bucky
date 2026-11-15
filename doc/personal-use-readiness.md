@@ -9,6 +9,21 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 58 — Round journal postings with exact decimal arithmetic
+
+- Regular journal creation and editing round the decimal value received at the service
+  boundary to cents, with half cents rounded away from zero. Journal verification
+  applies the same conversion to stored amounts.
+- FX drafts derive and compare amounts with integer ratios. The recorded rate remains
+  destination currency per source currency, and the allowed difference is one cent.
+  Amounts that cannot round-trip through the current numeric storage are refused.
+- This is the journal arithmetic step of BL-031. Journal amounts, rates, and the other
+  financial fields still use Float storage. The service can only recover the decimal
+  represented by the number it receives. Exact persistence and the migration of existing
+  values remain open.
+- Verification covered 1,213 native tests, 21 targeted encrypted tests, TypeScript,
+  Apple Silicon packaging, and the packaged native and FX portfolio funding workflow.
+
 ### Batch 57 — Check current valuation coverage
 
 - Book verification warns when a nonzero holding has no completed raw price for its

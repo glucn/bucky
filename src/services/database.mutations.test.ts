@@ -18,6 +18,18 @@ describe("Journal mutation integrity", () => {
     await prisma.$executeRawUnsafe('DROP TRIGGER IF EXISTS fail_posting_update');
   });
 
+  it("persists exact decimal cent rounding and skips an out-of-range amount", async () => {
+    const from = await account("Source"), to = await account("Destination");
+    const terms = { fromAccountId: from.id, toAccountId: to.id, date: "2026-08-01" };
+    const result = await databaseService.createJournalEntry({ ...terms, amount: 1.005 });
+    expect(result.entry?.lines.map((line: { amount: number }) => line.amount).sort((a: number, b: number) => a - b))
+      .toEqual([-1.01, 1.01]);
+    const before = await snapshot();
+    expect(await databaseService.createJournalEntry({ ...terms, amount: Number.MAX_SAFE_INTEGER }))
+      .toMatchObject({ skipped: true, reason: expect.stringContaining("precision") });
+    expect(await snapshot()).toEqual(before);
+  });
+
   async function fixture(currency = "USD") {
     const from = await account("Source");
     const to = await account("Destination", currency);

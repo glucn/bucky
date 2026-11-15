@@ -5,6 +5,7 @@ import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
+import { toJournalCents } from "./journalPrecision";
 import { securityMarketData } from "./securityMarketData";
 import { securityQuoteCurrency } from "./securityQuoteCurrency";
 import { createValuationConversionService, type ConversionResult } from "./valuationConversionService";
@@ -72,13 +73,13 @@ function verifyJournal(entry: Entry, findings: BookFinding[]) {
     if (line.account.type === AccountType.User && line.currency !== line.account.currency) {
       report("journal-account-currency", "Posting currency differs from the account currency", line.id);
     }
-    const cents = Math.round(line.amount * 100);
-    if (!Number.isSafeInteger(cents)) {
+    try {
+      const cents = BigInt(toJournalCents(line.amount));
+      totals.set(line.currency, (totals.get(line.currency) ?? 0n) + cents);
+    } catch {
       report("journal-amount", "Posting amount exceeds the current supported cent range", line.id);
       invalidAmount = true;
-      continue;
     }
-    totals.set(line.currency, (totals.get(line.currency) ?? 0n) + BigInt(cents));
   }
   if (invalidAmount) return;
 

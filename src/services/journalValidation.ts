@@ -1,3 +1,5 @@
+import { decimalRatio, journalAmountFromCents, roundDecimalRatio, toJournalCents } from "./journalPrecision";
+
 export interface CurrencyTransferAmounts {
   amountFrom?: number;
   amountTo?: number;
@@ -13,15 +15,25 @@ export function resolveCurrencyTransferAmounts(input: CurrencyTransferAmounts) {
   if (values.some((value) => value !== undefined && (!Number.isFinite(value) || value <= 0))) {
     throw new Error("Currency-transfer amounts and exchange rate must be finite and positive");
   }
-  const round = (value: number) => Math.round(value * 100) / 100;
-  const amountFrom = round(input.amountFrom ?? input.amountTo! / input.exchangeRate!);
-  const amountTo = round(input.amountTo ?? amountFrom * input.exchangeRate!);
-  const exchangeRate = input.exchangeRate ?? amountTo / amountFrom;
+  let fromCents = input.amountFrom === undefined ? undefined : BigInt(toJournalCents(input.amountFrom));
+  let toCents = input.amountTo === undefined ? undefined : BigInt(toJournalCents(input.amountTo));
+  if (input.exchangeRate !== undefined) {
+    const rate = decimalRatio(input.exchangeRate);
+    if (fromCents === undefined) {
+      const destination = decimalRatio(input.amountTo!);
+      fromCents = roundDecimalRatio(destination.numerator * rate.denominator * 100n, destination.denominator * rate.numerator);
+    }
+    toCents ??= roundDecimalRatio(fromCents * rate.numerator, rate.denominator);
+    const difference = toCents * rate.denominator - fromCents * rate.numerator;
+    if (difference < -rate.denominator || difference > rate.denominator) {
+      throw new Error("Amounts and exchange rate are inconsistent");
+    }
+  }
+  const amountFrom = journalAmountFromCents(fromCents!);
+  const amountTo = journalAmountFromCents(toCents!);
+  const exchangeRate = input.exchangeRate ?? Number(toCents!) / Number(fromCents!);
   if (![amountFrom, amountTo, exchangeRate].every((value) => Number.isFinite(value) && value > 0)) {
     throw new Error("Currency-transfer amounts and exchange rate must be finite and positive");
-  }
-  if (Math.abs(amountTo - amountFrom * exchangeRate) > 0.01 + Number.EPSILON * amountTo) {
-    throw new Error("Amounts and exchange rate are inconsistent");
   }
   return { amountFrom, amountTo, exchangeRate };
 }

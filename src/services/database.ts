@@ -8,6 +8,7 @@ import {
 import { localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
 import { autoCategorizationService } from "./autoCategorizationService";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
+import { roundJournalAmount } from "./journalPrecision";
 import { resolveDatabaseFile } from "./localDatabase";
 import { createEncryptedPrisma, initializeEncryptedDatabase } from "./encryptedDatabase";
 import { PrismaSession } from "./prismaSession";
@@ -1052,7 +1053,12 @@ class DatabaseService {
         console.warn("[createJournalEntry] Skipped: Amount is required for regular transactions", { amount: data.amount });
         return { skipped: true, reason: "Amount is required for regular transactions" };
       }
-      const roundedAmount = Math.round(data.amount * 100) / 100;
+      let roundedAmount: number;
+      try {
+        roundedAmount = roundJournalAmount(data.amount);
+      } catch (error) {
+        return { skipped: true, reason: (error as Error).message };
+      }
 
       // Improved deduplication logic
       // Only check for duplicates if this is an import operation or if explicitly requested
@@ -2740,25 +2746,21 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     const toLine = lines.find((l) => l.id !== fromLine?.id);
     if (!fromLine || !toLine) throw new Error("Could not find both sides of transaction");
 
-    const roundedAmount = Math.round(data.amount * 100) / 100;
-
-    // Use new logic for journal lines
-    const regularLines = DatabaseService.generateJournalLines({
-      transactionType: data.transactionType || "transfer",
-      userAccountId: data.fromAccountId,
-      userAccountSubtype: fromAccount.subtype as AccountSubtype,
-      counterpartyAccountId: data.toAccountId,
-      counterpartyAccountSubtype: toAccount.subtype as AccountSubtype,
-      amount: roundedAmount,
-      currency: fromAccount.type === AccountType.Category ? toAccount.currency : fromAccount.currency,
-      description: data.description,
-    });
     const [fromLineData, toLineData] = fxAmounts ? [
       { accountId: fromAccount.id, amount: -fxAmounts.amountFrom, currency: fromAccount.currency,
         exchangeRate: fxAmounts.exchangeRate, description: data.description },
       { accountId: toAccount.id, amount: fxAmounts.amountTo, currency: toAccount.currency,
         exchangeRate: fxAmounts.exchangeRate, description: data.description },
-    ] : regularLines.map((posting) => ({ ...posting, exchangeRate: null }));
+    ] : DatabaseService.generateJournalLines({
+      transactionType: data.transactionType || "transfer",
+      userAccountId: data.fromAccountId,
+      userAccountSubtype: fromAccount.subtype as AccountSubtype,
+      counterpartyAccountId: data.toAccountId,
+      counterpartyAccountSubtype: toAccount.subtype as AccountSubtype,
+      amount: roundJournalAmount(data.amount),
+      currency: fromAccount.type === AccountType.Category ? toAccount.currency : fromAccount.currency,
+      description: data.description,
+    }).map((posting) => ({ ...posting, exchangeRate: null }));
 
     // Update the entry (date, description, postingDate)
     await prisma.journalEntry.update({
