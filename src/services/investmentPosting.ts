@@ -17,7 +17,7 @@ export function cents(value: number): number {
   return toJournalCents(value);
 }
 
-export function tradeGrossCents(units: number, price: number): number {
+export function tradeGrossCents(units: number, price: number | string): number {
   const quantity = decimalRatio(units), unitPrice = decimalRatio(price);
   const gross = Number(roundDecimalRatio(quantity.numerator * unitPrice.numerator * 100n, quantity.denominator * unitPrice.denominator));
   if (!Number.isSafeInteger(gross)) throw new Error("Trade amount exceeds supported precision");

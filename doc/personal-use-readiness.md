@@ -9,6 +9,15 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 70 — Value positions using the exact closing price
+
+- Position market value multiplies held units by the retained closing-price decimal
+  and rounds at the native-currency cent boundary. Unrealized gain subtracts cost
+  basis from that value in cents. Percentage returns use the existing unrounded
+  numeric calculation.
+- Verification covered 122 focused native tests, 24 encrypted tests, and TypeScript.
+- Holding quantities and aggregate FX valuation still need precision work.
+
 ### Batch 69 — Store canonical closing prices as decimals
 
 - Manual, imported, and provider prices store an unrounded decimal alongside the

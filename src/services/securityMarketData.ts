@@ -24,12 +24,12 @@ function point(row: { marketDate: string; close: number; closeDecimal: string | 
 
 /** SecurityDailyPrice is the only price source. Never infer a market or fall back to ticker-only history. */
 export const securityMarketData = {
-  async latest(identity: SecurityIdentity, asOfDate?: string, tx: Prisma.TransactionClient = databaseService.prismaClient): Promise<CanonicalSecurityPrice | null> {
+  async latest(identity: SecurityIdentity, asOfDate?: string, tx: Prisma.TransactionClient = databaseService.prismaClient): Promise<(CanonicalSecurityPrice & { priceDecimal: string }) | null> {
     const key = parseSecurityIdentity(identity), cutoff = resolveValuationDate(asOfDate);
     const row = await tx.securityDailyPrice.findFirst({
       where: { ...key, priceBasis: "raw", barStatus: "complete", marketDate: { lte: cutoff } }, orderBy: { marketDate: "desc" },
     });
-    return row ? point(row) : null;
+    return row ? { ...point(row), priceDecimal: row.closeDecimal ?? row.close.toString() } : null;
   },
   async history(identity: SecurityIdentity, startDate?: string, endDate?: string): Promise<CanonicalSecurityPrice[]> {
     const key = parseSecurityIdentity(identity), start = startDate === undefined ? undefined : date(startDate), end = endDate === undefined ? undefined : date(endDate);

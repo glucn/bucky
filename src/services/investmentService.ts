@@ -21,7 +21,8 @@ import { valuationConversionService } from "./valuationConversionService";
 import { securityMarketData } from "./securityMarketData";
 import { securityQuoteCurrency } from "./securityQuoteCurrency";
 import { resolveValuationDate } from "./valuationDate";
-import { sumJournalCents, toJournalCents } from "./journalPrecision";
+import { journalAmountFromCents, sumJournalCents, toJournalCents } from "./journalPrecision";
+import { tradeGrossCents } from "./investmentPosting";
 
 export type InvestmentPosition = {
   needsBaselineReview?: boolean;
@@ -624,20 +625,13 @@ class InvestmentService {
     const quote = investmentProps.market && !quoteUnit.quoteCurrencyIssue ? await securityMarketData.latest({ ticker: investmentProps.tickerSymbol, market: investmentProps.market }, effectiveDate) : null;
     const marketPrice = quote?.price ?? null;
 
-    // Calculate market value: quantity × market price
-    const marketValue = quantity === 0 ? 0 : marketPrice !== null
-      ? quantity * marketPrice
-      : null;
-
-    // Calculate unrealized gain: market value - cost basis
-    const unrealizedGain = marketValue !== null 
-      ? marketValue - costBasis 
-      : null;
+    const marketCents = quantity === 0 ? 0n : quote ? BigInt(tradeGrossCents(quantity, quote.priceDecimal)) : null;
+    const gainCents = marketCents === null ? null : marketCents - BigInt(toJournalCents(costBasis));
 
     // Calculate unrealized gain percent: (unrealized gain / cost basis) × 100
-    const unrealizedGainPercent = unrealizedGain !== null && costBasis > 0
-      ? (unrealizedGain / costBasis) * 100
-      : null;
+    const unroundedValue = quantity === 0 ? 0 : marketPrice === null ? null : quantity * marketPrice;
+    const unrealizedGainPercent = unroundedValue !== null && costBasis > 0
+      ? ((unroundedValue - costBasis) / costBasis) * 100 : null;
 
     // Fix floating-point precision issues: treat very small numbers as zero
     // This prevents "-0.00" display for balances like -6.7302587114515e-13
@@ -657,8 +651,8 @@ class InvestmentService {
       costBasis: fixPrecision(costBasis),
       costPerShare: fixPrecision(costPerShare),
       marketPrice,
-      marketValue: marketValue !== null ? fixPrecision(marketValue) : null,
-      unrealizedGain: unrealizedGain !== null ? fixPrecision(unrealizedGain) : null,
+      marketValue: marketCents === null ? null : journalAmountFromCents(marketCents),
+      unrealizedGain: gainCents === null ? null : journalAmountFromCents(gainCents),
       unrealizedGainPercent: unrealizedGainPercent !== null ? fixPrecision(unrealizedGainPercent) : null,
     };
   }

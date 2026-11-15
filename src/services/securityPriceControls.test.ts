@@ -41,6 +41,18 @@ it("requires raw-close confirmation and the market observed during review", asyn
   await expect(saveSecurityPrices({ ...input, expected, expectedMarket: "NASDAQ" })).rejects.toThrow(/market/i);
   expect(await databaseService.prismaClient.securityDailyPrice.count()).toBe(0);
 });
+it("values fractional positions at the exact closing-price boundary", async () => {
+  const holding = await account();
+  const identity = { ticker: "ABC", market: "TSX" };
+  const date = "2026-01-02";
+  await securityMarketData.write({ identity, mode: "correct", source: "manual",
+    points: [{ date, price: 0.1005, priceBasis: "raw", barStatus: "complete" }] });
+  expect(await investmentService.getPositionDetails(holding.id, date))
+    .toMatchObject({ marketPrice: 0.1005, marketValue: 1.01, unrealizedGain: -98.99 });
+  await databaseService.prismaClient.securityDailyPrice.updateMany({ data: { closeDecimal: "0.10049999999999999999" } });
+  expect(await investmentService.getPositionDetails(holding.id, date))
+    .toMatchObject({ marketPrice: 0.1005, marketValue: 1, unrealizedGain: -99 });
+});
 it("refuses stale price previews atomically instead of overwriting a later correction", async () => {
   const holding = await account(), input = { ...request(holding.id, "correct"), points: [{ date: "2026-01-02", price: 12 }, { date: "2026-01-03", price: 13 }] };
   const preview = await previewSecurityPrices(input);
