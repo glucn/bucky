@@ -140,6 +140,7 @@ model JournalLine {
   amountCents   String?       // Canonical signed integer cents
   currency      String        // ISO 4217 currency code, e.g., 'USD', 'EUR'
   exchangeRate  Float?        // Optional, for currency-transfer transactions
+  exchangeRateDecimal String? // Destination currency per source currency
   description   String?
   entry         JournalEntry  @relation(fields: [entryId], references: [id])
   account       Account       @relation(fields: [accountId], references: [id])

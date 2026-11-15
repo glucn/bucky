@@ -1,4 +1,4 @@
-import { decimalRatio, journalAmountFromCents, readPostingCents, roundDecimalRatio, toJournalCents } from "./journalPrecision";
+import { decimalRatio, journalAmountFromCents, readPostingCents, readUnsignedDecimal, roundDecimalRatio, toJournalCents } from "./journalPrecision";
 import { AccountType } from "../shared/accountTypes";
 
 export function isOpeningBalanceEntry(entry: {
@@ -16,13 +16,25 @@ export interface CurrencyTransferAmounts {
   exchangeRate?: number;
 }
 
-type ExchangePosting = { amount: number; amountCents: string | null; currency: string; exchangeRate: number | null };
+type StoredExchangeRate = { exchangeRate: number | null; exchangeRateDecimal: string | null };
+type ExchangePosting = StoredExchangeRate & { amount: number; amountCents: string | null; currency: string };
+
+export function exchangeRateFields(rate: number | null) {
+  return { exchangeRate: rate, exchangeRateDecimal: rate?.toString() ?? null };
+}
+
+export function readPostingExchangeRate(posting: StoredExchangeRate): number | null {
+  const value = posting.exchangeRateDecimal ?? posting.exchangeRate;
+  if (value === null) return null;
+  const rate = readUnsignedDecimal(value);
+  return Number.isFinite(rate) && rate > 0 ? rate : null;
+}
 
 export function isCurrencyExchange(entry: { type: string | null; lines: ExchangePosting[] }): boolean {
   if (entry.type === "currency_transfer") return true;
   const isFunding = entry.type === "investment_cash_deposit" || entry.type === "investment_cash_withdrawal";
   return isFunding && (new Set(entry.lines.map(({ currency }) => currency)).size > 1 ||
-    entry.lines.some(({ exchangeRate }) => exchangeRate !== null));
+    entry.lines.some(({ exchangeRate, exchangeRateDecimal }) => exchangeRate !== null || exchangeRateDecimal !== null));
 }
 
 export function hasValidExchangePostings(lines: ExchangePosting[]): boolean {
@@ -30,13 +42,12 @@ export function hasValidExchangePostings(lines: ExchangePosting[]): boolean {
   try {
     const from = lines.find((line) => readPostingCents(line) < 0n);
     const to = lines.find((line) => readPostingCents(line) > 0n);
-    if (!from || !to || from.exchangeRate === null || to.exchangeRate !== from.exchangeRate) return false;
-    resolveCurrencyTransferAmounts({
-      amountFrom: journalAmountFromCents(-readPostingCents(from)),
-      amountTo: journalAmountFromCents(readPostingCents(to)),
-      exchangeRate: from.exchangeRate,
-    });
-    return true;
+    if (!from || !to || readPostingExchangeRate(from) === null || readPostingExchangeRate(to) === null) return false;
+    const rate = decimalRatio(from.exchangeRateDecimal ?? from.exchangeRate!);
+    const other = decimalRatio(to.exchangeRateDecimal ?? to.exchangeRate!);
+    if (rate.numerator * other.denominator !== other.numerator * rate.denominator) return false;
+    const difference = readPostingCents(to) * rate.denominator + readPostingCents(from) * rate.numerator;
+    return difference >= -rate.denominator && difference <= rate.denominator;
   } catch {
     return false;
   }

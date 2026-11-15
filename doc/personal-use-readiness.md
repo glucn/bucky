@@ -9,6 +9,17 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 84 — Store transaction FX rates as decimals
+
+- New and edited transfers store their directional rate as decimal text on
+  both postings. Transfer display uses the retained rate, and checkpoint and
+  journal verification compare the recorded rates and cents as exact ratios.
+- The migration backfills legacy rates that can be converted safely. Older
+  entries retain their numeric rates where needed. The stored transfer rate
+  remains independent of valuation FX.
+- Verification covered 56 focused native tests, 53 encrypted tests, 13 database
+  lifecycle tests, TypeScript, Apple Silicon packaging, and three packaged tests.
+
 ### Batch 83 — Review the replacement adjustment before reconciling
 
 - Reconciliation first shows the journal balance excluding the checkpoint's

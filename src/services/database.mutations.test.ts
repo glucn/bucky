@@ -88,9 +88,12 @@ describe("Journal mutation integrity", () => {
     } as any);
     expect(updated.type).toBe("currency_transfer");
     expect(updated.lines.find((line: any) => line.accountId === from.id))
-      .toMatchObject({ amount: -200, currency: "USD", exchangeRate: 1.4 });
+      .toMatchObject({ amount: -200, currency: "USD", exchangeRate: 1.4, exchangeRateDecimal: "1.4" });
     expect(updated.lines.find((line: any) => line.accountId === to.id))
-      .toMatchObject({ amount: 280, currency: "CAD", exchangeRate: 1.4 });
+      .toMatchObject({ amount: 280, currency: "CAD", exchangeRate: 1.4, exchangeRateDecimal: "1.4" });
+    await prisma.journalLine.updateMany({ where: { entryId: updated.id }, data: { exchangeRate: 9 } });
+    expect((await databaseService.getJournalEntriesForAccount(from.id))[0].exchangeRate).toBe(1.4);
+    expect((await databaseService.getJournalEntriesForAccount(to.id))[0].exchangeRate).toBe(1.4);
   });
 
   it("rejects incomplete FX edits instead of converting them to equal-amount postings", async () => {

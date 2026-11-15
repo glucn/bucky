@@ -262,6 +262,16 @@ it("reconciles the destination of an FX transfer without reversing the stored ra
   expect(await db().checkpoint.findUnique({ where: { id: reconciled.checkpoint.id } })).not.toBeNull();
 });
 
+it("uses exact stored FX posting rates when checking transfer equivalence", async () => {
+  const { cad, usd } = await fixture();
+  const result = await databaseService.createJournalEntry({
+    fromAccountId: usd.id, toAccountId: cad.id, date: "2026-11-01", type: "currency_transfer",
+    amountFrom: 100, amountTo: 140, exchangeRate: 1.4,
+  });
+  await db().journalLine.updateMany({ where: { entryId: result.entry!.id }, data: { exchangeRate: 9 } });
+  expect((await verifyBook()).findings.filter(({ code }) => code === "journal-fx")).toEqual([]);
+});
+
 it("checks retained investment activity and distinguishes legacy history from inconsistent lots", async () => {
   const portfolio = await investmentService.createInvestmentPortfolio("Verifier portfolio", "CAD");
   const holding = await investmentService.createSecurityAccount(portfolio.group.id, "ABC");

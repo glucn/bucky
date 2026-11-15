@@ -20,7 +20,7 @@ const journalSelect = {
   entryType: true,
   lines: {
     orderBy: { id: "asc" },
-    select: { id: true, accountId: true, amount: true, amountCents: true, currency: true, exchangeRate: true,
+    select: { id: true, accountId: true, amount: true, amountCents: true, currency: true, exchangeRate: true, exchangeRateDecimal: true,
       account: { select: { type: true, currency: true, name: true } } },
   },
 } satisfies Prisma.JournalEntrySelect;
@@ -35,7 +35,7 @@ function verifyOpeningBalance(entry: Entry, openings: Map<string, Entry | null>,
   const user = entry.lines.find(({ account }) => account.type === AccountType.User);
   const offset = entry.lines.find(({ account }) => account.type === AccountType.System);
   if (!user || !offset || entry.lines.length !== 2 || entry.type !== null ||
-    user.currency !== offset.currency || entry.lines.some(({ exchangeRate }) => exchangeRate !== null)) {
+    user.currency !== offset.currency || entry.lines.some(({ exchangeRate, exchangeRateDecimal }) => exchangeRate !== null || exchangeRateDecimal !== null)) {
     report(entry, "An opening balance must have one account posting and one system offset in the same currency");
     return;
   }

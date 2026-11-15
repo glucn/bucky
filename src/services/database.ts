@@ -8,7 +8,8 @@ import {
 import { localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
 import type { CheckpointReconciliationReview, CheckpointReview } from "../shared/checkpointReview";
 import { autoCategorizationService } from "./autoCategorizationService";
-import { hasValidExchangePostings, isCurrencyExchange, isOpeningBalanceEntry, resolveCurrencyTransferAmounts } from "./journalValidation";
+import { exchangeRateFields, hasValidExchangePostings, isCurrencyExchange, isOpeningBalanceEntry,
+  readPostingExchangeRate, resolveCurrencyTransferAmounts } from "./journalValidation";
 import { resolveCheckpointAdjustment } from "./checkpointAdjustment";
 import { checkpointBalance, journalAmountFromCents, postingAmountFromCents, readCheckpointCents, readPostingCents, roundJournalAmount, sumJournalCents, toJournalCents, withPostingCents } from "./journalPrecision";
 import { resolveDatabaseFile } from "./localDatabase";
@@ -1242,14 +1243,14 @@ class DatabaseService {
                 accountId: data.fromAccountId,
                 ...postingAmountFromCents(-toJournalCents(amountFrom)),
                 currency: currencyFrom,
-                exchangeRate,
+                ...exchangeRateFields(exchangeRate),
                 description: data.description,
               },
               {
                 accountId: data.toAccountId,
                 ...postingAmountFromCents(toJournalCents(amountTo)),
                 currency: currencyTo,
-                exchangeRate,
+                ...exchangeRateFields(exchangeRate),
                 description: data.description,
               },
             ],
@@ -1342,15 +1343,11 @@ class DatabaseService {
         line.account.currency !== otherLine.account.currency
       ) {
         isCurrencyTransfer = true;
-        // Prefer explicit exchangeRate field, else calculate
-        const lineExchangeRate = (line as any)["exchangeRate"];
-        const otherLineExchangeRate = (otherLine as any)?.["exchangeRate"];
-        if (typeof lineExchangeRate === "number") {
-          exchangeRate = lineExchangeRate;
-        } else if (typeof otherLineExchangeRate === "number") {
-          exchangeRate = otherLineExchangeRate;
-        } else if (Math.abs(otherLine.amount) > 0) {
-          exchangeRate = Math.abs(line.amount / otherLine.amount);
+        exchangeRate = readPostingExchangeRate(line) ?? readPostingExchangeRate(otherLine) ?? undefined;
+        if (exchangeRate === undefined) {
+          const from = line.amount < 0 ? line : otherLine;
+          const to = line.amount < 0 ? otherLine : line;
+          if (from.amount < 0 && to.amount > 0) exchangeRate = to.amount / -from.amount;
         }
       }
       return {
@@ -2623,9 +2620,9 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
 
     const [fromLineData, toLineData] = fxAmounts ? [
       { accountId: fromAccount.id, amount: -fxAmounts.amountFrom, currency: fromAccount.currency,
-        exchangeRate: fxAmounts.exchangeRate, description: data.description },
+        ...exchangeRateFields(fxAmounts.exchangeRate), description: data.description },
       { accountId: toAccount.id, amount: fxAmounts.amountTo, currency: toAccount.currency,
-        exchangeRate: fxAmounts.exchangeRate, description: data.description },
+        ...exchangeRateFields(fxAmounts.exchangeRate), description: data.description },
     ] : DatabaseService.generateJournalLines({
       transactionType: data.transactionType || "transfer",
       userAccountId: data.fromAccountId,
@@ -2635,7 +2632,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       amount: roundJournalAmount(data.amount),
       currency: fromAccount.type === AccountType.Category ? toAccount.currency : fromAccount.currency,
       description: data.description,
-    }).map((posting) => ({ ...posting, exchangeRate: null }));
+    }).map((posting) => ({ ...posting, ...exchangeRateFields(null) }));
 
     // Update the entry (date, description, postingDate)
     await prisma.journalEntry.update({

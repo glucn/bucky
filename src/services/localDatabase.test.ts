@@ -67,6 +67,7 @@ describe("Personal database lifecycle", () => {
     await sql("INSERT INTO JournalEntry (id,date,updatedAt) VALUES ('entry','2026-01-02',CURRENT_TIMESTAMP)");
     await sql(`INSERT INTO JournalLine (id,entryId,accountId,amount,currency) VALUES
       ('whole','entry','keep',-0.29,'CAD'), ('ambiguous','entry','keep',0.005,'CAD')`);
+    await sql("UPDATE JournalLine SET exchangeRate=1.25 WHERE id='whole'");
     await sql(`INSERT INTO FxDailyRate (id,sourceCurrency,targetCurrency,marketDate,rate) VALUES
       ('ordinary','USD','CAD','2026-01-02',1.25),
       ('long','USD','CAD','2026-01-03',1.2345678901234567)`);
@@ -91,6 +92,8 @@ describe("Personal database lifecycle", () => {
     expect(await sql("SELECT id,amount,amountCents FROM JournalLine ORDER BY id")).toEqual([
       { id: "ambiguous", amount: 0.005, amountCents: null }, { id: "whole", amount: -0.29, amountCents: "-29" },
     ]);
+    expect(await sql("SELECT exchangeRate,exchangeRateDecimal FROM JournalLine WHERE id='whole'"))
+      .toEqual([{ exchangeRate: 1.25, exchangeRateDecimal: "1.25" }]);
     expect(await sql("SELECT id,rate,rateDecimal FROM FxDailyRate ORDER BY id")).toEqual([
       { id: "long", rate: 1.2345678901234567, rateDecimal: null },
       { id: "ordinary", rate: 1.25, rateDecimal: "1.25" },
