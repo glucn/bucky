@@ -1,6 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { AccountType } from "../shared/accountTypes";
+import { localCalendarDate } from "../shared/dateUtils";
 import { databaseService } from "./database";
+import { verifyInvestmentSnapshot } from "./investmentActivity";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
 
 const journalSelect = {
@@ -14,9 +16,11 @@ const journalSelect = {
 
 type Entry = Prisma.JournalEntryGetPayload<{ select: typeof journalSelect }>;
 type Code = "journal-unbalanced" | "journal-account-currency" | "journal-fx" | "journal-postings" | "journal-amount";
-type Finding = { code: Code; entryId: string; message: string; lineId?: string } |
-  { code: "checkpoint-balance"; checkpointId: string; accountId: string; date: string;
-    expected: number; actual: number; currency: string; message: string };
+type Finding = { severity: "error"; code: Code; entryId: string; message: string; lineId?: string } |
+  { severity: "error"; code: "checkpoint-balance"; checkpointId: string; accountId: string; date: string;
+    expected: number; actual: number; currency: string; message: string } |
+  { severity: "error"; code: "investment-inconsistent"; accountId: string; message: string } |
+  { severity: "warning"; code: "investment-legacy"; accountId: string; message: string };
 
 function validExchange(entry: Entry): boolean {
   if (entry.lines.length !== 2) return false;
@@ -45,7 +49,7 @@ async function verifyCheckpoints(tx: Prisma.TransactionClient, findings: Finding
     });
     const actual = Math.round((_sum.amount ?? 0) * 100) / 100;
     if (actual !== balance) findings.push({
-      code: "checkpoint-balance", checkpointId: id, accountId, date,
+      severity: "error", code: "checkpoint-balance", checkpointId: id, accountId, date,
       expected: balance, actual, currency: account.currency,
       message: "The journal balance through the checkpoint date differs from the recorded balance",
     });
@@ -54,7 +58,7 @@ async function verifyCheckpoints(tx: Prisma.TransactionClient, findings: Finding
 
 function verifyJournal(entry: Entry, findings: Finding[]) {
   const report = (code: Code, message: string, lineId?: string) =>
-    findings.push({ code, entryId: entry.id, message, ...(lineId ? { lineId } : {}) });
+    findings.push({ severity: "error", code, entryId: entry.id, message, ...(lineId ? { lineId } : {}) });
 
   if (entry.type === "stock_split" && entry.lines.length === 0) return;
   if (entry.lines.length < 2) report("journal-postings", "Expected at least two postings in this monetary entry");
@@ -89,7 +93,26 @@ function verifyJournal(entry: Entry, findings: Finding[]) {
   }
 }
 
-/** Verify the persisted journal in a consistent read transaction using today's cent policy. */
+async function verifyHoldings(tx: Prisma.TransactionClient, findings: Finding[]) {
+  const holdings = await tx.investmentProperties.findMany({
+    select: { accountId: true }, orderBy: { accountId: "asc" },
+  });
+  const today = localCalendarDate();
+  for (const { accountId } of holdings) {
+    const snapshot = await verifyInvestmentSnapshot(tx, accountId, today);
+    if (snapshot.status === "available") continue;
+    if (snapshot.reason === "legacy_history") findings.push({
+      severity: "warning", code: "investment-legacy", accountId,
+      message: "A reviewed investment baseline is needed to verify this holding's history",
+    });
+    else findings.push({
+      severity: "error", code: "investment-inconsistent", accountId,
+      message: "Investment activity, lots, position or linked journal postings disagree",
+    });
+  }
+}
+
+/** Verify persisted accounting records in a consistent read transaction using today's cent policy. */
 export async function verifyBook(): Promise<{ findings: Finding[] }> {
   return databaseService.prismaClient.$transaction(async (tx) => {
     const findings: Finding[] = [];
@@ -107,6 +130,7 @@ export async function verifyBook(): Promise<{ findings: Finding[] }> {
       after = entries[entries.length - 1].id;
     }
     await verifyCheckpoints(tx, findings);
+    await verifyHoldings(tx, findings);
     return { findings };
   }, { timeout: 30000 });
 }

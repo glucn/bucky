@@ -3,6 +3,7 @@ import { AccountType } from "../shared/accountTypes";
 import { databaseService } from "./database";
 import { resetTestDatabase } from "./database.test.utils";
 import { verifyBook } from "./bookVerification";
+import { investmentService } from "./investmentService";
 
 const db = () => databaseService.prismaClient;
 beforeEach(async () => { await resetTestDatabase(); });
@@ -63,4 +64,21 @@ it("keeps foreign-currency checkpoint postings balanced and verifies the stored 
     expected: 200, actual: 188, currency: "CAD",
   })] });
   expect((await db().checkpoint.findUniqueOrThrow({ where: { id: checkpoint.id } })).balance).toBe(200);
+});
+
+it("checks retained investment activity and distinguishes legacy history from inconsistent lots", async () => {
+  const portfolio = await investmentService.createInvestmentPortfolio("Verifier portfolio", "CAD");
+  const holding = await investmentService.createSecurityAccount(portfolio.group.id, "ABC");
+  const legacy = await investmentService.createSecurityAccount(portfolio.group.id, "XYZ");
+  await investmentService.recordBuy({ portfolioId: portfolio.group.id, securityAccountId: holding.id, tickerSymbol: "ABC",
+    date: "2026-01-01", quantity: 10, pricePerShare: 10 });
+  await db().investmentProperties.update({ where: { accountId: legacy.id }, data: { hasCompleteActivityHistory: false } });
+  const historyGap = expect.objectContaining({ code: "investment-legacy", accountId: legacy.id, severity: "warning" });
+  expect((await verifyBook()).findings).toEqual([historyGap]);
+
+  await db().investmentProperties.update({ where: { accountId: holding.id }, data: { lots: "[]" } });
+  expect((await verifyBook()).findings).toEqual(expect.arrayContaining([
+    historyGap,
+    expect.objectContaining({ code: "investment-inconsistent", accountId: holding.id, severity: "error" }),
+  ]));
 });

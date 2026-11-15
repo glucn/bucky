@@ -9,6 +9,15 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 55 — Verify tracked investment holdings
+
+- Book verification checks structured investment activity, current quantities and lots,
+  and the linked journal through the existing investment snapshot verifier. Holdings
+  without a reviewed baseline produce a warning. Inconsistent tracked history produces
+  an error with the holding ID.
+- Verification covered 16 native tests, four encrypted tests, and TypeScript. Market
+  price and FX coverage and the user-facing verification action remain open.
+
 ### Batch 54 — Verify balance checkpoints against postings
 
 - New checkpoint adjustments post both sides in the account's currency. Existing postings
