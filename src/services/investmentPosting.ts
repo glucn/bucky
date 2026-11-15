@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
 import { databaseService } from "./database";
-import { sumJournalCents } from "./journalPrecision";
+import { decimalRatio, roundDecimalRatio, sumJournalCents, toJournalCents } from "./journalPrecision";
 import { hasPortfolioIdentity, isSettlementCash } from "../shared/investmentAccounts";
 
 export function investmentTransaction<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>, tx?: Prisma.TransactionClient): Promise<T> {
@@ -13,11 +13,20 @@ export type InvestmentSelection = { portfolioId: string; tickerSymbol: string; s
 
 export type Lot = { date: string; quantity: number; pricePerShare: number; amount: number };
 
-// Existing ledger amounts use cents. Exact decimal storage/quantity arithmetic is BL-031.
 export function cents(value: number): number {
-  const result = Math.round(value * 100);
-  if (!Number.isFinite(value) || !Number.isSafeInteger(result)) throw new Error("Trade amount exceeds supported precision");
-  return result;
+  return toJournalCents(value);
+}
+
+export function tradeGrossCents(units: number, price: number): number {
+  const quantity = decimalRatio(units), unitPrice = decimalRatio(price);
+  const gross = Number(roundDecimalRatio(quantity.numerator * unitPrice.numerator * 100n, quantity.denominator * unitPrice.denominator));
+  if (!Number.isSafeInteger(gross)) throw new Error("Trade amount exceeds supported precision");
+  return gross;
+}
+
+export function proportionalBasisCents(basis: number, unitsSold: number, unitsHeld: number): number {
+  const sold = decimalRatio(unitsSold), held = decimalRatio(unitsHeld);
+  return Number(roundDecimalRatio(BigInt(basis) * sold.numerator * held.denominator, sold.denominator * held.numerator));
 }
 
 export async function readInvestmentBasisCents(tx: Prisma.TransactionClient, accountId: string): Promise<bigint> {

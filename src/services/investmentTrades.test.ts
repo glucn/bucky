@@ -8,6 +8,42 @@ const trade = { tickerSymbol: "ABC", quantity: 10, pricePerShare: 10, date: "202
 const cashTotal = (entry: any, id: string) => entry.lines.filter((line: any) => line.accountId === id).reduce((sum: number, line: any) => sum + line.amount, 0);
 const balanced = (entry: any) => expect(entry.lines.reduce((sum: number, line: any) => sum + line.amount, 0)).toBeCloseTo(0, 10);
 
+it("rounds fractional trade consideration and fees at the exact half-cent boundary", async () => {
+  const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Fractional trade");
+  const common = { ...trade, portfolioId: group.id, quantity: 0.5, pricePerShare: 2.01, fee: 0.145 };
+  const buy = await investmentService.recordBuy(common);
+  expect(cashTotal(buy, tradeCashAccount.id)).toBe(-1.16);
+  const sell = await investmentService.recordSell({ ...common, date: "2026-01-03" });
+  expect(cashTotal(sell, tradeCashAccount.id)).toBe(0.86);
+  const gains = await investmentService.getRealizedGains(group.id, "2026-01-03", "2026-01-03");
+  expect(gains[0]).toMatchObject({ costBasis: 1.16, saleProceeds: 0.86, realizedGain: -0.30 });
+});
+
+it("retains recorded proceeds for a historical sale rounded by the binary calculation", async () => {
+  const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Historical rounding");
+  const common = { ...trade, portfolioId: group.id, quantity: 0.5, pricePerShare: 2 };
+  await investmentService.recordBuy(common);
+  const date = "2026-01-03";
+  const sale = await investmentService.recordSell({ ...common, date, pricePerShare: 2.01 });
+  const db = databaseService.prismaClient;
+  const gain = await db.account.findFirstOrThrow({ where: { name: "Realized Gains/Losses" } });
+  await db.journalLine.updateMany({ where: { entryId: sale.id, accountId: tradeCashAccount.id }, data: { amount: 1, amountCents: "100" } });
+  await db.journalLine.updateMany({ where: { entryId: sale.id, accountId: gain.id }, data: { amount: 0, amountCents: "0" } });
+  await db.investmentActivity.updateMany({ where: { journalLinks: { some: { entryId: sale.id } } }, data: { cashAmount: 1 } });
+  const gains = await investmentService.getRealizedGains(group.id, date, date);
+  expect(gains[0]).toMatchObject({ costBasis: 1, saleProceeds: 1, realizedGain: 0 });
+});
+
+it.each(["FIFO", "AVERAGE_COST"] as const)("releases a half-cent basis tie exactly for %s", async (method) => {
+  const { group } = await investmentService.createInvestmentPortfolio("Partial sale");
+  const holding = await investmentService.createSecurityAccount(group.id, "ABC", undefined, method);
+  const common = { ...trade, portfolioId: group.id, securityAccountId: holding.id };
+  await investmentService.recordBuy({ ...common, quantity: 22, pricePerShare: 0.005 });
+  const sale = await investmentService.recordSell({ ...common, date: "2026-01-03", quantity: 15, pricePerShare: 0.01 });
+  expect(cashTotal(sale, holding.id)).toBe(-0.08);
+  expect((await investmentService.getPositionDetails(holding.id, "2026-01-03")).costBasis).toBe(0.03);
+});
+
 it("capitalizes acquisition fees once in a balanced purchase and its lot", async () => {
   const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Fees");
   const entry = await investmentService.recordBuy({ ...trade, portfolioId: group.id, fee: 1 });

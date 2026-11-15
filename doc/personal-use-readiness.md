@@ -9,6 +9,19 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 66 — Round investment consideration and basis with decimal arithmetic
+
+- Buy and sell consideration, fees, and partial FIFO and average-cost basis releases
+  use integer ratios at the cent boundary. Reinvested units round to six decimal
+  places using the same ratio arithmetic.
+- Realized-gain reports retain recorded proceeds for historical sales whose amounts
+  reflect the previous binary rounding. Reviewed replay uses the current posting
+  policy and shows changes before saving.
+- Investment quantity and price storage and arithmetic such as split processing
+  remain part of the broader precision migration.
+- Verification covered 1,227 native tests, 74 targeted encrypted tests, TypeScript,
+  Apple Silicon packaging, and three packaged investment trade and replay tests.
+
 ### Batch 65 — Read exact postings in investment reports
 
 - Dividend, interest, fee, realized-gain, and portfolio cash-flow reports use stored

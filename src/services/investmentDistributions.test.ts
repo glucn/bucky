@@ -5,6 +5,13 @@ import { resetTestDatabase } from "./database.test.utils";
 
 beforeEach(resetTestDatabase);
 const dividend = { tickerSymbol: "ABC", dividendAmount: 10, reinvestmentPrice: 5, date: "2026-01-03", recordAsIncome: true };
+
+it("rounds reinvested units exactly at the sixth decimal place", async () => {
+  const { group } = await investmentService.createInvestmentPortfolio("Fractional reinvestment");
+  await investmentService.recordReinvestedDividend({ ...dividend, portfolioId: group.id, dividendAmount: 0.01, reinvestmentPrice: 6.4 });
+  const holding = await investmentService.getSecurityAccount(group.id, "ABC");
+  expect(holding.investmentProperties.quantity).toBe(0.001563);
+});
 async function position() {
   const portfolio = await investmentService.createInvestmentPortfolio("Distributions");
   await investmentService.recordBuy({ portfolioId: portfolio.group.id, tickerSymbol: "ABC", quantity: 10, pricePerShare: 10, date: "2026-01-02" });

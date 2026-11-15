@@ -1,4 +1,4 @@
-import { postingAmountFromCents } from "./journalPrecision";
+import { decimalRatio, postingAmountFromCents, roundDecimalRatio } from "./journalPrecision";
 import type { Prisma } from "@prisma/client";
 import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
@@ -92,7 +92,10 @@ export async function recordReinvestment(input: ReinvestmentInput, transaction?:
   const date = normalizedDate(input.date), amount = distributionAmount(input.dividendAmount);
   if (!Number.isFinite(input.reinvestmentPrice) || input.reinvestmentPrice <= 0) throw new Error("Reinvestment price must be a positive number");
   if (typeof input.recordAsIncome !== "boolean") throw new Error("Select reinvestment classification explicitly");
-  const quantity = Math.round((amount / 100 / input.reinvestmentPrice) * 1e6) / 1e6;
+  const price = decimalRatio(input.reinvestmentPrice);
+  const millionths = Number(roundDecimalRatio(BigInt(amount) * price.denominator * 10_000n, price.numerator));
+  if (!Number.isSafeInteger(millionths)) throw new Error("Reinvestment quantity exceeds supported precision");
+  const quantity = millionths / 1e6;
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("Reinvestment quantity exceeds supported precision");
   return investmentTransaction(async (tx) => {
     const { security, cash } = await resolveInvestmentAccounts(tx, input, { createSecurity: input.recordAsIncome, requireSecurity: true });

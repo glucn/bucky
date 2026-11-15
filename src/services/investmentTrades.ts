@@ -2,7 +2,7 @@ import { postingAmountFromCents } from "./journalPrecision";
 import type { Prisma } from "@prisma/client";
 import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
-import { cents, readLots, resolveInvestmentAccounts, investmentTransaction } from "./investmentPosting";
+import { cents, proportionalBasisCents, readLots, resolveInvestmentAccounts, investmentTransaction, tradeGrossCents } from "./investmentPosting";
 import { parseToStandardDate } from "../shared/dateUtils";
 
 export type InvestmentTrade = {
@@ -31,7 +31,7 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
   const date = typeof input.date === "string" ? parseToStandardDate(input.date) : null;
   if (!date) throw new Error("Transaction date is required and must be valid");
   const ticker = input.tickerSymbol.trim();
-  const gross = cents(input.quantity * input.pricePerShare), fee = cents(input.fee ?? 0);
+  const gross = tradeGrossCents(input.quantity, input.pricePerShare), fee = cents(input.fee ?? 0);
   const consideration = kind === "buy" ? gross + fee : gross - fee;
   if (!Number.isSafeInteger(consideration)) throw new Error("Trade amount exceeds supported precision");
 
@@ -57,7 +57,7 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
         lots = lots.flatMap((lot) => {
           if (remaining <= 0) return [lot];
           const taken = Math.min(remaining, lot.quantity), oldCost = cents(lot.amount);
-          const releasedCost = taken === lot.quantity ? oldCost : Math.round(oldCost * (taken / lot.quantity));
+          const releasedCost = taken === lot.quantity ? oldCost : proportionalBasisCents(oldCost, taken, lot.quantity);
           basis += releasedCost;
           remaining -= taken;
           return taken === lot.quantity ? [] : [{ ...lot, quantity: lot.quantity - taken, amount: (oldCost - releasedCost) / 100 }];
@@ -66,7 +66,7 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
         const oldCost = Number(history.basisCents);
         if (!Number.isSafeInteger(oldCost)) throw new Error("Cost basis exceeds supported precision");
         if (oldCost < 0) throw new Error("Account has negative cost basis");
-        basis = input.quantity === props.quantity ? oldCost : Math.round(oldCost * (input.quantity / props.quantity));
+        basis = input.quantity === props.quantity ? oldCost : proportionalBasisCents(oldCost, input.quantity, props.quantity);
       }
     }
     if (!Number.isSafeInteger(basis)) throw new Error("Cost basis exceeds supported precision");
