@@ -9,6 +9,15 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 89 — Identify historical investment rows before importing
+
+- Statement preview uses the same holding-date rule as ordinary posting. Rows
+  requiring historical review are identified before import and excluded by the
+  wizard. Existing import origins retain their matching or conflict status.
+- The import can still post eligible rows in the same statement. Direct calls
+  cannot bypass the holding-date rule by marking a historical row as additional.
+  Reviewing and replaying a bulk historical batch remains open.
+
 ### Batch 88 — Use the entered FX rate when posting transfers
 
 - The transfer form and ledger share decimal cent rounding. The form sends an

@@ -9,8 +9,9 @@ import { recordInvestmentTrade } from "./investmentTrades";
 import { recordCashDividend, recordReinvestment, recordSplit } from "./investmentDistributions";
 import { ImportHoldingSelectionError, originHolding, resolveImportSelection, securityImportRow } from "./investmentImportSelection";
 import { isSettlementCash } from "../shared/investmentAccounts";
+import { investmentActivityDateIssue, latestInvestmentActivity } from "./investmentActivity";
 
-type Match = { status: "new" | "matching" | "review" | "conflict"; reason?: string; count?: number };
+type Match = { status: "new" | "matching" | "review" | "conflict" | "historical"; reason?: string; count?: number };
 function context(options: InvestmentImportOptions, rows: InvestmentImportRow[]) {
   if (!options || typeof options !== "object" || (options.sourceNamespace !== undefined && typeof options.sourceNamespace !== "string")) throw new Error("Invalid investment import options");
   const sourceNamespace = options.sourceNamespace?.trim() || "";
@@ -94,9 +95,16 @@ export async function previewInvestmentImport(portfolioId: string, csv: string, 
   return investmentTransaction(async (tx) => {
     if (!await tx.accountGroup.findUnique({ where: { id: portfolioId } })) throw new Error("Portfolio not found");
     const seen = new Set<string>(), preview: Array<InvestmentImportRow & Match & { currency?: string; securityAccountId?: string | null; requiresHoldingSelection?: boolean }> = [];
+    const latest = new Map<string, Awaited<ReturnType<typeof latestInvestmentActivity>>>();
     for (const row of parsed.rows) {
       try {
         let result = await match(tx, portfolioId, sourceNamespace, row, options);
+        if (result.securityAccountId && (result.status === "new" || result.status === "review")) {
+          const holding = result.securityAccountId;
+          if (!latest.has(holding)) latest.set(holding, await latestInvestmentActivity(tx, holding));
+          const issue = investmentActivityDateIssue(latest.get(holding) ?? null, row.date);
+          if (issue) result = { ...result, status: "historical", reason: issue.reason };
+        }
         if (seen.has(result.sourceKey) && result.status === "new") result = { ...result, status: "matching", reason: row.sourceId ? "Repeated broker identifier in this statement" : "Identical row in this statement; confirm if it is another transaction" };
         seen.add(result.sourceKey); preview.push({ ...row, status: result.status, reason: result.reason, count: result.count, currency: result.currency, securityAccountId: result.securityAccountId });
       } catch (error) {

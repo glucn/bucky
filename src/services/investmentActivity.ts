@@ -175,6 +175,16 @@ export async function getInvestmentSnapshot(accountId: string, asOfDate: string)
   return databaseService.prismaClient.$transaction((tx) => verifyInvestmentSnapshot(tx, accountId, date), { timeout: 30000 });
 }
 
+export function latestInvestmentActivity(tx: Prisma.TransactionClient, accountId: string) {
+  return tx.investmentActivity.findFirst({ where: { accountId }, orderBy: { sequence: "desc" } });
+}
+
+export function investmentActivityDateIssue(last: { kind: string; date: string } | null, date: string) {
+  if (last?.kind === "baseline" && date === last.date) return { replay: false, reason: "Post new activity after the reviewed closing date; activity on the cutover date requires review" };
+  if (last && date < last.date) return { replay: true, reason: "Backdated investment posting requires dated replay of subsequent activity" };
+  return null;
+}
+
 export async function beginInvestmentActivity(tx: Prisma.TransactionClient, accountId: string, date: string) {
   const account = await tx.account.findUniqueOrThrow({ where: { id: accountId }, include: { investmentProperties: true } });
   const props = account.investmentProperties!;
@@ -182,9 +192,10 @@ export async function beginInvestmentActivity(tx: Prisma.TransactionClient, acco
     const unit = await securityQuoteCurrency(tx, props.tickerSymbol, props.market, account.currency);
     if (unit.quoteCurrencyIssue) throw new Error(unit.quoteCurrencyIssue);
   }
-  const last = await tx.investmentActivity.findFirst({ where: { accountId }, orderBy: { sequence: "desc" } });
-  if (last?.kind === "baseline" && date === last.date) throw new Error("Post new activity after the reviewed closing date; activity on the cutover date requires review");
-  if (last && date < last.date) throw new InvestmentReplayRequiredError("Backdated investment posting requires dated replay of subsequent activity");
+  const last = await latestInvestmentActivity(tx, accountId);
+  const dateIssue = investmentActivityDateIssue(last, date);
+  if (dateIssue?.replay) throw new InvestmentReplayRequiredError(dateIssue.reason);
+  if (dateIssue) throw new Error(dateIssue.reason);
   const basisCents = await readInvestmentBasisCents(tx, accountId);
   if (props.hasCompleteActivityHistory) {
     const verified = await verifyInvestmentSnapshot(tx, accountId, "9999-12-31");

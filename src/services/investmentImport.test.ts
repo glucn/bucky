@@ -24,6 +24,22 @@ it("imports only new rows from an overlapping statement before checking posting 
   expect(result).toMatchObject({ imported: 1, skipped: 1, errors: [] });
   expect((await investmentService.getSecurityAccount(id, "ABC")).investmentProperties.quantity).toBe(7);
 });
+it("identifies rows that require historical replay without relabeling retained matches or same-day rows", async () => {
+  const id = await portfolio(), withIds = { ...mapping, sourceId: "Id" };
+  const later = buy.replace("2026-01-02", "2026-01-04");
+  await investmentService.importInvestmentTransactions(id, csv(later), withIds);
+  const statement = csv(later, buy.replace("buy-1", "older"), later.replace("buy-1", "same-day"));
+  const before = await databaseService.prismaClient.investmentImportOrigin.findMany();
+  expect((await previewInvestmentImport(id, statement, withIds)).preview).toMatchObject([
+    { status: "matching" },
+    { status: "historical", reason: expect.stringMatching(/replay/i) },
+    { status: "new" },
+  ]);
+  expect(await databaseService.prismaClient.investmentImportOrigin.findMany()).toEqual(before);
+  expect(await investmentService.importInvestmentTransactions(id, statement, withIds, { additionalRows: [3] }))
+    .toMatchObject({ imported: 1, skipped: 2, errors: [{ row: 3, error: expect.stringMatching(/replay/i) }] });
+  expect((await investmentService.getSecurityAccount(id, "ABC")).investmentProperties.quantity).toBe(20);
+});
 it("does not confuse equal-sized buys and sells or different commission amounts", async () => {
   const id = await portfolio();
   const result = await investmentService.importInvestmentTransactions(id, csv(buy, buy.replace(",1,Original", ",2,Original"), "2026-01-02,sell,ABC,10,10,100,0,Sale,sale-1"), mapping);

@@ -37,6 +37,22 @@ it("shows row failures after a partial import and preserves the review identifie
   await screen.findByText(/Synthetic position failure/);
   expect(screen.getByText("Review again")).toBeTruthy();
 });
+it("shows historical rows before import and excludes them from ordinary posting", async () => {
+  invoke.mockResolvedValue({ success: true, validation: { valid: true, errors: [], rowCount: 1, preview: [{
+    row: 2, date: "2026-01-02", type: "buy", ticker: "ABC", amount: 10, fee: 1, status: "historical",
+    reason: "Backdated investment posting requires dated replay of subsequent activity",
+  }] } });
+  await upload();
+  fireEvent.click(screen.getByText("Validate & Preview"));
+  await screen.findByText("Historical review required; excluded");
+  expect(screen.queryByLabelText("Import row 2 as an additional transaction")).toBeNull();
+  invoke.mockResolvedValue({ success: true, imported: 0, skipped: 1, errors: [] });
+  fireEvent.click(screen.getByText("Import Transactions"));
+  await screen.findByText("Rows marked for historical review were excluded from this import.");
+  expect(invoke).toHaveBeenCalledWith("import-investment-transactions", expect.objectContaining({
+    options: expect.objectContaining({ skipRows: [2], additionalRows: [] }),
+  }));
+});
 it("sends an explicitly selected cash account instead of guessing currency in a multi-currency portfolio", async () => {
   invoke.mockImplementation(async (channel) => channel === "get-portfolio-accounts" ? { success: true, accounts: { tradeCashAccounts: [
     { id: "usd", name: "Trade Cash USD", currency: "USD" }, { id: "cad", name: "Trade Cash CAD", currency: "CAD" },

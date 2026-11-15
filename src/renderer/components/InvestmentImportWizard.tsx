@@ -4,7 +4,7 @@ import type { InvestmentImportMapping, InvestmentImportOptions, InvestmentImport
 
 interface Props { isOpen: boolean; onClose: () => void; portfolioId: string; onImportComplete?: () => void }
 type Step = "upload" | "mapping" | "preview" | "importing" | "complete";
-type PreviewRow = InvestmentImportRow & { status: "new" | "matching" | "review" | "conflict"; reason?: string; count?: number; currency?: string; securityAccountId?: string | null; requiresHoldingSelection?: boolean };
+type PreviewRow = InvestmentImportRow & { status: "new" | "matching" | "review" | "conflict" | "historical"; reason?: string; count?: number; currency?: string; securityAccountId?: string | null; requiresHoldingSelection?: boolean };
 type Holding = { id: string; currency: string; isArchived?: boolean; investmentProperties: { tickerSymbol: string; market?: string | null } };
 type Validation = { valid: boolean; rowCount: number; errors: Array<{ row: number; field: string; error: string }>; preview?: PreviewRow[] };
 type Summary = { imported: number; skipped: number; errors: Array<{ row: number; error: string }> };
@@ -70,8 +70,10 @@ export const InvestmentImportWizard: React.FC<Props> = ({ isOpen, onClose, portf
     if (busy || previewStale || validation?.preview?.some((row) => row.requiresHoldingSelection || row.status === "conflict")) return;
     const token = generation.current; setBusy(true); setError(""); setStep("importing");
     try {
-      const skipRows = (validation?.preview || []).filter((row) => row.status === "review" && !options.additionalRows?.includes(row.row)).map((row) => row.row);
-      const result = await window.electron.ipcRenderer.invoke("import-investment-transactions", { portfolioId, csvData, mapping, options: { ...options, skipRows } });
+      const skipRows = (validation?.preview || []).filter((row) => row.status === "historical" ||
+        (row.status === "review" && !options.additionalRows?.includes(row.row))).map((row) => row.row);
+      const additionalRows = options.additionalRows?.filter((row) => !skipRows.includes(row));
+      const result = await window.electron.ipcRenderer.invoke("import-investment-transactions", { portfolioId, csvData, mapping, options: { ...options, additionalRows, skipRows } });
       if (token !== generation.current) return;
       if (!result.success) throw new Error(result.error || "Unable to import this statement");
       changed.current ||= result.imported > 0; setSummary(result); setStep("complete");
@@ -133,7 +135,7 @@ export const InvestmentImportWizard: React.FC<Props> = ({ isOpen, onClose, portf
                 {holdings.filter((holding) => holding.investmentProperties.tickerSymbol === row.ticker).map((holding) => <option key={holding.id} value={holding.id} disabled={holding.isArchived}>{holdingLabel(holding)}</option>)}
               </select> : null}
             </td><td>{row.quantity ?? "—"}</td><td>{row.price ?? "—"}</td><td>{row.amount}</td><td>{row.fee}</td><td>{cashChange(row)}</td><td>{row.currency || selectedCash?.currency || "—"}</td><td>{row.sourceId || "Not provided"}</td><td className="p-2">
-              <p>{options.additionalRows?.includes(row.row) ? "Additional transaction selected" : row.status === "new" ? "New" : row.status === "conflict" ? "Conflicting broker ID" : row.status === "review" ? "Needs review; excluded" : "Matching row; skipped"}{row.count ? ` (${row.count})` : ""}</p>
+              <p>{row.status === "historical" ? "Historical review required; excluded" : options.additionalRows?.includes(row.row) ? "Additional transaction selected" : row.status === "new" ? "New" : row.status === "conflict" ? "Conflicting broker ID" : row.status === "review" ? "Needs review; excluded" : "Matching row; skipped"}{row.count ? ` (${row.count})` : ""}</p>
               {row.reason ? <p className="text-gray-600">{row.reason}</p> : null}
               {!row.requiresHoldingSelection && (row.status === "review" || (row.status === "matching" && !row.sourceId)) ? <label className="block mt-1">
                 <input type="checkbox" disabled={busy || previewStale} checked={options.additionalRows?.includes(row.row) || false} onChange={(event) => setOptions({ ...options, additionalRows: event.target.checked ? [...(options.additionalRows || []), row.row] : options.additionalRows?.filter((value) => value !== row.row) })} />
@@ -149,6 +151,7 @@ export const InvestmentImportWizard: React.FC<Props> = ({ isOpen, onClose, portf
       {step === "importing" ? <p role="status">Importing transactions…</p> : null}
       {step === "complete" && summary ? <div className="space-y-4">
         <p data-testid="investment-import-summary">{summary.imported} imported. {summary.skipped} skipped. {summary.errors.length ? `${summary.errors.length} need review.` : "No row errors."}</p>
+        {rows.some((row) => row.status === "historical") ? <p>Rows marked for historical review were excluded from this import.</p> : null}
         {summary.errors.length ? <ul role="alert" data-testid="investment-import-errors" className="text-red-700">{summary.errors.map((item, index) => <li key={index}>Row {item.row}: {item.error}</li>)}</ul> : null}
         <div className="flex justify-end gap-3">{summary.errors.length ? <button className={button} disabled={busy} onClick={() => void validate()}>Review again</button> : null}<button className={button} onClick={close}>Close</button></div>
       </div> : null}
