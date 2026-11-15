@@ -9,6 +9,17 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 53 — Verify stored journal postings
+
+- The read-only service scans journal entries and their account references in one consistent
+  transaction. It reports record IDs for missing postings, invalid amounts, account currency
+  mismatches, unbalanced native currencies, and inconsistent transfer rates. FX verification
+  uses the recorded posting pair, including portfolio funding marked as a deposit or withdrawal.
+- This preliminary check uses the current cent policy. Checkpoint assertions, holding checks,
+  market data coverage, and a user-facing verifier remain open. A review of checkpoint creation
+  identified that the system offset can use USD for a non-USD checkpoint.
+- Verification covered 14 native tests, two encrypted tests, and TypeScript.
+
 ### Batch 52 — Read retained investment revisions from the holding
 
 - Open **Revision history** from the holding's Transaction History. The list shows saved
