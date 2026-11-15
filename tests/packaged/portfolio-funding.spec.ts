@@ -58,6 +58,12 @@ test("packaged native and FX funding select cash explicitly, retain refusals and
     }
     const report = await invoke("get-portfolio-performance", { portfolioId, startDate: "2026-01-01", endDate: "2026-01-05" });
     expect(report).toMatchObject({ success: true, performance: { deposits: null, withdrawals: 84, closingValue: null, cashFlows: { depositsByCurrency: { CAD: 240, USD: 100 }, withdrawalsByCurrency: { CAD: 84 } } } });
+    const checkpoint = await invoke("create-checkpoint", { accountId: cadId, date: "2026-01-03", balance: 240, description: "January statement" });
+    expect(checkpoint).toMatchObject({ success: true, checkpoint: { adjustmentAmount: 0 } });
+    const reconciled = await invoke("reconcile-checkpoint", checkpoint.checkpoint.checkpoint.id);
+    expect(reconciled).toMatchObject({ success: true, checkpoint: { adjustmentAmount: 0 } });
+    expect(await invoke("delete-checkpoint", reconciled.checkpoint.checkpoint.id)).toMatchObject({ success: true });
+    expect(await invoke("get-account-balance", cadId)).toEqual({ success: true, balance: 156 });
   } catch (error) {
     await test.info().attach("portfolio-funding.log", { body: app.output(), contentType: "text/plain" }); throw error;
   } finally { await app.dispose(); }

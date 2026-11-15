@@ -4,7 +4,7 @@ import type { BookFinding, BookVerificationReport, JournalVerificationCode } fro
 import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
-import { resolveCurrencyTransferAmounts } from "./journalValidation";
+import { hasValidExchangePostings, isCurrencyExchange } from "./journalValidation";
 import { journalAmountFromCents, readCheckpointCents, readPostingCents, sumJournalCents } from "./journalPrecision";
 import { securityMarketData } from "./securityMarketData";
 import { securityQuoteCurrency } from "./securityQuoteCurrency";
@@ -23,20 +23,6 @@ const journalSelect = {
 } satisfies Prisma.JournalEntrySelect;
 
 type Entry = Prisma.JournalEntryGetPayload<{ select: typeof journalSelect }>;
-
-function validExchange(entry: Entry): boolean {
-  if (entry.lines.length !== 2) return false;
-  const from = entry.lines.find((line) => readPostingCents(line) < 0n);
-  const to = entry.lines.find((line) => readPostingCents(line) > 0n);
-  if (!from || !to || from.exchangeRate === null || to.exchangeRate !== from.exchangeRate) return false;
-  try {
-    resolveCurrencyTransferAmounts({ amountFrom: journalAmountFromCents(-readPostingCents(from)),
-      amountTo: journalAmountFromCents(readPostingCents(to)), exchangeRate: from.exchangeRate });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 async function verifyCheckpoints(tx: Prisma.TransactionClient, findings: BookFinding[]) {
   const checkpoints = await tx.checkpoint.findMany({
@@ -100,10 +86,8 @@ function verifyJournal(entry: Entry, findings: BookFinding[]) {
   }
   if (invalidAmount) return;
 
-  const isFunding = entry.type === "investment_cash_deposit" || entry.type === "investment_cash_withdrawal";
-  const isExchange = entry.type === "currency_transfer" ||
-    (isFunding && (totals.size > 1 || entry.lines.some((line) => line.exchangeRate !== null)));
-  if (isExchange && !validExchange(entry)) {
+  const isExchange = isCurrencyExchange(entry);
+  if (isExchange && !hasValidExchangePostings(entry.lines)) {
     report("journal-fx", "Exchange postings disagree with their recorded rate");
     return;
   }

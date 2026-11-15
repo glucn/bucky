@@ -7,7 +7,7 @@ import {
 } from "../shared/accountTypes";
 import { localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
 import { autoCategorizationService } from "./autoCategorizationService";
-import { resolveCurrencyTransferAmounts } from "./journalValidation";
+import { hasValidExchangePostings, isCurrencyExchange, resolveCurrencyTransferAmounts } from "./journalValidation";
 import { checkpointBalance, journalAmountFromCents, postingAmountFromCents, readCheckpointCents, readPostingCents, roundJournalAmount, sumJournalCents, toJournalCents, withPostingCents } from "./journalPrecision";
 import { resolveDatabaseFile } from "./localDatabase";
 import { createEncryptedPrisma, initializeEncryptedDatabase } from "./encryptedDatabase";
@@ -2541,38 +2541,9 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       },
     });
 
-    // For each currency-transfer transaction, validate value equivalence
-    const tolerance = 0.01;
-    for (const line of lines) {
-      const entry = (line as any).entry;
-      if (
-        entry &&
-        typeof entry.type === "string" &&
-        entry.type === "currency_transfer" &&
-        Array.isArray(entry.lines) &&
-        entry.lines.length === 2
-      ) {
-        const [lineA, lineB] = entry.lines;
-        // Identify which is this account
-        const thisLine = lineA.accountId === checkpoint.accountId ? lineA : lineB;
-        const otherLine = lineA.accountId === checkpoint.accountId ? lineB : lineA;
-        // Use exchangeRate if present, else calculate
-        const exchangeRate =
-          typeof (thisLine as any)["exchangeRate"] === "number"
-            ? (thisLine as any)["exchangeRate"]
-            : typeof (otherLine as any)["exchangeRate"] === "number"
-            ? (otherLine as any)["exchangeRate"]
-            : Math.abs(otherLine.amount / thisLine.amount);
-        // Validate equivalence
-        if (
-          Math.abs(Math.abs(otherLine.amount) - Math.abs(thisLine.amount) * exchangeRate) > tolerance
-        ) {
-          throw new Error(
-            `Currency transfer inconsistency detected in entry ${entry.id}: ` +
-              `amounts ${thisLine.amount} (${thisLine.accountId}) and ${otherLine.amount} (${otherLine.accountId}) ` +
-              `with exchange rate ${exchangeRate} are not equivalent within tolerance ${tolerance}`
-          );
-        }
+    for (const { entry } of lines) {
+      if (isCurrencyExchange(entry) && !hasValidExchangePostings(entry.lines)) {
+        throw new Error(`Currency transfer inconsistency detected in entry ${entry.id}. Review the amounts and recorded exchange rate.`);
       }
     }
     // --- End multi-currency validation ---

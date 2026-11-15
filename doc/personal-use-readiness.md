@@ -9,6 +9,18 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 77 — Reconcile both sides of an FX transfer
+
+- Checkpoint reconciliation validates the stored debit and credit in their
+  original direction, regardless of which account owns the checkpoint. It
+  shares the verifier's exact checks for journal amounts and recorded rates,
+  including cross-currency portfolio funding.
+- A rejected FX check leaves the original checkpoint and postings intact.
+  The packaged funding workflow also covers creating, reconciling, and deleting
+  a checkpoint on the date of a retained FX contribution.
+- Verification covered 1,243 native tests, 26 targeted encrypted tests, TypeScript,
+  Apple Silicon packaging, and three packaged funding and recovery tests.
+
 ### Batch 76 — Link checkpoints to their own adjustments
 
 - New checkpoints retain the ID of their adjusting journal entry. Deletion and

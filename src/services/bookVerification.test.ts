@@ -147,6 +147,21 @@ it("keeps an ambiguous legacy checkpoint and its possible adjustments intact", a
   expect(await db().journalEntry.count()).toBe(2);
 });
 
+it("reconciles the destination of an FX transfer without reversing the stored rate", async () => {
+  const { cad, usd, entry } = await fixture();
+  const transfer = await entry([
+    { accountId: usd.id, amount: -100, currency: "USD", exchangeRate: 1.4 },
+    { accountId: cad.id, amount: 140, currency: "CAD", exchangeRate: 1.4 },
+  ], "currency_transfer");
+  const saved = await databaseService.createCheckpoint({ accountId: cad.id, date: "2026-11-01", balance: 140 });
+  const reconciled = await databaseService.reconcileCheckpoint(saved.checkpoint.id);
+  expect(reconciled.checkpoint.balance).toBe(140);
+  expect(await db().journalEntry.findUnique({ where: { id: transfer.id }, include: { lines: true } })).toEqual(transfer);
+  await db().journalLine.updateMany({ where: { entryId: transfer.id }, data: { exchangeRate: 2 } });
+  await expect(databaseService.reconcileCheckpoint(reconciled.checkpoint.id)).rejects.toThrow(/currency transfer inconsistency/i);
+  expect(await db().checkpoint.findUnique({ where: { id: reconciled.checkpoint.id } })).not.toBeNull();
+});
+
 it("checks retained investment activity and distinguishes legacy history from inconsistent lots", async () => {
   const portfolio = await investmentService.createInvestmentPortfolio("Verifier portfolio", "CAD");
   const holding = await investmentService.createSecurityAccount(portfolio.group.id, "ABC");
