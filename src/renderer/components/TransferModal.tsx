@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useAccounts } from "../context/AccountsContext";
+import { resolveCurrencyTransferAmounts } from "../../services/journalValidation";
 import { AccountType, AccountSubtype } from "../../shared/accountTypes";
 import { normalizeTransactionAmount } from "../utils/displayNormalization";
 import {
@@ -23,6 +24,7 @@ interface TransferModalProps {
     amountFrom?: number;
     amountTo?: number;
     exchangeRate?: number;
+    exchangeRateDecimal?: string | null;
   }; // Optional: for editing existing transfers
 }
 
@@ -57,56 +59,29 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Multi-currency state
-  const [targetAmount, setTargetAmount] = useState<number>(editTransaction?.amountTo || 0);
-  const [exchangeRate, setExchangeRate] = useState<number>(editTransaction?.exchangeRate || 1);
-  const [exchangeError, setExchangeError] = useState<string | null>(null);
-
-  // Lookup source and target accounts
-  const fromAccount = accounts.find((a) => a.id === transferData.fromAccountId);
-  const toAccount = accounts.find((a) => a.id === transferData.toAccountId);
-
-  // Determine if this is a multi-currency transfer
-  const isMultiCurrency: boolean = Boolean(
-    fromAccount?.currency &&
-      toAccount?.currency &&
-      fromAccount.currency !== toAccount.currency
+  const [targetOverride, setTargetOverride] = useState<number | undefined>(editTransaction?.amountTo);
+  const [rateInput, setRateInput] = useState<string | undefined>(
+    editTransaction?.exchangeRateDecimal ?? editTransaction?.exchangeRate?.toString() ??
+      (editTransaction?.amountTo === undefined ? "1" : undefined)
   );
 
-  // When toAccount or amount changes, recalc exchange rate/target amount
-  useEffect(() => {
-    if (isMultiCurrency) {
-      if (exchangeRate && transferData.amount) {
-        setTargetAmount(
-          Number((transferData.amount * exchangeRate).toFixed(2))
-        );
-      }
+  const fromAccount = accounts.find((a) => a.id === transferData.fromAccountId);
+  const toAccount = accounts.find((a) => a.id === transferData.toAccountId);
+  const isMultiCurrency = Boolean(fromAccount && toAccount && fromAccount.currency !== toAccount.currency);
+  const fxInput = { amountFrom: transferData.amount, amountTo: targetOverride, exchangeRate: rateInput };
+  let targetAmount = targetOverride ?? 0;
+  let exchangeRate = rateInput ?? "";
+  let exchangeError: string | null = null;
+  if (isMultiCurrency && transferData.amount > 0) {
+    try {
+      const resolved = resolveCurrencyTransferAmounts(fxInput);
+      targetAmount = resolved.amountTo;
+      exchangeRate = rateInput ?? String(resolved.exchangeRate);
+    } catch (error) {
+      exchangeError = error instanceof Error ? error.message : "Check the transfer amounts and exchange rate.";
     }
-  }, [exchangeRate, transferData.amount, isMultiCurrency]);
-
-  useEffect(() => {
-    if (isMultiCurrency && transferData.amount && targetAmount) {
-      if (Math.abs(targetAmount - transferData.amount * exchangeRate) > 0.01) {
-        setExchangeError("Amounts and exchange rate are inconsistent.");
-      } else {
-        setExchangeError(null);
-      }
-    } else {
-      setExchangeError(null);
-    }
-  }, [targetAmount, exchangeRate, transferData.amount, isMultiCurrency]);
-
-  // When toAccount changes, reset targetAmount and exchangeRate
-  useEffect(() => {
-    if (isMultiCurrency) {
-      setExchangeRate(1);
-      setTargetAmount(Number(transferData.amount || 0));
-    }
-  }, [transferData.toAccountId, isMultiCurrency]);
-
-  // Computed value for button disabled state
-  const isButtonDisabled: boolean =
-    isSubmitting || (isMultiCurrency && exchangeError !== null);
+  }
+  const isButtonDisabled = isSubmitting || (isMultiCurrency && exchangeError !== null);
 
   // Filter user accounts only
   const userAccounts = accounts.filter((acc) => acc.type === AccountType.User);
@@ -136,14 +111,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
         return;
       }
 
-      // Validate multi-currency transfer
-      if (isMultiCurrency && (targetAmount <= 0 || exchangeRate <= 0)) {
-        alert(
-          "For multi-currency transfers, both amounts and exchange rate must be greater than zero."
-        );
-        setIsSubmitting(false);
-        return;
-      }
+      const fx = isMultiCurrency ? { type: "currency_transfer", ...fxInput } : {};
+      if (isMultiCurrency) resolveCurrencyTransferAmounts(fxInput);
 
       if (editTransaction) {
         // Update existing transfer
@@ -155,10 +124,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
           date: transferData.date,
           description: transferData.description,
           transactionType: "transfer",
-          type: isMultiCurrency ? "currency_transfer" : undefined,
-          amountFrom: isMultiCurrency ? transferData.amount : undefined,
-          amountTo: isMultiCurrency ? targetAmount : undefined,
-          exchangeRate: isMultiCurrency ? exchangeRate : undefined,
+          ...fx,
         });
         if (!result?.success) throw new Error(result?.error || "Failed to update transfer");
       } else {
@@ -170,10 +136,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
           date: transferData.date,
           description: transferData.description,
           transactionType: "transfer",
-          type: isMultiCurrency ? "currency_transfer" : undefined,
-          amountFrom: isMultiCurrency ? transferData.amount : undefined,
-          amountTo: isMultiCurrency ? targetAmount : undefined,
-          exchangeRate: isMultiCurrency ? exchangeRate : undefined,
+          ...fx,
         });
 
         if (result && result.skipped && result.reason === "potential_duplicate") {
@@ -192,10 +155,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
               date: transferData.date,
               description: transferData.description,
               transactionType: "transfer",
-              type: isMultiCurrency ? "currency_transfer" : undefined,
-              amountFrom: isMultiCurrency ? transferData.amount : undefined,
-              amountTo: isMultiCurrency ? targetAmount : undefined,
-              exchangeRate: isMultiCurrency ? exchangeRate : undefined,
+              ...fx,
               forceDuplicate: true,
             });
           } else {
@@ -249,6 +209,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                   ...prev,
                   fromAccountId: e.target.value,
                 }));
+                setRateInput("1");
+                setTargetOverride(undefined);
               }}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
               required
@@ -281,6 +243,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                   ...prev,
                   toAccountId: e.target.value,
                 }));
+                setRateInput("1");
+                setTargetOverride(undefined);
               }}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
               required
@@ -303,10 +267,11 @@ export const TransferModal: React.FC<TransferModalProps> = ({
           {isMultiCurrency ? (
             <>
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label htmlFor="transfer-source-amount" className="block text-sm font-medium text-gray-700">
                   Amount in {fromAccount?.currency || "source currency"}
                 </label>
                 <input
+                  id="transfer-source-amount"
                   type="number"
                   value={transferData.amount}
                   onChange={(e) => {
@@ -315,11 +280,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                       ...prev,
                       amount: isNaN(amt) ? 0 : amt,
                     }));
-                    if (exchangeRate) {
-                      setTargetAmount(
-                        isNaN(amt) ? 0 : Number((amt * exchangeRate).toFixed(2))
-                      );
-                    }
+                    if (rateInput !== undefined) setTargetOverride(undefined);
                   }}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   required
@@ -328,22 +289,16 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label htmlFor="transfer-target-amount" className="block text-sm font-medium text-gray-700">
                   Amount in {toAccount?.currency || "target currency"}
                 </label>
                 <input
+                  id="transfer-target-amount"
                   type="number"
                   value={targetAmount}
                   onChange={(e) => {
-                    const tgt = parseFloat(e.target.value);
-                    setTargetAmount(isNaN(tgt) ? 0 : tgt);
-                    if (transferData.amount) {
-                      setExchangeRate(
-                        isNaN(tgt) || !transferData.amount
-                          ? 1
-                          : Number((tgt / transferData.amount).toFixed(6))
-                      );
-                    }
+                    setTargetOverride(Number(e.target.value));
+                    setRateInput(undefined);
                   }}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   required
@@ -352,30 +307,22 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label htmlFor="transfer-exchange-rate" className="block text-sm font-medium text-gray-700">
                   Exchange Rate ({fromAccount?.currency} → {toAccount?.currency}
                   )
                 </label>
                 <input
+                  id="transfer-exchange-rate"
                   type="number"
                   value={exchangeRate}
                   onChange={(e) => {
-                    const rate = parseFloat(e.target.value);
-                    setExchangeRate(isNaN(rate) ? 1 : rate);
-                    if (transferData.amount) {
-                      setTargetAmount(
-                        Number(
-                          (
-                            transferData.amount * (isNaN(rate) ? 1 : rate)
-                          ).toFixed(2)
-                        )
-                      );
-                    }
+                    setRateInput(e.target.value);
+                    setTargetOverride(undefined);
                   }}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   required
-                  min="0.000001"
-                  step="0.000001"
+                  min="0"
+                  step="any"
                 />
               </div>
               {exchangeError && (
@@ -514,7 +461,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                   <div className="flex justify-between text-xs text-gray-500 pt-1 border-t border-gray-200">
                     <span>Exchange Rate:</span>
                     <span>
-                      1 {fromAccount.currency} = {exchangeRate.toFixed(6)}{" "}
+                      1 {fromAccount.currency} = {Number(exchangeRate).toFixed(6)}{" "}
                       {toAccount.currency}
                     </span>
                   </div>

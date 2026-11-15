@@ -357,6 +357,7 @@ export interface JournalLine {
   amount: number;
   currency: string;
   exchangeRate?: number; // Optional, for currency-transfer transactions
+  exchangeRateDecimal?: string | null;
   description?: string;
   entry: JournalEntry;
   account: Account;
@@ -423,7 +424,12 @@ export const AccountTransactionsPage: React.FC = () => {
     // For asset accounts: negative amount means money going out (from), positive means money coming in (to)
     // For liability accounts: positive amount means debt increasing (money coming in), negative means debt decreasing (money going out)
     
-    if (currentAccount.subtype === 'asset') {
+    if (line.entry.type === "currency_transfer") {
+      const [source, target] = line.amount < 0 ? [line, otherLine] : [otherLine, line];
+      fromAccountId = source.accountId;
+      toAccountId = target.accountId;
+      amount = Math.abs(source.amount);
+    } else if (currentAccount.subtype === 'asset') {
       if (line.amount < 0) {
         // Current asset account is losing money (from account)
         fromAccountId = line.accountId;
@@ -459,9 +465,10 @@ export const AccountTransactionsPage: React.FC = () => {
       date: line.entry.date,
       description: line.description || line.entry.description || "",
       type: line.entry.type,
-      amountFrom: line.entry.type === "currency_transfer" ? Math.abs(line.amount) : undefined,
-      amountTo: line.entry.type === "currency_transfer" ? Math.abs(otherLine.amount) : undefined,
+      amountFrom: line.entry.type === "currency_transfer" ? amount : undefined,
+      amountTo: line.entry.type === "currency_transfer" ? Math.abs(line.amount < 0 ? otherLine.amount : line.amount) : undefined,
       exchangeRate: line.exchangeRate || otherLine.exchangeRate,
+      exchangeRateDecimal: line.exchangeRateDecimal ?? otherLine.exchangeRateDecimal,
     };
   };
 
@@ -1179,11 +1186,10 @@ export const AccountTransactionsPage: React.FC = () => {
                             true
                           );
                           
-                          // Avoid division by zero
-                          const rate =
-                            Math.abs(thisAmt) > 0
-                              ? Math.abs(otherAmt / thisAmt)
-                              : 1;
+                          const postedRate = line.exchangeRate;
+                          const rate = postedRate && postedRate > 0
+                            ? (thisAmt < 0 ? postedRate : 1 / postedRate)
+                            : (thisAmt !== 0 ? Math.abs(otherAmt / thisAmt) : 1);
                           return (
                             <div>
                               <div className={`font-medium ${colorClass}`} aria-label={ariaLabel}>

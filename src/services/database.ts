@@ -975,7 +975,7 @@ class DatabaseService {
       // For currency-transfer: both amounts and exchange rate
       amountFrom?: number;
       amountTo?: number;
-      exchangeRate?: number;
+      exchangeRate?: number | string;
       type?: string; // 'regular' | 'currency_transfer'
       transactionType?: "income" | "expense" | "transfer";
       forceDuplicate?: boolean; // If true, allow duplicate creation
@@ -2555,7 +2555,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       type?: string;
       amountFrom?: number;
       amountTo?: number;
-      exchangeRate?: number;
+      exchangeRate?: number | string;
     },
     tx?: TransactionClient
   ): Promise<any> {

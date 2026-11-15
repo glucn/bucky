@@ -1,5 +1,6 @@
 import Papa from "papaparse";
 import { parseToStandardDate } from "./dateUtils";
+import { normalizeUnsignedDecimal } from "./decimalInput";
 
 export type PricePoint = { date: string; price: number | string };
 export type PriceRequest = { accountId: string; expectedMarket: string; source: "manual" | "import" | "legacy"; mode: "fill" | "correct"; confirmRawClose: boolean; points?: PricePoint[]; legacyIds?: string[] };
@@ -7,16 +8,8 @@ type ReviewedPrice = { price: number; priceDecimal: string };
 export type PricePreviewRow = ReviewedPrice & { date: string; token: string | null; action: "insert" | "retain" | "correct"; existing: (ReviewedPrice & { source: string; priceBasis: string; barStatus: string }) | null };
 
 export function parseSecurityPrice(value: unknown): ReviewedPrice | null {
-  if (typeof value !== "string" && typeof value !== "number") return null;
-  const text = String(value).trim();
-  if (text.length > 64 || !/^\+?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text)) return null;
-  const price = Number(text);
-  const [mantissa, exponent] = text.toLowerCase().replace(/^\+/, "").split("e");
-  if (!Number.isFinite(price) || (price === 0 && /[1-9]/.test(mantissa))) return null;
-  if (price === 0) return { price, priceDecimal: "0" };
-  const digits = mantissa.replace(/^\./, "0.").replace(/\.$/, "");
-  const priceDecimal = exponent === undefined ? digits : `${digits}e${Number(exponent)}`;
-  return priceDecimal.length <= 64 ? { price, priceDecimal } : null;
+  const priceDecimal = normalizeUnsignedDecimal(value);
+  return priceDecimal === null ? null : { price: Number(priceDecimal), priceDecimal };
 }
 
 export function parseSecurityPriceCsv(csv: string): PricePoint[] {

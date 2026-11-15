@@ -9,6 +9,15 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 88 — Use the entered FX rate when posting transfers
+
+- The transfer form and ledger share decimal cent rounding. The form sends an
+  entered rate as decimal text and lets the ledger derive the destination
+  amount. When both amounts are entered, the ledger derives the implied rate.
+- Editing retains the posted amounts and stored rate until a transfer term
+  changes. Edits opened from either account use the original posting direction.
+  Transaction history shows the recorded rate in the direction being viewed.
+
 ### Batch 87 — Preserve provider closing-price and FX decimals
 
 - Twelve Data closing prices and rates retain the provider's decimal text

@@ -103,6 +103,24 @@ describe("Journal mutation integrity", () => {
     expect(await snapshot()).toEqual(before);
   });
 
+  it("creates and edits FX transfers using the entered rate digits at half-cent boundaries", async () => {
+    const from = await account("USD source", "USD");
+    const to = await account("CAD destination", "CAD");
+    const rate = "1.00499999999999999999";
+    const created = await databaseService.createJournalEntry({ fromAccountId: from.id, toAccountId: to.id,
+      date: "2026-08-01", type: "currency_transfer", amountFrom: 1, exchangeRate: rate });
+    expect(created.entry?.lines).toEqual(expect.arrayContaining([
+      expect.objectContaining({ accountId: to.id, amountCents: "100", exchangeRateDecimal: rate }),
+    ]));
+    const source = created.entry.lines.find((line: { accountId: string }) => line.accountId === from.id);
+    const updated = await databaseService.updateJournalEntryLine({ lineId: source.id,
+      fromAccountId: from.id, toAccountId: to.id, amount: 1, amountFrom: 1, date: "2026-08-01",
+      description: "Rate correction", transactionType: "transfer", type: "currency_transfer", exchangeRate: "1.005" });
+    expect(updated.lines).toEqual(expect.arrayContaining([
+      expect.objectContaining({ accountId: to.id, amountCents: "101", exchangeRateDecimal: "1.005" }),
+    ]));
+  });
+
   it.each([
     { date: "2026-02-30" }, { postingDate: "2026-07-01" }, { amount: Infinity },
     { amount: NaN }, { toAccountId: "missing-account" },
