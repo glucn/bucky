@@ -25,6 +25,16 @@ async function transfer(from: string, to: string, amount: number, date: string) 
 }
 const performance = (id: string) => investmentService.getPortfolioPerformance(id, "2026-01-01", "2026-01-03");
 
+it("rounds total FX cash flows after summing their exact posting-date values", async () => {
+  const { portfolio, usd, outside } = await book();
+  await databaseService.prismaClient.fxDailyRate.updateMany({ data: { rate: 0.5025, rateDecimal: "0.50249999999999999999" } });
+  await transfer(outside.id, usd.id, 1, "2026-01-01");
+  await transfer(outside.id, usd.id, 1, "2026-01-02");
+  const report = await investmentCashFlows(portfolio.group.id, "2026-01-01", "2026-01-03", "CAD");
+  expect(report).toMatchObject({ deposits: 1, depositsByCurrency: { USD: 2 },
+    rows: [{ amountBase: 0.5025 }, { amountBase: 0.5025 }] });
+});
+
 it("counts ordinary transfers across every cash currency at posting-date FX, independent of mutable names and tags", async () => {
   const { portfolio, usd, outside } = await book();
   await transfer(outside.id, usd.id, 100, "2026-01-02");

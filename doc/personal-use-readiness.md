@@ -9,6 +9,15 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 71 — Retain fractional cents through FX aggregation
+
+- Net worth and each dashboard portfolio allocation sum exact converted amounts
+  before rounding. Portfolio deposit and withdrawal totals do the same using
+  each posting date's FX rate, with native subtotals summed in integer cents.
+- Cash-flow rows retain the numeric values consumed by the performance report.
+  Portfolio valuations and return calculations still have numeric boundaries.
+- Verification covered 62 focused native tests, 45 encrypted tests, and TypeScript.
+
 ### Batch 70 — Value positions using the exact closing price
 
 - Position market value multiplies held units by the retained closing-price decimal

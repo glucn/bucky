@@ -1,7 +1,7 @@
 import { databaseService } from "./database";
 import { resolveValuationDate } from "./valuationDate";
 import { isValidStandardDate } from "../shared/dateUtils";
-import { decimalRatio, journalAmountFromCents, readUnsignedDecimal, roundDecimalRatio } from "./journalPrecision";
+import { decimalRatio, readUnsignedDecimal, roundRatioToJournalAmount, zeroRatio, type DecimalRatio } from "./journalPrecision";
 
 type Rate = { rate: number; ratio: ReturnType<typeof decimalRatio> };
 type FxRateMap = Map<string, Rate & { date: string }>;
@@ -29,19 +29,24 @@ export type ConversionResult = {
 type QuoteRequest = { sourceCurrency: string; targetCurrency: string; asOfDate: string };
 export type ValuationQuote = Omit<ConversionResult, "convertedAmount"> & {
   apply: (amount: number, roundToCents?: boolean) => number | null;
+  applyExact: (amount: number) => DecimalRatio | null;
 };
 
 function quote(rate: Rate | null, source: ConversionSource, pair: string | null): ValuationQuote {
+  const applyExact = (amount: number): DecimalRatio | null => {
+    if (amount === 0) return zeroRatio;
+    if (!rate) return null;
+    const value = decimalRatio(amount);
+    return { numerator: value.numerator * rate.ratio.numerator, denominator: value.denominator * rate.ratio.denominator };
+  };
   return {
     rate: rate?.rate ?? null, source, pair,
+    applyExact,
     apply(amount, roundToCents = false) {
       if (amount === 0) return 0;
       if (!rate) return null;
       if (!roundToCents) return amount * rate.rate;
-      const value = decimalRatio(amount);
-      return journalAmountFromCents(roundDecimalRatio(
-        value.numerator * rate.ratio.numerator * 100n, value.denominator * rate.ratio.denominator
-      ));
+      return roundRatioToJournalAmount(applyExact(amount)!);
     },
   };
 }
@@ -65,8 +70,8 @@ class ValuationConversionService {
 
   async convertAmount(input: QuoteRequest & { amount: number; roundToCents?: boolean }): Promise<ConversionResult> {
     if (typeof input.amount !== "number" || !Number.isFinite(input.amount)) throw new Error("Invalid valuation amount");
-    const { apply, ...result } = await this.getQuote(input, input.amount === 0);
-    return { ...result, convertedAmount: apply(input.amount, input.roundToCents) };
+    const { apply, rate, source, pair } = await this.getQuote(input, input.amount === 0);
+    return { rate, source, pair, convertedAmount: apply(input.amount, input.roundToCents) };
   }
 
   async getQuote(input: QuoteRequest, zeroAmount = false): Promise<ValuationQuote> {

@@ -21,6 +21,25 @@ export function decimalRatio(value: number | string) {
     : { numerator: digits, denominator: 10n ** BigInt(-exponent) };
 }
 
+export type DecimalRatio = ReturnType<typeof decimalRatio>;
+export const zeroRatio: DecimalRatio = { numerator: 0n, denominator: 1n };
+
+export function addDecimalRatios(left: DecimalRatio, right: DecimalRatio): DecimalRatio {
+  let divisor = left.denominator;
+  let remainder = right.denominator;
+  while (remainder !== 0n) {
+    [divisor, remainder] = [remainder, divisor % remainder];
+  }
+  const leftScale = right.denominator / divisor;
+  const rightScale = left.denominator / divisor;
+  const numerator = left.numerator * leftScale + right.numerator * rightScale;
+  return numerator === 0n ? zeroRatio : { numerator, denominator: left.denominator * leftScale };
+}
+
+export function roundRatioToJournalAmount(ratio: DecimalRatio): number {
+  return journalAmountFromCents(roundDecimalRatio(ratio.numerator * 100n, ratio.denominator));
+}
+
 export function roundDecimalRatio(numerator: bigint, denominator: bigint): bigint {
   const quotient = numerator / denominator;
   const remainder = numerator % denominator;

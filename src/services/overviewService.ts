@@ -5,7 +5,8 @@ import { databaseService } from "./database";
 import { investmentService, InvestmentHistoryUnavailableError } from "./investmentService";
 import { valuationConversionService, type ValuationQuote } from "./valuationConversionService";
 import { resolveValuationDate } from "./valuationDate";
-import { journalAmountFromCents, readPostingAmount, sumJournalCents } from "./journalPrecision";
+import { addDecimalRatios, journalAmountFromCents, readPostingAmount, roundRatioToJournalAmount,
+  sumJournalCents, toJournalCents, zeroRatio, type DecimalRatio } from "./journalPrecision";
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -54,8 +55,7 @@ class OverviewService {
     });
 
     const reportingCurrency = (await appSettingsService.getBaseCurrency()) ?? "USD";
-    let assetTotal = 0;
-    let liabilityTotal = 0;
+    let netWorth = zeroRatio;
     let netWorthUnavailable = false;
 
     let usedEstimatedFxRate = false;
@@ -65,9 +65,8 @@ class OverviewService {
     const convertToReportingCurrency = async (
       amount: number,
       fromCurrency: string,
-      roundToCents = false,
-    ): Promise<number | null> => {
-      if (amount === 0) return 0;
+    ): Promise<DecimalRatio | null> => {
+      if (amount === 0) return zeroRatio;
       const cacheKey = `${fromCurrency}->${reportingCurrency}@${effectiveAsOfDate}`;
       let conversion = conversionRateCache.get(cacheKey);
 
@@ -92,7 +91,7 @@ class OverviewService {
         return null;
       }
 
-      return conversion.apply(amount, roundToCents);
+      return conversion.applyExact(amount);
     };
 
     for (const account of userAccounts) {
@@ -104,17 +103,14 @@ class OverviewService {
         balance = value;
       }
 
-      const convertedBalance = await convertToReportingCurrency(balance, account.currency);
+      const amount = account.subtype === AccountSubtype.Liability ? -Math.abs(balance) : balance;
+      const convertedBalance = await convertToReportingCurrency(amount, account.currency);
       if (convertedBalance === null) {
         netWorthUnavailable = true;
         continue;
       }
 
-      if (account.subtype === AccountSubtype.Liability) {
-        liabilityTotal += Math.abs(convertedBalance);
-      } else {
-        assetTotal += convertedBalance;
-      }
+      netWorth = addDecimalRatios(netWorth, convertedBalance);
     }
 
     const monthKeys = getRecentMonthKeys(effectiveAsOfDate, 6);
@@ -156,8 +152,8 @@ class OverviewService {
           continue;
         }
 
-        const convertedAmount = await convertToReportingCurrency(Math.abs(readPostingAmount(line)), line.currency, true);
-        if (convertedAmount === null) {
+        const converted = await convertToReportingCurrency(Math.abs(readPostingAmount(line)), line.currency);
+        if (converted === null) {
           if (line.account.subtype === AccountSubtype.Asset) {
             month.income = null;
           } else {
@@ -166,6 +162,7 @@ class OverviewService {
           continue;
         }
 
+        const convertedAmount = roundRatioToJournalAmount(converted);
         if (line.account.subtype === AccountSubtype.Asset) {
           if (month.income !== null) {
             month.income = round2(month.income + convertedAmount);
@@ -188,7 +185,7 @@ class OverviewService {
     const investmentPortfolios = await investmentService.getInvestmentPortfolios();
     for (const portfolio of investmentPortfolios) {
       const portfolioAccounts = await investmentService.getPortfolioAccounts(portfolio.id);
-      let amount = 0;
+      let amount = zeroRatio;
       let hasMissingConversion = false;
 
       for (const tradeCashAccount of portfolioAccounts.tradeCashAccounts) {
@@ -198,7 +195,7 @@ class OverviewService {
           hasMissingConversion = true;
           continue;
         }
-        amount += convertedAmount;
+        amount = addDecimalRatios(amount, convertedAmount);
       }
 
       for (const securityAccount of portfolioAccounts.securities) {
@@ -209,10 +206,10 @@ class OverviewService {
           hasMissingConversion = true;
           continue;
         }
-        amount += convertedAmount;
+        amount = addDecimalRatios(amount, convertedAmount);
       }
 
-      const roundedAmount = round2(amount);
+      const roundedAmount = roundRatioToJournalAmount(amount);
       if (roundedAmount <= 0 && !hasMissingConversion) {
         continue;
       }
@@ -228,7 +225,7 @@ class OverviewService {
     const hasAllocationConversionGap = allocationSlices.some((slice) => slice.amount === null);
     const allocationTotal = hasAllocationConversionGap
       ? null
-      : round2(allocationSlices.reduce((total, slice) => total + (slice.amount ?? 0), 0));
+      : journalAmountFromCents(allocationSlices.reduce((total, slice) => total + BigInt(toJournalCents(slice.amount ?? 0)), 0n));
     const hasAllocationData =
       allocationSlices.length > 0 && (allocationTotal === null || allocationTotal > 0);
 
@@ -256,7 +253,7 @@ class OverviewService {
     return {
       asOfDate: effectiveAsOfDate,
       netWorth: {
-        amount: netWorthUnavailable ? null : round2(assetTotal - liabilityTotal),
+        amount: netWorthUnavailable ? null : roundRatioToJournalAmount(netWorth),
         currency: reportingCurrency,
       },
       incomeExpenseTrend6m: {

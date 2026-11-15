@@ -80,6 +80,23 @@ describe("overviewService", () => {
     expect((await reportingService.getIncomeExpenseBreakdownReport({ preset: "THIS_MONTH" }, date)).kpis.expenseTotal).toBe(1.01);
   });
 
+  it("retains fractional FX cents until rounding net worth and each allocation", async () => {
+    const date = "2026-02-10";
+    await appSettingsService.setBaseCurrency("CAD");
+    await seedFxRate("USD", "CAD", date, 0.5025);
+    const portfolio = await investmentService.createInvestmentPortfolio("Dollar assets", "USD");
+    const holding = await investmentService.createMarketHolding({ portfolioId: portfolio.group.id, tickerSymbol: "ABC",
+      market: "NASDAQ", quoteCurrency: "USD", tradeCashAccountId: portfolio.tradeCashAccount.id, costBasisMethod: "FIFO" });
+    await investmentService.recordBuy({ portfolioId: portfolio.group.id, securityAccountId: holding.id, tickerSymbol: "ABC",
+      date, quantity: 1, pricePerShare: 1 });
+    await databaseService.setOpeningBalance({ accountId: portfolio.tradeCashAccount.id, asOfDate: "2026-02-09", displayAmount: 2 });
+    await securityMarketData.write({ identity: { ticker: "ABC", market: "NASDAQ" }, mode: "fill", source: "manual",
+      points: [{ date, price: 1, priceBasis: "raw", barStatus: "complete" }] });
+    const dashboard = await overviewService.getOverviewDashboard(date);
+    expect(dashboard.netWorth.amount).toBe(1.01);
+    expect(dashboard.investmentAllocation).toMatchObject({ total: 1.01, slices: [{ amount: 1.01 }] });
+  });
+
   it("returns a single payload shape for all dashboard cards", async () => {
     const payload = await overviewService.getOverviewDashboard();
 
