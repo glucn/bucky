@@ -58,10 +58,14 @@ test("packaged native and FX funding select cash explicitly, retain refusals and
     }
     const report = await invoke("get-portfolio-performance", { portfolioId, startDate: "2026-01-01", endDate: "2026-01-05" });
     expect(report).toMatchObject({ success: true, performance: { deposits: null, withdrawals: 84, closingValue: null, cashFlows: { depositsByCurrency: { CAD: 240, USD: 100 }, withdrawalsByCurrency: { CAD: 84 } } } });
-    const checkpoint = await invoke("create-checkpoint", { accountId: cadId, date: "2026-01-03", balance: 240, description: "January statement" });
-    expect(checkpoint).toMatchObject({ success: true, checkpoint: { adjustmentAmount: 0 } });
+    const statement = { accountId: cadId, date: "2026-01-03", balance: 245, description: "January statement" };
+    expect(await invoke("create-checkpoint", statement)).toMatchObject({ success: false, error: expect.stringMatching(/review/i) });
+    const reviewed = await invoke("review-checkpoint", statement);
+    expect(reviewed).toMatchObject({ success: true, preview: { journalBalance: 240, statementBalance: 245, adjustmentAmount: 5 } });
+    const checkpoint = await invoke("create-checkpoint", { ...statement, reviewToken: reviewed.preview.token });
+    expect(checkpoint).toMatchObject({ success: true, checkpoint: { adjustmentAmount: 5 } });
     const reconciled = await invoke("reconcile-checkpoint", checkpoint.checkpoint.checkpoint.id);
-    expect(reconciled).toMatchObject({ success: true, checkpoint: { adjustmentAmount: 0 } });
+    expect(reconciled).toMatchObject({ success: true, checkpoint: { adjustmentAmount: 5 } });
     expect(await invoke("delete-checkpoint", reconciled.checkpoint.checkpoint.id)).toMatchObject({ success: true });
     expect(await invoke("get-account-balance", cadId)).toEqual({ success: true, balance: 156 });
   } catch (error) {

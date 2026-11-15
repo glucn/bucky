@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Account } from "../types";
 import { useAccounts } from "../context/AccountsContext";
 import { formatCurrencyAmountDetail } from "../utils/currencyUtils";
+import { saveCheckpointAfterReview } from "../utils/checkpointReview";
 
 interface Checkpoint {
   id: string;
@@ -99,19 +100,15 @@ export const Checkpoints: React.FC = () => {
     if (!selectedAccount || !newCheckpoint.balance) return;
 
     setIsCreating(true);
+    setError(null);
     try {
-      // Always round to two decimals before sending to backend
-      const roundedBalance =
-        Math.round(parseFloat(newCheckpoint.balance) * 100) / 100;
-      const result = await window.electron.ipcRenderer.invoke(
-        "create-checkpoint",
-        {
-          accountId: selectedAccount,
-          date: newCheckpoint.date,
-          balance: roundedBalance,
-          description: newCheckpoint.description || undefined,
-        }
-      );
+      const result = await saveCheckpointAfterReview({
+        accountId: selectedAccount,
+        date: newCheckpoint.date,
+        balance: Number(newCheckpoint.balance),
+        description: newCheckpoint.description || undefined,
+      });
+      if (!result) return;
 
       if (result.success) {
         setShowCreateForm(false);
@@ -364,19 +361,10 @@ This action cannot be undone.`;
                           type="number"
                           step="0.01"
                           value={newCheckpoint.balance}
-                          onChange={(e) => {
-                            // Always round to two decimals for input
-                            let val = e.target.value;
-                            if (val !== "") {
-                              const rounded =
-                                Math.round(parseFloat(val) * 100) / 100;
-                              val = rounded.toString();
-                            }
-                            setNewCheckpoint({
+                          onChange={(e) => setNewCheckpoint({
                               ...newCheckpoint,
-                              balance: val,
-                            });
-                          }}
+                              balance: e.target.value,
+                            })}
                           className="block w-full rounded-md border-gray-300 pl-7 pr-12 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                           placeholder="0.00"
                           required

@@ -16,6 +16,7 @@ import {
 } from "../utils/displayNormalization";
 import { AccountType, AccountSubtype, toAccountType } from "../../shared/accountTypes";
 import { buildCleanupDestinationOptions, isPlaceholderCounterpartyName } from "../utils/placeholderCleanup";
+import { saveCheckpointAfterReview } from "../utils/checkpointReview";
 
 // Modal for setting opening balance for the current account
 export const SetOpeningBalanceModal: React.FC<{
@@ -227,16 +228,10 @@ const CreateCheckpointModal: React.FC<{
 
     setIsSubmitting(true);
     try {
-      const roundedBalance = Math.round(parseFloat(form.balance) * 100) / 100;
-      const result = await window.electron.ipcRenderer.invoke(
-        "create-checkpoint",
-        {
-          accountId,
-          date: form.date,
-          balance: roundedBalance,
-          description: form.description || undefined,
-        }
-      );
+      const result = await saveCheckpointAfterReview({
+        accountId, date: form.date, balance: Number(form.balance), description: form.description || undefined,
+      });
+      if (!result) return;
       if (result.success) {
         setForm({
           date: localCalendarDate(),
@@ -300,17 +295,7 @@ const CreateCheckpointModal: React.FC<{
                 type="number"
                 step="0.01"
                 value={form.balance}
-                onChange={(e) => {
-                  let val = e.target.value;
-                  if (val !== "") {
-                    const rounded = Math.round(parseFloat(val) * 100) / 100;
-                    val = rounded.toString();
-                  }
-                  setForm({
-                    ...form,
-                    balance: val,
-                  });
-                }}
+                onChange={(e) => setForm({ ...form, balance: e.target.value })}
                 className="block w-full rounded-md border-none focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                 placeholder="0.00"
                 required

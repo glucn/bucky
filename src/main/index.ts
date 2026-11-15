@@ -180,6 +180,7 @@ function setupIpcHandlers() {
   ipcMain.removeHandler("can-delete-account");
   ipcMain.removeHandler("restore-account");
   ipcMain.removeHandler("create-checkpoint");
+  ipcMain.removeHandler("review-checkpoint");
   ipcMain.removeHandler("get-checkpoints-for-account");
   ipcMain.removeHandler("get-latest-checkpoint-for-account");
   ipcMain.removeHandler("delete-checkpoint");
@@ -695,6 +696,13 @@ function setupIpcHandlers() {
   });
 
   // Checkpoint handlers
+  ipcMain.handle("review-checkpoint", async (_, data: { accountId: string; date: string; balance: number }) => {
+    try {
+      return { success: true, preview: await databaseService.reviewCheckpoint(data) };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : "Failed to review checkpoint" };
+    }
+  });
   ipcMain.handle(
     "create-checkpoint",
     async (
@@ -704,13 +712,14 @@ function setupIpcHandlers() {
         date: string;
         balance: number;
         description?: string;
+        reviewToken?: string;
       }
     ) => {
       console.log("Handling create-checkpoint request:", data);
       try {
         const result = await databaseService.createCheckpoint({
           ...data,
-          date: new Date(data.date),
+          review: { token: data.reviewToken },
         });
         return { success: true, checkpoint: result };
       } catch (error) {

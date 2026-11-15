@@ -9,6 +9,19 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 82 — Review statement differences before posting checkpoints
+
+- Both checkpoint creation forms request a read-only preview of the journal
+  balance through the statement date. A nonzero difference shows the journal
+  balance, statement balance, and proposed adjustment before confirmation.
+- The main process checks the reviewed amounts again inside the save
+  transaction. An unreviewed nonzero adjustment or a changed preview leaves
+  the book intact.
+- Reconciliation of an existing checkpoint still uses its existing confirmation
+  flow.
+- Verification covered 48 focused native tests, 31 encrypted tests, TypeScript,
+  Apple Silicon packaging, and the packaged statement adjustment workflow.
+
 ### Batch 81 — Keep opening-balance lookup read-only
 
 - Opening-balance lookup no longer retags or deletes journal entries. Legacy

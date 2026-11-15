@@ -158,6 +158,23 @@ it("deletes only the checkpoint adjustment and retains unrelated same-day transa
   expect(await databaseService.getAccountBalanceAtDate(cad.id, "2026-11-01")).toBe(-12);
 });
 
+it("previews the statement discrepancy without writing and refuses a stale review", async () => {
+  const { cad, category, entry } = await fixture();
+  const input = { accountId: cad.id, date: "2026-11-01", balance: 20 };
+  await entry([{ accountId: cad.id, amount: 12, currency: "CAD" }, { accountId: category.id, amount: -12, currency: "CAD" }]);
+  const preview = await databaseService.reviewCheckpoint(input);
+  expect(preview).toMatchObject({ currency: "CAD", journalBalance: 12, statementBalance: 20, adjustmentAmount: 8 });
+  expect(await db().checkpoint.count()).toBe(0);
+  expect(await db().journalEntry.count()).toBe(1);
+  await expect(databaseService.createCheckpoint({ ...input, review: {} })).rejects.toThrow(/review/i);
+  await entry([{ accountId: cad.id, amount: 1, currency: "CAD" }, { accountId: category.id, amount: -1, currency: "CAD" }]);
+  await expect(databaseService.createCheckpoint({ ...input, review: { token: preview.token } })).rejects.toThrow(/review/i);
+  expect(await db().checkpoint.count()).toBe(0);
+  const updated = await databaseService.reviewCheckpoint(input);
+  const saved = await databaseService.createCheckpoint({ ...input, review: { token: updated.token } });
+  expect(saved.adjustmentAmount).toBe(7);
+});
+
 it("keeps an ambiguous legacy checkpoint and its possible adjustments intact", async () => {
   const { cad } = await fixture();
   const data = { accountId: cad.id, date: "2026-11-01", balance: 200, description: "Statement" };

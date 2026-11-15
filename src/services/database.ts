@@ -6,6 +6,7 @@ import {
   AccountSubtype,
 } from "../shared/accountTypes";
 import { localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
+import type { CheckpointReview } from "../shared/checkpointReview";
 import { autoCategorizationService } from "./autoCategorizationService";
 import { hasValidExchangePostings, isCurrencyExchange, isOpeningBalanceEntry, resolveCurrencyTransferAmounts } from "./journalValidation";
 import { resolveCheckpointAdjustment } from "./checkpointAdjustment";
@@ -2197,12 +2198,36 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
    * This creates a special journal entry that sets the account balance to the specified value.
    * All transactions before this checkpoint date will adjust the checkpoint transaction instead of the account directly.
    */
+  public async reviewCheckpoint(data: { accountId: string; date: string | Date; balance: number },
+    tx?: TransactionClient): Promise<CheckpointReview> {
+    if (!tx) return this.prisma.$transaction((transaction) => this.reviewCheckpoint(data, transaction));
+    const date = parseToStandardDate(data.date);
+    if (!date) throw new Error("Invalid checkpoint date");
+    const account = await tx.account.findUnique({ where: { id: data.accountId }, select: { currency: true } });
+    if (!account) throw new Error("Account not found");
+    const { currency } = account;
+    const postings = await tx.journalLine.findMany({
+      where: { accountId: data.accountId, currency, entry: { date: { lte: date } } },
+      select: { amount: true, amountCents: true },
+    });
+    const journalCents = sumJournalCents(postings);
+    const statementCents = BigInt(toJournalCents(data.balance));
+    return {
+      currency,
+      journalBalance: journalAmountFromCents(journalCents),
+      statementBalance: journalAmountFromCents(statementCents),
+      adjustmentAmount: journalAmountFromCents(statementCents - journalCents),
+      token: JSON.stringify([data.accountId, date, currency, journalCents.toString(), statementCents.toString()]),
+    };
+  }
+
   public async createCheckpoint(
     data: {
       accountId: string;
       date: string | Date;
       balance: number;
       description?: string;
+      review?: { token?: string };
     },
     tx?: TransactionClient
   ): Promise<any> {
@@ -2215,6 +2240,15 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
         { timeout: 20000 }
       );
     }
+
+    const preview = await this.reviewCheckpoint(data, tx);
+    const { adjustmentAmount, statementBalance: balance, currency } = preview;
+    if (data.review && (data.review.token !== undefined
+      ? data.review.token !== preview.token
+      : adjustmentAmount !== 0)) {
+      throw new Error("Review the current journal and statement difference before saving the checkpoint");
+    }
+    const date = parseToStandardDate(data.date)!;
 
     // 1. Get or create the 'Checkpoint Adjustment' system account
     let checkpointAccount = await tx.account.findFirst({
@@ -2232,14 +2266,12 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     }
 
     // 2. Create the checkpoint record
-    const balanceCents = BigInt(toJournalCents(data.balance));
-    const balance = journalAmountFromCents(balanceCents);
     const checkpoint = await tx.checkpoint.create({
       data: {
         accountId: data.accountId,
-        date: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10),
+        date,
         balance,
-        balanceCents: balanceCents.toString(),
+        balanceCents: toJournalCents(balance).toString(),
         description: data.description,
       },
     });
@@ -2247,7 +2279,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     // 3. Create the journal entry for the checkpoint
     const journalEntry = await tx.journalEntry.create({
       data: {
-        date: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10),
+        date,
         description: data.description || `Checkpoint for ${checkpoint.id}`,
         entryType: "checkpoint-adjustment",
         displayOrder: Date.now(),
@@ -2255,30 +2287,6 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     });
 
     // 4. Create journal lines to set the balance
-    const account = await tx.account.findUnique({
-      where: { id: data.accountId },
-    });
-
-    if (!account) {
-      throw new Error("Account not found");
-    }
-
-    // Include existing postings through the end of the checkpoint date.
-    const linesBeforeCheckpoint = await tx.journalLine.findMany({
-      where: {
-        accountId: data.accountId,
-        currency: account.currency,
-        entry: {
-          date: { lte: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10) },
-        },
-      },
-      select: { amount: true, amountCents: true },
-    });
-
-    const adjustmentAmount = journalAmountFromCents(
-      balanceCents - sumJournalCents(linesBeforeCheckpoint)
-    );
-
     const linesData = [];
 
     // Always create journal lines for the checkpoint, even if adjustment is 0
@@ -2287,7 +2295,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       entryId: journalEntry.id,
       accountId: data.accountId,
       amount: adjustmentAmount,
-      currency: account.currency,
+      currency,
       description: data.description || "Checkpoint adjustment",
     });
 
@@ -2296,7 +2304,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       entryId: journalEntry.id,
       accountId: checkpointAccount.id,
       amount: -adjustmentAmount,
-      currency: account.currency,
+      currency,
       description: data.description || "Checkpoint adjustment",
     });
 
