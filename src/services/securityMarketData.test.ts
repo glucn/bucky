@@ -71,8 +71,8 @@ it("keeps zero prices and precision, normalizes dates, and isolates history by m
   ]);
 });
 
-it.each([NaN, Infinity, -1, "12"])("rejects invalid price %j before any batch write", async (price) => {
-  await expect(securityMarketData.write({ identity, points: [{ date: "2026-01-02", price: 10, priceBasis: "raw" as const, barStatus: "complete" as const }, { date: "2026-01-03", price: price as number, priceBasis: "raw" as const, barStatus: "complete" as const }], mode: "fill", source: "import" })).rejects.toThrow(/price/i);
+it.each([NaN, Infinity, -1, "12oops", "1e-9999", "1e9999"])("rejects invalid price %j before any batch write", async (price) => {
+  await expect(securityMarketData.write({ identity, points: [{ date: "2026-01-02", price: 10, priceBasis: "raw" as const, barStatus: "complete" as const }, { date: "2026-01-03", price, priceBasis: "raw" as const, barStatus: "complete" as const }], mode: "fill", source: "import" })).rejects.toThrow(/price/i);
   expect(await databaseService.prismaClient.securityDailyPrice.count()).toBe(0);
 });
 

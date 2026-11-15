@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { databaseService } from "./database";
 import { parseSecurityIdentity } from "../shared/securityMarket";
 import { parseToStandardDate } from "../shared/dateUtils";
-import type { PriceRequest, PricePreviewRow } from "../shared/securityPrices";
+import { parseSecurityPrice, type PriceRequest, type PricePreviewRow } from "../shared/securityPrices";
 import { readSecurityClose, securityMarketData } from "./securityMarketData";
 import { resolveValuationDate } from "./valuationDate";
 import { resolveConfiguredEnrichmentProvider } from "./enrichmentRuntimeService";
@@ -44,7 +44,7 @@ export async function getSecurityPriceContext(input: { accountId: string; endDat
       .filter((row) => !end || row.normalizedDate === null || row.normalizedDate <= end)
       .sort((a, b) => (b.normalizedDate || "9999-99-99").localeCompare(a.normalizedDate || "9999-99-99") || a.id.localeCompare(b.id));
     return { accountId: account.id, ticker: props.tickerSymbol, market: props.market, currency: account.currency, ...quoteUnit, hasTrackedHistory: props.hasCompleteActivityHistory,
-      prices: quoteUnit.quoteCurrencyIssue ? [] : prices.map((row) => ({ id: row.id, date: row.marketDate, price: readSecurityClose(row), source: row.source, priceBasis: row.priceBasis, barStatus: row.barStatus, basisAsOf: row.basisAsOf, token: token(row) })),
+      prices: quoteUnit.quoteCurrencyIssue ? [] : prices.map((row) => ({ id: row.id, date: row.marketDate, price: readSecurityClose(row), priceDecimal: row.closeDecimal ?? row.close.toString(), source: row.source, priceBasis: row.priceBasis, barStatus: row.barStatus, basisAsOf: row.basisAsOf, token: token(row) })),
       legacyPrices: legacyPrices.slice(0, 200),
       priceCount: where ? await tx.securityDailyPrice.count({ where }) : 0, legacyCount: legacyPrices.length,
     };
@@ -84,24 +84,29 @@ async function review(tx: Prisma.TransactionClient, input: PriceRequest) {
   const seen = new Set<string>(), cutoff = resolveValuationDate(), rows: PricePreviewRow[] = [];
   for (const point of points) {
     const date = point && typeof point.date === "string" ? parseToStandardDate(point.date) : null;
-    if (!date || date > cutoff || typeof point.price !== "number" || !Number.isFinite(point.price) || point.price < 0 || seen.has(date)) throw new Error("Prices need unique valid dates, finite nonnegative values, and a completed book day");
+    const close = parseSecurityPrice(point?.price);
+    if (!date || date > cutoff || !close || seen.has(date)) throw new Error("Prices need unique valid dates, finite nonnegative values, and a completed book day");
     seen.add(date);
     const existing = await tx.securityDailyPrice.findUnique({ where: { ticker_market_marketDate: { ...identity, marketDate: date } } });
-    rows.push({ date, price: point.price, token: token(existing), action: existing ? input.mode === "fill" ? "retain" : "correct" : "insert",
-      existing: existing ? { price: readSecurityClose(existing), source: existing.source, priceBasis: existing.priceBasis, barStatus: existing.barStatus } : null });
+    rows.push({ date, ...close, token: token(existing), action: existing ? input.mode === "fill" ? "retain" : "correct" : "insert",
+      existing: existing ? { price: readSecurityClose(existing), priceDecimal: existing.closeDecimal ?? existing.close.toString(), source: existing.source, priceBasis: existing.priceBasis, barStatus: existing.barStatus } : null });
   }
   return { identity, rows };
 }
 export async function previewSecurityPrices(input: PriceRequest) {
   return databaseService.prismaClient.$transaction((tx) => review(tx, input), { timeout: 30000 });
 }
-export async function saveSecurityPrices(input: PriceRequest & { expected: Array<{ date: string; price: number; token: string | null }> }) {
+export async function saveSecurityPrices(input: PriceRequest & { expected: Array<{ date: string; price: number; priceDecimal?: string; token: string | null }> }) {
   if (input?.confirmRawClose !== true) throw new Error("Confirm these are unadjusted completed closing prices in this holding's currency");
   return databaseService.prismaClient.$transaction(async (tx) => {
     const { identity, rows } = await review(tx, input);
     if (!Array.isArray(input.expected) || input.expected.length !== rows.length || input.expected.some((row) => !row || typeof row.date !== "string" || typeof row.price !== "number" || !(row.token === null || typeof row.token === "string"))) throw new Error("Review the price preview before saving");
     const expected = new Map(input.expected.map((row) => [row.date, row]));
-    if (expected.size !== rows.length || rows.some((row) => expected.get(row.date)?.token !== row.token || expected.get(row.date)?.price !== row.price)) throw new Error("Prices changed or preview is missing. Review the prices again before saving");
-    return securityMarketData.write({ identity, points: rows.map(({ date, price }) => ({ date, price, priceBasis: "raw", barStatus: "complete" })), mode: input.mode, source: input.source === "manual" ? "manual" : "import" }, tx);
+    if (expected.size !== rows.length || rows.some((row) => {
+      const reviewed = expected.get(row.date);
+      return !reviewed || reviewed.token !== row.token || reviewed.price !== row.price ||
+        (reviewed.priceDecimal ?? parseSecurityPrice(reviewed.price)?.priceDecimal) !== row.priceDecimal;
+    })) throw new Error("Prices changed or preview is missing. Review the prices again before saving");
+    return securityMarketData.write({ identity, points: rows.map(({ date, priceDecimal }) => ({ date, price: priceDecimal, priceBasis: "raw", barStatus: "complete" })), mode: input.mode, source: input.source === "manual" ? "manual" : "import" }, tx);
   }, { timeout: 30000 });
 }

@@ -53,6 +53,20 @@ it("values fractional positions at the exact closing-price boundary", async () =
   expect(await investmentService.getPositionDetails(holding.id, date))
     .toMatchObject({ marketPrice: 0.1005, marketValue: 1, unrealizedGain: -99 });
 });
+it.each(["manual", "import"] as const)("retains the reviewed %s decimal through storage and valuation", async (source) => {
+  const holding = await account(), date = "2026-01-02";
+  const priceDecimal = "0.10049999999999999999";
+  const input = { ...request(holding.id), source,
+    points: source === "import" ? parseSecurityPriceCsv(`Date,Price\n${date},${priceDecimal}`) : [{ date, price: priceDecimal }] };
+  const preview = await previewSecurityPrices(input);
+  expect(preview.rows[0]).toMatchObject({ price: 0.1005, priceDecimal });
+  await expect(saveSecurityPrices({ ...input, expected: preview.rows, points: [{ date, price: "0.1005" }] })).rejects.toThrow(/review/i);
+  expect(await databaseService.prismaClient.securityDailyPrice.count()).toBe(0);
+  await saveSecurityPrices({ ...input, expected: preview.rows });
+  expect(await databaseService.prismaClient.securityDailyPrice.findFirstOrThrow()).toMatchObject({ closeDecimal: priceDecimal });
+  expect((await getSecurityPriceContext({ accountId: holding.id })).prices[0]).toMatchObject({ priceDecimal });
+  expect(await investmentService.getPositionDetails(holding.id, date)).toMatchObject({ marketValue: 1 });
+});
 it("refuses stale price previews atomically instead of overwriting a later correction", async () => {
   const holding = await account(), input = { ...request(holding.id, "correct"), points: [{ date: "2026-01-02", price: 12 }, { date: "2026-01-03", price: 13 }] };
   const preview = await previewSecurityPrices(input);
@@ -83,7 +97,7 @@ it("promotes only explicitly selected legacy records for the chosen holding, pre
   expect(await databaseService.prismaClient.securityPriceHistory.count()).toBe(2);
 });
 it("parses strict dated price CSV records and rejects invalid batches before review", () => {
-  expect(parseSecurityPriceCsv('Date,Price\n"1/2/2026",0.123456789\n2026-01-03,0')).toEqual([{ date: "2026-01-02", price: 0.123456789 }, { date: "2026-01-03", price: 0 }]);
+  expect(parseSecurityPriceCsv('Date,Price\n"1/2/2026",0.123456789\n2026-01-03,0')).toEqual([{ date: "2026-01-02", price: "0.123456789" }, { date: "2026-01-03", price: "0" }]);
   for (const csv of ['Date,Price\n2026-01-02,12bad', 'Date,Price\n2026-02-30,1', 'Date,Price\n2026-01-02,1\n1/2/2026,2']) expect(() => parseSecurityPriceCsv(csv)).toThrow();
 });
 

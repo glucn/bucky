@@ -6,17 +6,20 @@ import { SecurityPriceModal } from "./SecurityPriceModal";
 
 const context = { accountId: "holding", ticker: "ABC", market: "TSX", currency: "CAD", quoteCurrency: "CAD", quoteCurrencyIssue: null, hasTrackedHistory: true, prices: [], legacyPrices: [], priceCount: 0, legacyCount: 0 };
 it("requires explicit correction policy and raw-close confirmation, then saves the exact reviewed account and prices", async () => {
-  const invoke = vi.fn(async (channel) => channel === "get-security-price-context" ? { success: true, context } : channel === "preview-security-prices" ? { success: true, preview: { rows: [{ date: "2026-01-02", price: 12, token: null, action: "insert", existing: null }] } } : { success: true, result: { inserted: 1, corrected: 0, retained: 0 } });
+  const priceDecimal = "0.10049999999999999999";
+  const invoke = vi.fn(async (channel) => channel === "get-security-price-context" ? { success: true, context } : channel === "preview-security-prices" ? { success: true, preview: { rows: [{ date: "2026-01-02", price: 0.1005, priceDecimal, token: null, action: "insert", existing: null }] } } : { success: true, result: { inserted: 1, corrected: 0, retained: 0 } });
   Object.defineProperty(window, "electron", { configurable: true, value: { ipcRenderer: { invoke } } });
   render(<SecurityPriceModal isOpen accountId="holding" onClose={vi.fn()} />);
   await screen.findByText("ABC · TSX · CAD");
   fireEvent.change(screen.getByLabelText("Price date"), { target: { value: "2026-01-02" } });
-  fireEvent.change(screen.getByLabelText("Price in CAD"), { target: { value: "12" } });
+  fireEvent.change(screen.getByLabelText("Price in CAD"), { target: { value: priceDecimal } });
   fireEvent.change(screen.getByLabelText("Existing dates"), { target: { value: "correct" } });
   fireEvent.click(screen.getByText("Preview prices"));
+  await screen.findByText(priceDecimal);
+  expect(invoke).toHaveBeenCalledWith("preview-security-prices", expect.objectContaining({ points: [{ date: "2026-01-02", price: priceDecimal }] }));
   const save = await screen.findByText("Save reviewed prices"); expect((save as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(screen.getByLabelText(/I verified these are unadjusted completed/)); fireEvent.click(save);
-  await waitFor(() => expect(invoke).toHaveBeenCalledWith("save-security-prices", expect.objectContaining({ accountId: "holding", expectedMarket: "TSX", mode: "correct", confirmRawClose: true, expected: [{ date: "2026-01-02", price: 12, token: null }] })));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("save-security-prices", expect.objectContaining({ accountId: "holding", expectedMarket: "TSX", mode: "correct", confirmRawClose: true, expected: [{ date: "2026-01-02", price: 0.1005, priceDecimal, token: null }] })));
   await screen.findByText("1 inserted · 0 corrected · 0 retained");
 });
 

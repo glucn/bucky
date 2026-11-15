@@ -9,6 +9,15 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 86 — Preserve entered closing-price digits through review
+
+- Manual and CSV closes keep their decimal text through preview, history,
+  storage, and valuation. Saving compares the reviewed decimal so it rejects
+  a change even when both prices project to the same JavaScript number.
+- A regression verifies that a close just below a half-cent valuation
+  boundary stays below it after preview and save. Provider and legacy prices
+  received as numbers still have the precision of those inputs.
+
 ### Batch 85 — Compare restored balances using posting cents
 
 - Backup and restore summaries add canonical posting cents across each account

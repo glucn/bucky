@@ -4,10 +4,11 @@ import { databaseService } from "./database";
 import { verifyPricePolicy, type SecurityPricePolicy } from "./securityPricePolicy";
 import { resolveValuationDate } from "./valuationDate";
 import { readUnsignedDecimal } from "./journalPrecision";
+import { parseSecurityPrice, type PricePoint } from "../shared/securityPrices";
 import type { Prisma } from "@prisma/client";
 
 export type CanonicalSecurityPrice = { date: string; price: number; source: string };
-type Write = { identity: SecurityIdentity; points: Array<{ date: string; price: number } & SecurityPricePolicy>; mode: "fill" | "correct"; source: "manual" | "import" | "provider" };
+type Write = { identity: SecurityIdentity; points: Array<PricePoint & SecurityPricePolicy>; mode: "fill" | "correct"; source: "manual" | "import" | "provider" };
 function date(value: unknown): string {
   const normalized = typeof value === "string" && value.length <= 64 ? parseToStandardDate(value) : null;
   if (!normalized) throw new Error("Invalid security price date");
@@ -44,10 +45,11 @@ export const securityMarketData = {
     const key = parseSecurityIdentity(input.identity);
     if (!Array.isArray(input.points) || !input.points.length || input.points.length > 10000) throw new Error("Supply between 1 and 10000 security price points");
     const points = input.points.map((row) => {
-      if (!row || typeof row.price !== "number" || !Number.isFinite(row.price) || row.price < 0) throw new Error("Security price must be finite and non-negative");
+      const close = parseSecurityPrice(row?.price);
+      if (!close) throw new Error("Security price must be finite and non-negative");
       const policy = verifyPricePolicy(row);
       if (input.source !== "provider" && policy.priceBasis !== "raw") throw new Error("Manual/import valuation prices must explicitly use raw prices");
-      return { marketDate: date(row.date), close: row.price, closeDecimal: row.price.toString(), ...policy };
+      return { marketDate: date(row.date), close: close.price, closeDecimal: close.priceDecimal, ...policy };
     });
     if (new Set(points.map((row) => row.marketDate)).size !== points.length) throw new Error("Duplicate security price dates in one batch");
     const write = async (tx: Prisma.TransactionClient) => {
