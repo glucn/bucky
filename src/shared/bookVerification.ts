@@ -1,4 +1,4 @@
-export type JournalVerificationCode = "journal-unbalanced" | "journal-account-currency" | "journal-fx" | "journal-postings" | "journal-amount";
+export type JournalVerificationCode = "journal-unbalanced" | "journal-account-currency" | "journal-fx" | "journal-postings" | "journal-amount" | "journal-opening-balance";
 
 export type BookFinding =
   | { severity: "error"; code: JournalVerificationCode; entryId: string; date: string; description: string | null; message: string; lineId?: string }

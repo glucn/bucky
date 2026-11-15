@@ -9,6 +9,13 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 80 — Verify opening-balance entries
+
+- The verifier reports duplicate opening balances by account and checks that a
+  tagged opening consists of an account posting and a same-currency system
+  offset. A matching memo alone does not classify a transaction as an opening.
+- Verification covered 24 focused native tests, 22 encrypted tests, and TypeScript.
+
 ### Batch 79 — Verify recoverable legacy checkpoint adjustments
 
 - Verification, deletion, and reconciliation share the same matching rules for

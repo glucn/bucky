@@ -17,13 +17,41 @@ const journalSelect = {
   date: true,
   description: true,
   type: true,
+  entryType: true,
   lines: {
     orderBy: { id: "asc" },
-    select: { id: true, amount: true, amountCents: true, currency: true, exchangeRate: true, account: { select: { type: true, currency: true } } },
+    select: { id: true, accountId: true, amount: true, amountCents: true, currency: true, exchangeRate: true,
+      account: { select: { type: true, currency: true, name: true } } },
   },
 } satisfies Prisma.JournalEntrySelect;
 
 type Entry = Prisma.JournalEntryGetPayload<{ select: typeof journalSelect }>;
+
+function verifyOpeningBalance(entry: Entry, openings: Map<string, Entry | null>, findings: BookFinding[]) {
+  const isLegacyOpening = entry.entryType === null && entry.description === "Opening Balance" &&
+    entry.lines.some(({ account }) => account.type === AccountType.System &&
+      (account.name === "Opening Balances" || account.name === "Opening Balance Equity"));
+  if (entry.entryType !== "opening-balance" && !isLegacyOpening) return;
+  const report = (record: Entry, message: string) => findings.push({
+    severity: "error", code: "journal-opening-balance", entryId: record.id, date: record.date, description: record.description, message,
+  });
+  const user = entry.lines.find(({ account }) => account.type === AccountType.User);
+  const offset = entry.lines.find(({ account }) => account.type === AccountType.System);
+  if (!user || !offset || entry.lines.length !== 2 || entry.type !== null ||
+    user.currency !== offset.currency || entry.lines.some(({ exchangeRate }) => exchangeRate !== null)) {
+    report(entry, "An opening balance must have one account posting and one system offset in the same currency");
+    return;
+  }
+  const first = openings.get(user.accountId);
+  if (first === undefined) {
+    openings.set(user.accountId, entry);
+    return;
+  }
+  const message = "More than one opening balance posts to this account";
+  if (first) report(first, message);
+  report(entry, message);
+  openings.set(user.accountId, null);
+}
 
 async function verifyCheckpoints(tx: Prisma.TransactionClient, findings: BookFinding[]) {
   const checkpoints = await tx.checkpoint.findMany({
@@ -190,6 +218,7 @@ export async function verifyBook(asOfDate?: string): Promise<BookVerificationRep
   const date = resolveValuationDate(asOfDate);
   return databaseService.prismaClient.$transaction(async (tx) => {
     const findings: BookFinding[] = [];
+    const openings = new Map<string, Entry | null>();
     const pageSize = 500;
     let after: string | undefined;
     while (true) {
@@ -199,7 +228,10 @@ export async function verifyBook(asOfDate?: string): Promise<BookVerificationRep
         take: pageSize,
         select: journalSelect,
       });
-      for (const entry of entries) verifyJournal(entry, findings);
+      for (const entry of entries) {
+        verifyJournal(entry, findings);
+        verifyOpeningBalance(entry, openings, findings);
+      }
       if (entries.length < pageSize) break;
       after = entries[entries.length - 1].id;
     }

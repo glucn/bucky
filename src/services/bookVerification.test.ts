@@ -30,6 +30,21 @@ it("accepts balanced native-currency postings, portfolio FX and nonfinancial spl
   expect(await verifyBook()).toEqual({ findings: [] });
 });
 
+it("reports duplicate opening balances and invalid opening counterparties without treating a memo as an opening", async () => {
+  const { cad, usd, category, entry } = await fixture();
+  const first = await databaseService.setOpeningBalance({ accountId: cad.id, asOfDate: "2026-11-01", displayAmount: 100 });
+  const equityId = first.lines.find((line: { accountId: string }) => line.accountId !== cad.id).accountId;
+  const duplicate = await entry([{ accountId: cad.id, amount: 25, currency: "CAD" }, { accountId: equityId, amount: -25, currency: "CAD" }]);
+  const ordinary = await entry([{ accountId: usd.id, amount: -12, currency: "USD" }, { accountId: category.id, amount: 12, currency: "USD" }]);
+  await db().journalEntry.updateMany({ where: { id: { in: [duplicate.id, ordinary.id] } }, data: { description: "Opening Balance" } });
+  const invalid = await entry([{ accountId: usd.id, amount: 50, currency: "USD" }, { accountId: category.id, amount: -50, currency: "USD" }]);
+  await db().journalEntry.update({ where: { id: invalid.id }, data: { entryType: "opening-balance" } });
+  const opening = (await verifyBook()).findings.filter(({ code }) => code === "journal-opening-balance");
+  expect(opening).toHaveLength(3);
+  expect(opening).toEqual(expect.arrayContaining([first.id, duplicate.id, invalid.id].map((entryId) => expect.objectContaining({ entryId }))));
+  expect(await db().journalEntry.count()).toBe(4);
+});
+
 it("reports a retained posting whose original precision needs review", async () => {
   const { cad, category } = await fixture();
   const saved = await db().journalEntry.create({ data: { date: "2026-11-01", lines: { create: [
