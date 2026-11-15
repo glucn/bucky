@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
-import { addInvestmentUnits, cents, investmentQuantityFields, readInvestmentBasisCents, readInvestmentQuantity,
+import { addInvestmentUnits, cents, investmentLot, investmentQuantityFields, readInvestmentBasisCents, readInvestmentQuantity,
   readLots, resolveInvestmentAccounts, investmentTransaction, scaleInvestmentUnits, type InvestmentSelection, type Lot } from "./investmentPosting";
 
 export type DividendInput = InvestmentSelection & { amount: number; date: string; isReturnOfCapital?: boolean; description?: string };
@@ -51,7 +51,7 @@ function reduceLots(lots: Lot[], reduction: number): Lot[] {
   const ordered = [...portions].sort((a, b) => a.remainder === b.remainder ? a.index - b.index : a.remainder > b.remainder ? -1 : 1);
   for (const portion of ordered) { if (remainder-- <= 0) break; portion.reduction++; }
   if (portions.some((portion) => portion.reduction > costs[portion.index])) throw new Error("Return of capital exceeds a lot's basis; classify excess explicitly");
-  return lots.map((lot, index) => ({ ...lot, amount: (costs[index] - portions[index].reduction) / 100 }));
+  return lots.map((lot, index) => ({ ...lot, ...postingAmountFromCents(costs[index] - portions[index].reduction) }));
 }
 async function reducedBasis(tx: Prisma.TransactionClient, accountId: string, lots: Lot[] | null, amount: number) {
   const basis = await readInvestmentBasisCents(tx, accountId);
@@ -114,7 +114,7 @@ export async function recordReinvestment(input: ReinvestmentInput, transaction?:
       [{ accountId: security!.id, cents: amount }, { accountId: cash.id, cents: -amount }]);
     const newQuantity = addInvestmentUnits(readInvestmentQuantity(props.quantity, props.quantityDecimal), quantity);
     if (!Number.isFinite(newQuantity)) throw new Error("Reinvestment quantity exceeds supported precision");
-    lots?.push({ date, quantity, pricePerShare: input.reinvestmentPrice, amount: amount / 100 });
+    lots?.push(investmentLot(date, quantity, input.reinvestmentPrice, amount));
     await tx.investmentProperties.update({ where: { id: props.id }, data: { ...investmentQuantityFields(newQuantity), lots: lots ? JSON.stringify(lots) : null } });
     await finishInvestmentActivity(tx, history, { kind: input.recordAsIncome ? "income_reinvestment" : "capital_reinvestment", units: quantity, price: input.reinvestmentPrice, cashAmount: 0 }, [receipt.id, entry.id]);
     return entry;
@@ -132,7 +132,8 @@ export async function recordSplit(accountId: string, splitRatio: number, inputDa
     const props = account.investmentProperties, lots = positionLots(props);
     const held = readInvestmentQuantity(props.quantity, props.quantityDecimal);
     const quantity = scaleInvestmentUnits(held, splitRatio);
-    const updatedLots = lots?.map((lot) => ({ ...lot, quantity: scaleInvestmentUnits(lot.quantity, splitRatio), pricePerShare: lot.pricePerShare / splitRatio }));
+    const updatedLots = lots?.map((lot) => ({ ...lot, ...investmentQuantityFields(scaleInvestmentUnits(lot.quantity, splitRatio)),
+      pricePerShare: lot.pricePerShare / splitRatio }));
     if (!Number.isFinite(quantity) || (held > 0 && quantity <= 0) || updatedLots?.some((lot) => !Number.isFinite(lot.quantity) || lot.quantity <= 0 || !Number.isFinite(lot.pricePerShare))) {
       throw new Error("Split result exceeds supported precision");
     }

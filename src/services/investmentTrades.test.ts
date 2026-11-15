@@ -59,6 +59,24 @@ it("uses stored decimal quantities instead of their numeric mirrors during valua
   expect(await investmentService.getPositionDetails(holding.id, "2026-01-03")).toMatchObject({ quantity: 0, costBasis: 0 });
 });
 
+it("releases FIFO basis from the stored lot cents and decimal quantity", async () => {
+  const { group } = await investmentService.createInvestmentPortfolio("Exact lots");
+  const common = { ...trade, portfolioId: group.id };
+  await investmentService.recordBuy({ ...common, quantity: 0.3 });
+  const holding = await investmentService.getSecurityAccount(group.id, "ABC");
+  const db = databaseService.prismaClient;
+  const props = await db.investmentProperties.findUniqueOrThrow({ where: { accountId: holding.id } });
+  const [lot] = JSON.parse(props.lots!);
+  expect(lot).toMatchObject({ quantityDecimal: "0.3", amountCents: "300" });
+  const lots = JSON.stringify([{ ...lot, quantity: 0.1, amount: 0 }]);
+  await db.investmentProperties.update({ where: { id: props.id }, data: { lots } });
+  await db.investmentActivity.updateMany({ where: { accountId: holding.id }, data: { lotsAfter: lots } });
+  await investmentService.recordSell({ ...common, quantity: 0.1, date: "2026-01-03" });
+  expect(await investmentService.getPositionDetails(holding.id, "2026-01-03")).toMatchObject({ quantity: 0.2, costBasis: 2 });
+  const remaining = await db.investmentProperties.findUniqueOrThrow({ where: { id: props.id } });
+  expect(JSON.parse(remaining.lots!)).toEqual([expect.objectContaining({ quantityDecimal: "0.2", amountCents: "200" })]);
+});
+
 it("rounds fractional trade consideration and fees at the exact half-cent boundary", async () => {
   const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Fractional trade");
   const common = { ...trade, portfolioId: group.id, quantity: 0.5, pricePerShare: 2.01, fee: 0.145 };

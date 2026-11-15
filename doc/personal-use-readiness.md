@@ -9,6 +9,17 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 74 — Store FIFO lot quantities and basis in exact form
+
+- New FIFO lots and lots confirmed at a reviewed baseline store decimal units
+  and integer basis cents. Partial sales update both values. Return-of-capital
+  reductions update basis cents, and splits update the lot quantities.
+- FIFO validation and posting prefer the exact fields when present. Historical
+  records without them remain readable. Lot unit prices still use the numeric
+  representation.
+- Verification covered 152 focused native tests, 81 encrypted tests, TypeScript,
+  Apple Silicon packaging, and three packaged restart tests.
+
 ### Batch 73 — Store decimal holding quantities and activity balances
 
 - Current holdings and before/after activity balances store the decimal value

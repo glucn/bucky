@@ -2,7 +2,8 @@ import type { Prisma } from "@prisma/client";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
 import { databaseService } from "./database";
-import { addDecimalRatios, decimalRatio, readUnsignedDecimal, roundDecimalRatio, sumJournalCents, toJournalCents, type DecimalRatio } from "./journalPrecision";
+import { addDecimalRatios, decimalRatio, postingAmountFromCents, readPostingAmount,
+  readUnsignedDecimal, roundDecimalRatio, sumJournalCents, toJournalCents, type DecimalRatio } from "./journalPrecision";
 import { hasPortfolioIdentity, isSettlementCash } from "../shared/investmentAccounts";
 
 export function investmentTransaction<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>, tx?: Prisma.TransactionClient): Promise<T> {
@@ -11,7 +12,8 @@ export function investmentTransaction<T>(operation: (tx: Prisma.TransactionClien
 
 export type InvestmentSelection = { portfolioId: string; tickerSymbol: string; securityAccountId?: string; tradeCashAccountId?: string };
 
-export type Lot = { date: string; quantity: number; pricePerShare: number; amount: number };
+export type Lot = { date: string; quantity: number; pricePerShare: number; amount: number;
+  quantityDecimal?: string; amountCents?: string };
 
 export function cents(value: number): number {
   return toJournalCents(value);
@@ -54,18 +56,32 @@ export function investmentQuantityFields(quantity: number) {
   return { quantity, quantityDecimal: readInvestmentQuantity(quantity, null).toString() };
 }
 
+export function investmentLot(date: string, quantity: number, pricePerShare: number, basisCents: number): Lot {
+  return { date, ...investmentQuantityFields(quantity), pricePerShare, ...postingAmountFromCents(basisCents) };
+}
+
 export async function readInvestmentBasisCents(tx: Prisma.TransactionClient, accountId: string): Promise<bigint> {
   const postings = await tx.journalLine.findMany({ where: { accountId }, select: { amount: true, amountCents: true } });
   return sumJournalCents(postings);
 }
 export function readLots(value: string | null, quantity: number): Lot[] {
   const lots: Lot[] = value ? JSON.parse(value) : [];
-  if (!Array.isArray(lots) || lots.some((lot) => !lot || !Number.isFinite(lot.quantity) || lot.quantity <= 0 ||
-    !Number.isFinite(lot.amount) || lot.amount < 0 || !parseToStandardDate(lot.date))) throw new Error("Invalid FIFO lot data");
-  if (Math.abs(lots.reduce((sum, lot) => sum + lot.quantity, 0) - quantity) > 1e-8 * Math.max(1, quantity)) {
+  if (!Array.isArray(lots)) throw new Error("Invalid FIFO lot data");
+  const normalized = lots.map((lot) => {
+    if (!lot || !parseToStandardDate(lot.date) ||
+      (lot.quantityDecimal !== undefined && typeof lot.quantityDecimal !== "string") ||
+      (lot.amountCents !== undefined && typeof lot.amountCents !== "string") ||
+      (lot.amountCents === undefined && (!Number.isFinite(lot.amount) || lot.amount < 0)) ||
+      (lot.quantityDecimal === undefined && !Number.isFinite(lot.quantity))) throw new Error("Invalid FIFO lot data");
+    const units = readInvestmentQuantity(lot.quantity, lot.quantityDecimal);
+    const amount = readPostingAmount({ amount: lot.amount, amountCents: lot.amountCents ?? null });
+    if (units <= 0 || amount < 0) throw new Error("Invalid FIFO lot data");
+    return { ...lot, quantity: units, amount };
+  });
+  if (Math.abs(normalized.reduce((sum, lot) => sum + lot.quantity, 0) - quantity) > 1e-8 * Math.max(1, quantity)) {
     throw new Error("FIFO lots do not match the position quantity");
   }
-  return lots;
+  return normalized;
 }
 
 export async function resolveInvestmentAccounts(tx: Prisma.TransactionClient, input: InvestmentSelection,

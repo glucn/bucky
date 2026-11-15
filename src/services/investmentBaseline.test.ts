@@ -21,7 +21,10 @@ const reviewed = (accountId: string, lots: history.InvestmentBaselineReview["lot
 it("establishes a verified cutover without rewriting holdings or posting new money", async () => {
   const { portfolio, holding, lots } = await legacy();
   const before = await databaseService.prismaClient.journalEntry.findMany({ include: { lines: true } });
-  await confirm(reviewed(holding.id, lots));
+  const cutover = await confirm(reviewed(holding.id, lots));
+  expect(cutover.status === "available" && JSON.parse(cutover.lots!)[0]).toMatchObject({
+    quantityDecimal: "10", amountCents: "10000",
+  });
   expect(await databaseService.prismaClient.journalEntry.findMany({ include: { lines: true } })).toEqual(before);
   expect(await history.getInvestmentSnapshot(holding.id, "2026-01-01")).toEqual({ status: "unavailable", reason: "legacy_history" });
   expect(await history.getInvestmentSnapshot(holding.id, "2026-01-02")).toMatchObject({ status: "available", quantity: 10, costBasis: 100 });

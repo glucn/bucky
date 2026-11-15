@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { databaseService } from "./database";
-import { cents, investmentQuantityFields, investmentTransaction, readInvestmentBasisCents, readInvestmentQuantity, readLots, type Lot } from "./investmentPosting";
+import { cents, investmentLot, investmentQuantityFields, investmentTransaction, readInvestmentBasisCents, readInvestmentQuantity, readLots, type Lot } from "./investmentPosting";
 import { journalAmountFromCents, sumJournalCents } from "./journalPrecision";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { isValidStandardDate, localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
@@ -143,8 +143,10 @@ export async function confirmInvestmentBaseline(input: InvestmentBaselineReview)
     if (lines.some((line) => line.currency !== account.currency || !isValidStandardDate(line.entry.date) || line.entry.date > input.date)) throw new Error("Cutover date or journal currency conflicts with retained postings");
     const last = await tx.investmentActivity.findFirst({ where: { accountId: account.id }, orderBy: { sequence: "desc" } });
     if (last && last.date > input.date) throw new Error("Cutover date precedes retained investment activity");
-    const lots = Array.isArray(input.lots) ? JSON.stringify(input.lots.map(({ date, quantity, pricePerShare, amount }) => ({ date, quantity, pricePerShare, amount }))) : null;
-    if (!validLots(props.costBasisMethod, input.quantity, input.costBasis, lots, input.date)) throw new Error("Reviewed lots must agree with quantity, basis and cutover date");
+    const reviewedLots = Array.isArray(input.lots) ? input.lots.map(({ date, quantity, pricePerShare, amount }) => ({ date, quantity, pricePerShare, amount })) : null;
+    if (!validLots(props.costBasisMethod, input.quantity, input.costBasis, reviewedLots && JSON.stringify(reviewedLots), input.date)) throw new Error("Reviewed lots must agree with quantity, basis and cutover date");
+    const lots = reviewedLots && JSON.stringify(reviewedLots.map((lot) =>
+      investmentLot(lot.date, lot.quantity, lot.pricePerShare, cents(lot.amount))));
     const entryIds = [...new Set(lines.map((line) => line.entryId))];
     const linked = await tx.investmentActivityJournal.findMany({ where: { entryId: { in: entryIds } }, include: { activity: true } });
     if (linked.some(({ activity }) => activity.accountId !== account.id)) throw new Error("A retained journal belongs to another holding's activity");

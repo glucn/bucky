@@ -2,7 +2,7 @@ import { postingAmountFromCents } from "./journalPrecision";
 import type { Prisma } from "@prisma/client";
 import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
-import { addInvestmentUnits, cents, investmentQuantityFields, proportionalBasisCents, readInvestmentQuantity, readLots,
+import { addInvestmentUnits, cents, investmentLot, investmentQuantityFields, proportionalBasisCents, readInvestmentQuantity, readLots,
   resolveInvestmentAccounts, investmentTransaction, tradeGrossCents } from "./investmentPosting";
 import { parseToStandardDate } from "../shared/dateUtils";
 
@@ -49,7 +49,7 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
     const newQuantity = addInvestmentUnits(held, kind === "buy" ? input.quantity : -input.quantity);
     if (!Number.isFinite(newQuantity)) throw new Error("Position quantity exceeds supported precision");
     if (kind === "buy") {
-      lots?.push({ date, quantity: input.quantity, pricePerShare: input.pricePerShare, amount: consideration / 100 });
+      lots?.push(investmentLot(date, input.quantity, input.pricePerShare, consideration));
     } else {
       if (lots) {
         let remaining = input.quantity;
@@ -60,7 +60,8 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
           const releasedCost = taken === lot.quantity ? oldCost : proportionalBasisCents(oldCost, taken, lot.quantity);
           basis += releasedCost;
           remaining = addInvestmentUnits(remaining, -taken);
-          return taken === lot.quantity ? [] : [{ ...lot, quantity: addInvestmentUnits(lot.quantity, -taken), amount: (oldCost - releasedCost) / 100 }];
+          return taken === lot.quantity ? [] : [investmentLot(lot.date, addInvestmentUnits(lot.quantity, -taken),
+            lot.pricePerShare, oldCost - releasedCost)];
         });
       } else {
         const oldCost = Number(history.basisCents);
