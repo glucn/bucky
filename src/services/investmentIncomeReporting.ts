@@ -4,7 +4,7 @@ import { parseToStandardDate } from "../shared/dateUtils";
 import type { InvestmentIncomeReport, RealizedGainReportRow, ReportFxSource } from "../shared/investmentReporting";
 import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
-import { cents, readLots, tradeGrossCents } from "./investmentPosting";
+import { addInvestmentUnits, cents, readLots, tradeGrossCents } from "./investmentPosting";
 import { journalAmountFromCents, readPostingCents, sumJournalCents } from "./journalPrecision";
 import { createValuationConversionService, valuationFxSelect, type ValuationQuote } from "./valuationConversionService";
 
@@ -118,7 +118,8 @@ function holdingAge(activity: NonNullable<Entry["investmentActivityLink"]>["acti
       const date = parseToStandardDate(lot.date);
       if (!date || date > activity.date) return "unknown";
       const days = (Date.parse(`${activity.date}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / 86400000;
-      ages.add(days >= 365 ? "long" : "short"); remaining -= Math.min(remaining, lot.quantity);
+      ages.add(days >= 365 ? "long" : "short");
+      remaining = addInvestmentUnits(remaining, -Math.min(remaining, lot.quantity));
     }
     return remaining > 1e-8 ? "unknown" : ages.size > 1 ? "mixed" : ages.has("long") ? "long" : "short";
   } catch { return "unknown"; }

@@ -8,6 +8,41 @@ const trade = { tickerSymbol: "ABC", quantity: 10, pricePerShare: 10, date: "202
 const cashTotal = (entry: any, id: string) => entry.lines.filter((line: any) => line.accountId === id).reduce((sum: number, line: any) => sum + line.amount, 0);
 const balanced = (entry: any) => expect(entry.lines.reduce((sum: number, line: any) => sum + line.amount, 0)).toBeCloseTo(0, 10);
 
+it.each(["FIFO", "AVERAGE_COST"] as const)("fully closes a fractional %s position across separate sales", async (method) => {
+  const { group } = await investmentService.createInvestmentPortfolio("Fractional closing");
+  const holding = await investmentService.createSecurityAccount(group.id, "ABC", undefined, method);
+  const common = { ...trade, portfolioId: group.id, securityAccountId: holding.id };
+  await investmentService.recordBuy({ ...common, quantity: 0.3, pricePerShare: 10 });
+  await investmentService.recordSell({ ...common, quantity: 0.1, date: "2026-01-03" });
+  expect((await investmentService.getPositionDetails(holding.id, "2026-01-03")).quantity).toBe(0.2);
+  await investmentService.recordSell({ ...common, quantity: 0.2, date: "2026-01-04" });
+  expect(await investmentService.getPositionDetails(holding.id, "2026-01-04")).toMatchObject({ quantity: 0, costBasis: 0 });
+  expect((await databaseService.prismaClient.investmentProperties.findUniqueOrThrow({ where: { accountId: holding.id } })).lots)
+    .toBe(method === "FIFO" ? "[]" : null);
+});
+
+it("consumes fractional FIFO lots without leaving a residual unit or cost basis", async () => {
+  const { group } = await investmentService.createInvestmentPortfolio("Fractional lots");
+  const common = { ...trade, portfolioId: group.id };
+  await investmentService.recordBuy({ ...common, quantity: 0.1, pricePerShare: 10 });
+  await investmentService.recordBuy({ ...common, quantity: 0.2, pricePerShare: 20 });
+  const holding = await investmentService.getSecurityAccount(group.id, "ABC");
+  await investmentService.recordSell({ ...common, quantity: 0.3, date: "2026-01-03" });
+  expect(await investmentService.getPositionDetails(holding.id, "2026-01-03")).toMatchObject({ quantity: 0, costBasis: 0 });
+  expect((await databaseService.prismaClient.investmentProperties.findUniqueOrThrow({ where: { accountId: holding.id } })).lots).toBe("[]");
+});
+
+it("closes all units after splitting a fractional lot", async () => {
+  const { group } = await investmentService.createInvestmentPortfolio("Fractional split");
+  const common = { ...trade, portfolioId: group.id };
+  await investmentService.recordBuy({ ...common, quantity: 0.1 });
+  const holding = await investmentService.getSecurityAccount(group.id, "ABC");
+  await investmentService.recordStockSplit(holding.id, 3, "2026-01-03");
+  expect((await investmentService.getPositionDetails(holding.id, "2026-01-03")).quantity).toBe(0.3);
+  await investmentService.recordSell({ ...common, date: "2026-01-04", quantity: 0.3 });
+  expect(await investmentService.getPositionDetails(holding.id, "2026-01-04")).toMatchObject({ quantity: 0, costBasis: 0 });
+});
+
 it("rounds fractional trade consideration and fees at the exact half-cent boundary", async () => {
   const { group, tradeCashAccount } = await investmentService.createInvestmentPortfolio("Fractional trade");
   const common = { ...trade, portfolioId: group.id, quantity: 0.5, pricePerShare: 2.01, fee: 0.145 };

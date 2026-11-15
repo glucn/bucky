@@ -2,7 +2,7 @@ import { postingAmountFromCents } from "./journalPrecision";
 import type { Prisma } from "@prisma/client";
 import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
-import { cents, proportionalBasisCents, readLots, resolveInvestmentAccounts, investmentTransaction, tradeGrossCents } from "./investmentPosting";
+import { addInvestmentUnits, cents, proportionalBasisCents, readLots, resolveInvestmentAccounts, investmentTransaction, tradeGrossCents } from "./investmentPosting";
 import { parseToStandardDate } from "../shared/dateUtils";
 
 export type InvestmentTrade = {
@@ -44,13 +44,12 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
     if (!["FIFO", "AVERAGE_COST"].includes(props.costBasisMethod)) throw new Error("Invalid cost basis method");
     let lots = props.costBasisMethod === "FIFO" ? readLots(props.lots, props.quantity) : null;
     let basis = consideration;
-    let newQuantity = props.quantity + input.quantity;
+    if (kind === "sell" && input.quantity > props.quantity) throw new Error(`Insufficient shares: trying to sell ${input.quantity} but only ${props.quantity} available`);
+    const newQuantity = addInvestmentUnits(props.quantity, kind === "buy" ? input.quantity : -input.quantity);
     if (!Number.isFinite(newQuantity)) throw new Error("Position quantity exceeds supported precision");
     if (kind === "buy") {
       lots?.push({ date, quantity: input.quantity, pricePerShare: input.pricePerShare, amount: consideration / 100 });
     } else {
-      if (input.quantity > props.quantity) throw new Error(`Insufficient shares: trying to sell ${input.quantity} but only ${props.quantity} available`);
-      newQuantity = props.quantity - input.quantity;
       if (lots) {
         let remaining = input.quantity;
         basis = 0;
@@ -59,8 +58,8 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
           const taken = Math.min(remaining, lot.quantity), oldCost = cents(lot.amount);
           const releasedCost = taken === lot.quantity ? oldCost : proportionalBasisCents(oldCost, taken, lot.quantity);
           basis += releasedCost;
-          remaining -= taken;
-          return taken === lot.quantity ? [] : [{ ...lot, quantity: lot.quantity - taken, amount: (oldCost - releasedCost) / 100 }];
+          remaining = addInvestmentUnits(remaining, -taken);
+          return taken === lot.quantity ? [] : [{ ...lot, quantity: addInvestmentUnits(lot.quantity, -taken), amount: (oldCost - releasedCost) / 100 }];
         });
       } else {
         const oldCost = Number(history.basisCents);

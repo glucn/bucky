@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
 import { databaseService } from "./database";
-import { decimalRatio, roundDecimalRatio, sumJournalCents, toJournalCents } from "./journalPrecision";
+import { addDecimalRatios, decimalRatio, roundDecimalRatio, sumJournalCents, toJournalCents, type DecimalRatio } from "./journalPrecision";
 import { hasPortfolioIdentity, isSettlementCash } from "../shared/investmentAccounts";
 
 export function investmentTransaction<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>, tx?: Prisma.TransactionClient): Promise<T> {
@@ -27,6 +27,21 @@ export function tradeGrossCents(units: number, price: number | string): number {
 export function proportionalBasisCents(basis: number, unitsSold: number, unitsHeld: number): number {
   const sold = decimalRatio(unitsSold), held = decimalRatio(unitsHeld);
   return Number(roundDecimalRatio(BigInt(basis) * sold.numerator * held.denominator, sold.denominator * held.numerator));
+}
+
+function quantityFromDecimal(value: DecimalRatio): number {
+  // Quantity arithmetic keeps power-of-ten denominators. Parse the exact decimal once
+  // at the current numeric boundary instead of rounding numerator and quotient separately.
+  return Number(`${value.numerator}e-${value.denominator.toString().length - 1}`);
+}
+
+export function addInvestmentUnits(quantity: number, change: number): number {
+  return quantityFromDecimal(addDecimalRatios(decimalRatio(quantity), decimalRatio(change)));
+}
+
+export function scaleInvestmentUnits(quantity: number, factor: number): number {
+  const units = decimalRatio(quantity), scale = decimalRatio(factor);
+  return quantityFromDecimal({ numerator: units.numerator * scale.numerator, denominator: units.denominator * scale.denominator });
 }
 
 export async function readInvestmentBasisCents(tx: Prisma.TransactionClient, accountId: string): Promise<bigint> {

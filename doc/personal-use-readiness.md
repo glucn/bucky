@@ -9,6 +9,16 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 72 — Use decimal arithmetic for fractional holding changes
+
+- Trades, FIFO lot consumption, reinvestments, and stock splits calculate finite
+  decimal unit changes before projecting to the existing numeric storage. A
+  fractional position can close without leaving a residual unit or basis.
+- This prevents new floating-point artifacts at these arithmetic steps. Stored
+  quantities, lot records, and historical precision review still need migration.
+- Verification covered 162 focused native tests, 74 encrypted tests, TypeScript,
+  Apple Silicon packaging, and three packaged trade and replay tests.
+
 ### Batch 71 — Retain fractional cents through FX aggregation
 
 - Net worth and each dashboard portfolio allocation sum exact converted amounts

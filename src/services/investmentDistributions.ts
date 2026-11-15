@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
-import { cents, readInvestmentBasisCents, readLots, resolveInvestmentAccounts, investmentTransaction, type InvestmentSelection, type Lot } from "./investmentPosting";
+import { addInvestmentUnits, cents, readInvestmentBasisCents, readLots, resolveInvestmentAccounts, investmentTransaction, scaleInvestmentUnits, type InvestmentSelection, type Lot } from "./investmentPosting";
 
 export type DividendInput = InvestmentSelection & { amount: number; date: string; isReturnOfCapital?: boolean; description?: string };
 export type ReinvestmentInput = InvestmentSelection & { dividendAmount: number; reinvestmentPrice: number; date: string; recordAsIncome: boolean; description?: string };
@@ -110,7 +110,7 @@ export async function recordReinvestment(input: ReinvestmentInput, transaction?:
       [{ accountId: cash.id, cents: amount }, { accountId: sourceAccountId, cents: -amount }]);
     const entry = await journal(tx, date, `${description} - Purchase${input.recordAsIncome ? "" : " (Cost Basis Reduction)"}`, "dividend_reinvest", cash.currency,
       [{ accountId: security!.id, cents: amount }, { accountId: cash.id, cents: -amount }]);
-    const newQuantity = props.quantity + quantity;
+    const newQuantity = addInvestmentUnits(props.quantity, quantity);
     if (!Number.isFinite(newQuantity)) throw new Error("Reinvestment quantity exceeds supported precision");
     lots?.push({ date, quantity, pricePerShare: input.reinvestmentPrice, amount: amount / 100 });
     await tx.investmentProperties.update({ where: { id: props.id }, data: { quantity: newQuantity, lots: lots ? JSON.stringify(lots) : null } });
@@ -128,8 +128,8 @@ export async function recordSplit(accountId: string, splitRatio: number, inputDa
     if (!account?.investmentProperties || account.isArchived) throw new Error("Security account not found or archived");
     const history = await beginInvestmentActivity(tx, accountId, date);
     const props = account.investmentProperties, lots = positionLots(props);
-    const quantity = props.quantity * splitRatio;
-    const updatedLots = lots?.map((lot) => ({ ...lot, quantity: lot.quantity * splitRatio, pricePerShare: lot.pricePerShare / splitRatio }));
+    const quantity = scaleInvestmentUnits(props.quantity, splitRatio);
+    const updatedLots = lots?.map((lot) => ({ ...lot, quantity: scaleInvestmentUnits(lot.quantity, splitRatio), pricePerShare: lot.pricePerShare / splitRatio }));
     if (!Number.isFinite(quantity) || (props.quantity > 0 && quantity <= 0) || updatedLots?.some((lot) => !Number.isFinite(lot.quantity) || lot.quantity <= 0 || !Number.isFinite(lot.pricePerShare))) {
       throw new Error("Split result exceeds supported precision");
     }
