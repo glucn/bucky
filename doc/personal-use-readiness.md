@@ -9,6 +9,13 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 60 — Compare portfolio cash in exact cents
+
+- Portfolio withdrawals and dated valuations now compare the checkpoint-derived balance
+  with exact native posting cents. A one-cent net balance from large offsetting postings
+  stays available for valuation and withdrawal.
+- Verification covered 35 targeted native tests, 29 encrypted tests, and TypeScript.
+
 ### Batch 59 — Accumulate checkpoint balances in exact cents
 
 - Account balances and checkpoint adjustments sum posting cents as integers through

@@ -1,5 +1,6 @@
 import { databaseService } from "./database";
 import { cents, investmentTransaction } from "./investmentPosting";
+import { journalAmountFromCents, sumJournalCents, toJournalCents } from "./journalPrecision";
 import { hasPortfolioIdentity, isSettlementCash } from "../shared/investmentAccounts";
 import { AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
@@ -58,11 +59,15 @@ export async function recordPortfolioFunding(kind: "deposit" | "withdrawal", por
     const otherGroup = kind === "deposit" && other.groupId && isSettlementCash(other) ? await tx.accountGroup.findUnique({ where: { id: other.groupId }, include: { accounts: { include: { investmentProperties: true } } } }) : null;
     const outgoingCash = kind === "withdrawal" ? cash : otherGroup && hasPortfolioIdentity(otherGroup) ? other : null;
     if (outgoingCash) {
-      const ledger = await tx.journalLine.aggregate({ where: { accountId: outgoingCash.id, entry: { date: { lte: date } } }, _sum: { amount: true } });
+      const postings = await tx.journalLine.findMany({
+        where: { accountId: outgoingCash.id, entry: { date: { lte: date } } },
+        select: { currency: true, amount: true },
+      });
+      if (postings.some(({ currency }) => currency !== outgoingCash.currency)) throw new Error("Portfolio cash journal currency requires review");
       const balance = await databaseService.getAccountBalanceAtDate(outgoingCash.id, date, tx);
-      const journalBalance = cents(ledger._sum.amount ?? 0) / 100;
-      if (cents(balance) !== cents(journalBalance)) throw new Error("Cash checkpoint disagrees with the journal; reconcile before withdrawing");
-      if (cents(journalBalance) < cents(amountFrom)) throw new Error(`Insufficient trade cash balance: trying to withdraw ${amountFrom} but only ${journalBalance} available in ${outgoingCash.currency} as of ${date}`);
+      const journalCents = sumJournalCents(postings);
+      if (BigInt(toJournalCents(balance)) !== journalCents) throw new Error("Cash checkpoint disagrees with the journal; reconcile before withdrawing");
+      if (journalCents < BigInt(toJournalCents(amountFrom))) throw new Error(`Insufficient trade cash balance: trying to withdraw ${amountFrom} but only ${journalAmountFromCents(journalCents)} available in ${outgoingCash.currency} as of ${date}`);
     }
     const result = await databaseService.createJournalEntry({ date, description: description || `Cash ${kind === "deposit" ? "deposit to" : "withdrawal from"} investment portfolio`,
       fromAccountId: kind === "deposit" ? other.id : cash.id, toAccountId: kind === "deposit" ? cash.id : other.id,

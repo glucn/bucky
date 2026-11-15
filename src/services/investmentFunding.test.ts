@@ -128,6 +128,22 @@ it("requires reconciliation when a checkpoint invents spendable cash beyond the 
   expect(await databaseService.prismaClient.journalEntry.count()).toBe(1);
 });
 
+it("retains cents in dated cash valuation and withdrawal checks after large offsetting entries", async () => {
+  const { group, bank, tradeCashAccount } = await book("USD");
+  const date = "2026-02-01";
+  await databaseService.prismaClient.appSetting.upsert({ where: { key: "baseCurrency" },
+    create: { key: "baseCurrency", jsonValue: '"USD"' }, update: { jsonValue: '"USD"' } });
+  for (const amount of [80_000_000_000_000.06, -80_000_000_000_000.05]) {
+    await databaseService.prismaClient.journalEntry.create({ data: { date, lines: { create: [
+      { accountId: tradeCashAccount.id, amount, currency: "USD" },
+      { accountId: bank.id, amount: -amount, currency: "USD" },
+    ] } } });
+  }
+  expect((await investmentService.getPortfolioPerformance(group.id, date, date)).currentValue).toBe(0.01);
+  await withdraw(group.id, 0.01, bank.id, date);
+  expect(await databaseService.getAccountBalanceAtDate(tradeCashAccount.id, date)).toBe(0);
+});
+
 it("rejects security counterparties rather than changing basis without activity", async () => {
   const { group } = await book(), other = await investmentService.createInvestmentPortfolio("Other", "CAD");
   const holding = await investmentService.createSecurityAccount(other.group.id, "ABC");

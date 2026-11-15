@@ -21,6 +21,7 @@ import { valuationConversionService } from "./valuationConversionService";
 import { securityMarketData } from "./securityMarketData";
 import { securityQuoteCurrency } from "./securityQuoteCurrency";
 import { resolveValuationDate } from "./valuationDate";
+import { sumJournalCents, toJournalCents } from "./journalPrecision";
 
 export type InvestmentPosition = {
   needsBaselineReview?: boolean;
@@ -786,10 +787,12 @@ class InvestmentService {
     for (const tradeCashAccount of portfolioAccounts.tradeCashAccounts) {
       const balance = await databaseService.getAccountBalanceAtDate(tradeCashAccount.id, asOfDate);
       if (requireDatedHistory) {
-        const ledger = await databaseService.prismaClient.journalLine.groupBy({ by: ["currency"], where: { accountId: tradeCashAccount.id, entry: { date: { lte: asOfDate } } }, _sum: { amount: true } });
-        if (ledger.some((row) => row.currency !== tradeCashAccount.currency)) throw new Error("Portfolio cash journal currency requires review");
-        const ledgerBalance = ledger.reduce((sum, row) => sum + (row._sum.amount ?? 0), 0);
-        if (Math.round(ledgerBalance * 100) !== Math.round(balance * 100)) cashSummaryUnavailable = true;
+        const postings = await databaseService.prismaClient.journalLine.findMany({
+          where: { accountId: tradeCashAccount.id, entry: { date: { lte: asOfDate } } },
+          select: { amount: true, currency: true },
+        });
+        if (postings.some(({ currency }) => currency !== tradeCashAccount.currency)) throw new Error("Portfolio cash journal currency requires review");
+        if (sumJournalCents(postings) !== BigInt(toJournalCents(balance))) cashSummaryUnavailable = true;
       }
       const convertedBalance = await convertToBaseCurrency(balance, tradeCashAccount.currency);
       if (convertedBalance === null) {
