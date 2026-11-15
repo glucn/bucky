@@ -5,11 +5,38 @@ import { createHash } from "crypto";
 import sqlite3 from "sqlite3";
 import { Prisma } from "@prisma/client";
 import { closeSqlite, initializePersonalDatabase, openSqlite, querySql } from "./localDatabase";
+import { readPostingCents } from "./journalPrecision";
 import type { RecoverySummary } from "../shared/recovery";
 
 const identifier = (name: string) => `"${name.replace(/"/g, '""')}"`;
 const schemaSql = "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name != '_prisma_migrations' ORDER BY type,name";
 export interface RecoveryReader { query<T>(sql: string, params?: number[]): Promise<T[]> }
+
+async function readRecoveryBalances(db: RecoveryReader, signal?: AbortSignal): Promise<RecoverySummary["balances"]> {
+  type Posting = RecoverySummary["balances"][number] & { amountCents: string | null };
+  const balances: RecoverySummary["balances"] = [];
+  let current: { accountId: string; currency: string; cents: bigint } | undefined;
+  const finishBalance = () => {
+    if (!current) return;
+    const { accountId, currency, cents } = current;
+    balances.push({ accountId, currency, amount: Number(`${cents}e-2`) });
+  };
+  for (let offset = 0; ; offset += 1000) {
+    signal?.throwIfAborted();
+    const rows = await db.query<Posting>(
+      "SELECT accountId,currency,amount,amountCents FROM JournalLine ORDER BY accountId,currency,id LIMIT 1000 OFFSET ?", [offset]);
+    for (const row of rows) {
+      if (!current || current.accountId !== row.accountId || current.currency !== row.currency) {
+        finishBalance();
+        current = { accountId: row.accountId, currency: row.currency, cents: 0n };
+      }
+      current.cents += readPostingCents(row);
+    }
+    if (rows.length < 1000) break;
+  }
+  finishBalance();
+  return balances;
+}
 
 /** Caller holds a consistent read transaction. Only the empty reference schema is plaintext. */
 export async function validateRecoveryDatabase(db: RecoveryReader, migrations: string, signal?: AbortSignal): Promise<RecoverySummary> {
@@ -66,8 +93,7 @@ export async function validateRecoveryDatabase(db: RecoveryReader, migrations: s
         if (rows.length < 1000) break;
       }
     }
-    const balances = await db.query<RecoverySummary["balances"][number]>(
-      "SELECT accountId,currency,SUM(amount) AS amount FROM JournalLine GROUP BY accountId,currency ORDER BY accountId,currency");
+    const balances = await readRecoveryBalances(db, signal);
     return { schemaVersion: expectedHistory[expectedHistory.length - 1].migration_name,
       recordDigest: digest.digest("hex"), tableCounts, balances };
   } finally {

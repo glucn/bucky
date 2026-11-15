@@ -53,6 +53,20 @@ describe("Backup and recovery", () => {
     } finally { await closeSqlite(live); }
   });
 
+  it("sums exact and legacy postings in cents across a restored account", async () => {
+    await modify(book, `UPDATE JournalLine SET amountCents = '10', amount = 0.15 WHERE id = 'debit';
+      UPDATE JournalLine SET amountCents = '-10', amount = -0.15 WHERE id = 'credit';
+      INSERT INTO JournalLine(id,entryId,accountId,amount,currency)
+      VALUES ('legacy-debit','entry','cash',0.20,'CAD'),('legacy-credit','entry','equity',-0.20,'CAD');`);
+    const saved = await createBackup(book, backup, migrations);
+    expect(saved.summary.balances).toEqual([
+      { accountId: "cash", currency: "CAD", amount: 0.30 },
+      { accountId: "equity", currency: "CAD", amount: -0.30 },
+    ]);
+    const restored = await restoreBackup(backup, directory, migrations);
+    expect(restored.summary).toEqual(saved.summary);
+  });
+
   it("never overwrites an existing backup, even an empty file", async () => {
     await fs.mkdir(path.dirname(backup));
     await fs.writeFile(backup, "");

@@ -155,8 +155,13 @@ it.each(["references", "schema", "migration-history"])("rejects invalid %s even 
   await expect(fs.stat(destination)).rejects.toThrow();
 });
 
-it("checks the record manifest even when an altered artifact has a valid authentication tag", async () => {
-  await save();
+it.each(["altered record count", "legacy balance calculation"])("verifies the authenticated manifest with %s", async (kind) => {
+  const db = client();
+  try {
+    await db.execute("UPDATE JournalLine SET amountCents = CASE id WHEN 'debit' THEN '12345' ELSE '-12345' END, amount = CASE id WHEN 'debit' THEN 999.99 ELSE -999.99 END");
+  } finally { db.close(); }
+  const saved = await save();
+  expect(saved.summary.balances).toContainEqual({ accountId: "cash", currency: "CAD", amount: 123.45 });
   const bytes = await fs.readFile(destination);
   const length = bytes.readUInt32BE(8), start = 12 + length;
   const header = JSON.parse(bytes.subarray(12, start).toString());
@@ -166,14 +171,19 @@ it("checks the record manifest even when an altered artifact has a valid authent
     decipher.setAAD(bytes.subarray(0, start)); decipher.setAuthTag(bytes.subarray(-16));
     const payload = Buffer.concat([decipher.update(bytes.subarray(start, -16)), decipher.final()]);
     const manifest = JSON.parse(payload.subarray(0, header.manifestBytes).toString());
-    manifest.summary.tableCounts.Account++;
+    if (kind === "altered record count") manifest.summary.tableCounts.Account++;
+    else for (const balance of manifest.summary.balances) balance.amount = Math.sign(balance.amount) * 999.99;
     const altered = Buffer.from(JSON.stringify(manifest));
     expect(altered.length).toBe(header.manifestBytes); altered.copy(payload);
     const cipher = createCipheriv("aes-256-gcm", key, Buffer.from(header.nonce, "base64url"));
     cipher.setAAD(bytes.subarray(0, start));
     await fs.writeFile(destination, Buffer.concat([bytes.subarray(0, start), cipher.update(payload), cipher.final(), cipher.getAuthTag()]));
     payload.fill(0);
-    const action = vi.fn(); await expect(recover(action)).rejects.toThrow(); expect(action).not.toHaveBeenCalled();
+    if (kind === "altered record count") {
+      const action = vi.fn(); await expect(recover(action)).rejects.toThrow(); expect(action).not.toHaveBeenCalled();
+    } else {
+      await recover(async (verified) => expect(verified.summary).toEqual(saved.summary));
+    }
   } finally { key.fill(0); }
 });
 

@@ -74,13 +74,23 @@ async function encryptedFile(filename: string) {
 const connect = (filename: string, dataKey: Buffer) => createClient({ url: pathToFileURL(filename).href,
   encryptionKey: dataKey.toString("hex"), concurrency: 1, timeout: 5000 });
 /** Trusted caller supplies an authenticated key; this never migrates or rewrites a book. */
-export async function validateEncryptedRecoveryDatabase(filename: string, dataKey: Buffer, migrations: string, signal?: AbortSignal) {
+export async function validateEncryptedRecoveryDatabase(filename: string, dataKey: Buffer, migrations: string, signal?: AbortSignal, manifest?: unknown) {
   await encryptedFile(filename);
   const client = connect(filename, dataKey);
   try {
     const tx = await client.transaction("read");
-    try { return await validateRecoveryDatabase({ query: async <T>(sql: string, params: number[] = []) =>
-      (await tx.execute({ sql, args: params })).rows.map((row) => ({ ...row })) as T[] }, migrations, signal); }
+    try {
+      const query = async <T>(sql: string, params: number[] = []) =>
+        (await tx.execute({ sql, args: params })).rows.map((row) => ({ ...row })) as T[];
+      const summary = await validateRecoveryDatabase({ query }, migrations, signal);
+      if (manifest !== undefined && JSON.stringify(manifest) !== JSON.stringify({ summary })) {
+        // Earlier manifests summed the Float mirrors. Check their entire summary against the same snapshot.
+        const balances = await query<RecoverySummary["balances"][number]>(
+          "SELECT accountId,currency,SUM(amount) AS amount FROM JournalLine GROUP BY accountId,currency ORDER BY accountId,currency");
+        if (JSON.stringify(manifest) !== JSON.stringify({ summary: { ...summary, balances } })) throw invalid();
+      }
+      return summary;
+    }
     finally { tx.close(); }
   } finally { client.close(); }
 }
@@ -202,8 +212,8 @@ async function verifyArtifact<T>(options: Omit<VerifyOptions, "credential">,
       await output.sync();
     } finally { await output.close(); }
     signal?.throwIfAborted();
-    const summary = await validateEncryptedRecoveryDatabase(databaseFile, dataKey, migrations, signal);
-    if (JSON.stringify(JSON.parse(manifest.toString("utf8"))) !== JSON.stringify({ summary })) throw invalid();
+    const summary = await validateEncryptedRecoveryDatabase(databaseFile, dataKey, migrations, signal,
+      JSON.parse(manifest.toString("utf8")));
     signal?.throwIfAborted();
     return await action({ databaseFile, dataKey, envelope: header.envelope, summary });
   } catch { throw invalid(); }

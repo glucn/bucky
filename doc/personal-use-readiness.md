@@ -9,6 +9,16 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 85 — Compare restored balances using posting cents
+
+- Backup and restore summaries add canonical posting cents across each account
+  and currency. Older postings without stored cents use the same cent rounding
+  as the live ledger. The record digest still covers both stored fields.
+- Older authenticated backup manifests can still be verified against their
+  original balance calculation. Restores then report the cent-based balances.
+  The manifest check still compares the schema version, record digest, and
+  table counts before releasing the recovered database.
+
 ### Batch 84 — Store transaction FX rates as decimals
 
 - New and edited transfers store their directional rate as decimal text on
