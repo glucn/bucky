@@ -14,7 +14,9 @@ const journalSelect = {
 
 type Entry = Prisma.JournalEntryGetPayload<{ select: typeof journalSelect }>;
 type Code = "journal-unbalanced" | "journal-account-currency" | "journal-fx" | "journal-postings" | "journal-amount";
-type Finding = { code: Code; entryId: string; message: string; lineId?: string };
+type Finding = { code: Code; entryId: string; message: string; lineId?: string } |
+  { code: "checkpoint-balance"; checkpointId: string; accountId: string; date: string;
+    expected: number; actual: number; currency: string; message: string };
 
 function validExchange(entry: Entry): boolean {
   if (entry.lines.length !== 2) return false;
@@ -26,6 +28,27 @@ function validExchange(entry: Entry): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function verifyCheckpoints(tx: Prisma.TransactionClient, findings: Finding[]) {
+  const checkpoints = await tx.checkpoint.findMany({
+    orderBy: [{ date: "asc" }, { id: "asc" }],
+    select: { id: true, date: true, accountId: true, balance: true, account: { select: { currency: true } } },
+  });
+  for (const { id, date, accountId, balance, account } of checkpoints) {
+    // Include the recorded adjustment and other postings through the end of the checkpoint date.
+    // The projected account balance takes this checkpoint as an input, so it cannot verify it.
+    const { _sum } = await tx.journalLine.aggregate({
+      where: { accountId, currency: account.currency, entry: { date: { lte: date } } },
+      _sum: { amount: true },
+    });
+    const actual = Math.round((_sum.amount ?? 0) * 100) / 100;
+    if (actual !== balance) findings.push({
+      code: "checkpoint-balance", checkpointId: id, accountId, date,
+      expected: balance, actual, currency: account.currency,
+      message: "The journal balance through the checkpoint date differs from the recorded balance",
+    });
   }
 }
 
@@ -80,8 +103,10 @@ export async function verifyBook(): Promise<{ findings: Finding[] }> {
         select: journalSelect,
       });
       for (const entry of entries) verifyJournal(entry, findings);
-      if (entries.length < pageSize) return { findings };
+      if (entries.length < pageSize) break;
       after = entries[entries.length - 1].id;
     }
+    await verifyCheckpoints(tx, findings);
+    return { findings };
   }, { timeout: 30000 });
 }

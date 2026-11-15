@@ -1,9 +1,11 @@
-import { expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { AccountType } from "../shared/accountTypes";
 import { databaseService } from "./database";
+import { resetTestDatabase } from "./database.test.utils";
 import { verifyBook } from "./bookVerification";
 
 const db = () => databaseService.prismaClient;
+beforeEach(async () => { await resetTestDatabase(); });
 
 async function fixture() {
   const [cad, usd, category, equity] = await Promise.all([
@@ -46,4 +48,19 @@ it("reports persisted posting discrepancies by record and leaves the book unchan
     expect.objectContaining({ code: "journal-postings", entryId: missing.id }),
   ]));
   expect(await snapshot()).toEqual(before);
+});
+
+it("keeps foreign-currency checkpoint postings balanced and verifies the stored assertion against the journal", async () => {
+  const { cad, category, entry } = await fixture();
+  const { checkpoint, journalEntry } = await databaseService.createCheckpoint({ accountId: cad.id, date: "2026-11-01", balance: 200 });
+  const offsets = await db().journalLine.findMany({ where: { entryId: journalEntry.id } });
+  expect(offsets.map(({ currency }) => currency)).toEqual(["CAD", "CAD"]);
+  expect(await verifyBook()).toEqual({ findings: [] });
+
+  await entry([{ accountId: cad.id, amount: -12, currency: "CAD" }, { accountId: category.id, amount: 12, currency: "CAD" }]);
+  expect(await verifyBook()).toEqual({ findings: [expect.objectContaining({
+    code: "checkpoint-balance", checkpointId: checkpoint.id, accountId: cad.id,
+    expected: 200, actual: 188, currency: "CAD",
+  })] });
+  expect((await db().checkpoint.findUniqueOrThrow({ where: { id: checkpoint.id } })).balance).toBe(200);
 });

@@ -9,6 +9,14 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 54 — Verify balance checkpoints against postings
+
+- New checkpoint adjustments post both sides in the account's currency. Existing postings
+  remain available for review through journal verification.
+- The verifier compares each checkpoint with the native-currency journal total through the
+  end of its date. It reports expected and actual balances and preserves the checkpoint.
+- Verification covered 15 native tests, three encrypted tests, and TypeScript.
+
 ### Batch 53 — Verify stored journal postings
 
 - The read-only service scans journal entries and their account references in one consistent

@@ -2313,7 +2313,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       entryId: journalEntry.id,
       accountId: data.accountId,
       amount: adjustmentAmount,
-      currency: account?.currency || "USD", // Add currency from the account
+      currency: account.currency,
       description: data.description || "Checkpoint adjustment",
     });
 
@@ -2322,7 +2322,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       entryId: journalEntry.id,
       accountId: checkpointAccount.id,
       amount: -adjustmentAmount,
-      currency: checkpointAccount.currency || "USD", // Add currency for checkpoint account
+      currency: account.currency,
       description: data.description || "Checkpoint adjustment",
     });
 
