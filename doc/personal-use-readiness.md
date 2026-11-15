@@ -9,6 +9,12 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 65 — Read exact postings in investment reports
+
+- Dividend, interest, fee, realized-gain, and portfolio cash-flow reports use stored
+  posting cents. Sale journal checks compare basis, proceeds, and gain as integers.
+- Verification covered 36 native tests, 36 encrypted tests, and TypeScript.
+
 ### Batch 64 — Use exact posting cents for investment basis and replay
 
 - Position verification, baseline review, trades, return-of-capital calculations,

@@ -5,6 +5,7 @@ import type { InvestmentIncomeReport, RealizedGainReportRow, ReportFxSource } fr
 import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { cents, readLots } from "./investmentPosting";
+import { journalAmountFromCents, readPostingCents, sumJournalCents } from "./journalPrecision";
 import { createValuationConversionService } from "./valuationConversionService";
 
 export function investmentReportRange(start: string, end: string) {
@@ -66,7 +67,7 @@ function structured(entry: Entry) {
   if (activity && (!holding || holding.tickerSymbol !== activity.ticker || activity.account.currency !== activity.currency ||
     (activity.market !== null && activity.market !== holding.market))) throw new Error("Investment report holding identity requires review");
   if (activity && (activity.date !== entry.date || entry.lines.some((line) => line.currency !== activity.currency) ||
-    entry.lines.reduce((sum, line) => sum + cents(line.amount), 0) !== 0)) throw new Error("Investment report activity conflicts with its journal");
+    sumJournalCents(entry.lines) !== 0n)) throw new Error("Investment report activity conflicts with its journal");
   return activity;
 }
 
@@ -90,7 +91,7 @@ async function incomeFromContext(ctx: Awaited<ReturnType<typeof context>>, kind:
     scopes(entry, portfolioId);
     const activity = structured(entry);
     for (const line of lines) {
-      const amount = rounded(line.amount * (kind === "fee" ? 1 : -1));
+      const amount = journalAmountFromCents(readPostingCents(line) * (kind === "fee" ? 1n : -1n));
       const converted = await ctx.convert(amount, line.currency, entry.date);
       const ticker = activity?.ticker ?? null;
       report.rows.push({ entryId: entry.id, lineId: line.id, date: entry.date, accountId: activity?.accountId ?? null,
@@ -134,26 +135,28 @@ async function gainsFromContext(ctx: Awaited<ReturnType<typeof context>>, portfo
     const security = securities[0], currency = security.currency;
     const cash = entry.lines.filter((line) => !line.account.investmentProperties && line.account.type === AccountType.User && line.account.subtype === AccountSubtype.Asset && line.account.groupId === portfolioId);
     const categories = entry.lines.filter((line) => line.account.type === AccountType.Category);
-    if (!cash.length || entry.lines.some((line) => line.currency !== currency) || entry.lines.reduce((sum, line) => sum + cents(line.amount), 0) !== 0) throw new Error("Sale journal currency or balance requires review");
-    const costBasis = rounded(-security.amount), saleProceeds = rounded(cash.reduce((sum, line) => sum + line.amount, 0));
+    if (!cash.length || entry.lines.some((line) => line.currency !== currency) || sumJournalCents(entry.lines) !== 0n) throw new Error("Sale journal currency or balance requires review");
+    const basisCents = -readPostingCents(security), proceedsCents = sumJournalCents(cash);
+    const costBasis = journalAmountFromCents(basisCents), saleProceeds = journalAmountFromCents(proceedsCents);
     let gainCategories = categories.filter((line) => line.account.name === "Realized Gains/Losses");
     if (!gainCategories.length && activity && categories.length <= 1) gainCategories = categories;
     if (!gainCategories.length && categories.length) throw new Error("Legacy sale gain classification requires review");
     const gainLineIds = new Set(gainCategories.map((line) => line.id));
-    const otherCategoryAmount = rounded(categories.filter((line) => !gainLineIds.has(line.id)).reduce((sum, line) => sum + line.amount, 0));
-    const realizedGain = rounded(-gainCategories.reduce((sum, line) => sum + line.amount, 0));
-    if (costBasis < 0 || rounded(saleProceeds - costBasis + otherCategoryAmount) !== realizedGain) throw new Error("Sale journal gain requires review");
+    const otherCategoryCents = sumJournalCents(categories.filter((line) => !gainLineIds.has(line.id)));
+    const gainCents = -sumJournalCents(gainCategories), realizedGain = journalAmountFromCents(gainCents);
+    if (basisCents < 0n || proceedsCents - basisCents + otherCategoryCents !== gainCents) throw new Error("Sale journal gain requires review");
     if (activity && (activity.kind !== "sell" || activity.accountId !== security.accountId || !(activity.units! > 0) ||
       !Number.isFinite(activity.units) || !Number.isFinite(activity.price) || activity.price! < 0 || !Number.isFinite(activity.fee ?? 0) || (activity.fee ?? 0) < 0 ||
       Math.abs(activity.quantityBefore - activity.quantityAfter - activity.units!) > 1e-8 * Math.max(1, activity.units!) ||
       activity.ticker !== security.account.investmentProperties!.tickerSymbol ||
       cents(activity.units! * activity.price!) - cents(activity.fee ?? 0) !== cents(saleProceeds) ||
-      otherCategoryAmount !== 0 || cents(activity.basisBefore - activity.basisAfter) !== cents(costBasis) || cents(activity.cashAmount) !== cents(saleProceeds))) throw new Error("Sale activity conflicts with its journal");
+      otherCategoryCents !== 0n || cents(activity.basisBefore - activity.basisAfter) !== cents(costBasis) || cents(activity.cashAmount) !== cents(saleProceeds))) throw new Error("Sale activity conflicts with its journal");
     const conversion = await ctx.convert(realizedGain, currency, entry.date);
     rows.push({ entryId: entry.id, date: entry.date, accountId: security.accountId,
       tickerSymbol: activity?.ticker ?? security.account.investmentProperties!.tickerSymbol,
       market: security.account.investmentProperties!.market, recordedMarket: activity?.market ?? null,
-      currency, baseCurrency: ctx.baseCurrency, quantity: activity?.units ?? null, costBasis, saleProceeds, otherCategoryAmount, realizedGain,
+      currency, baseCurrency: ctx.baseCurrency, quantity: activity?.units ?? null, costBasis, saleProceeds, realizedGain,
+      otherCategoryAmount: journalAmountFromCents(otherCategoryCents),
       realizedGainBase: conversion.amountBase, fxSource: conversion.fxSource, fxRate: conversion.fxRate,
       holdingPeriod: activity ? holdingAge(activity, ctx.history) : "unknown" });
   }

@@ -5,6 +5,7 @@ import { appSettingsService } from "./appSettingsService";
 import { investmentService } from "./investmentService";
 import { bindSecurityMarket } from "./securityMarketBinding";
 import { getInvestmentSnapshot } from "./investmentActivity";
+import { AccountType } from "../shared/accountTypes";
 
 beforeEach(async () => { await resetTestDatabase(); await appSettingsService.setBaseCurrency("CAD"); });
 it("uses an explicit first market assignment for earlier events without rewriting their recorded identity", async () => {
@@ -78,6 +79,25 @@ it("reports net sale gains from structured activity even with custom description
   const gains: any[] = await investmentService.getRealizedGains(book.portfolioId, "2026-01-01", "2026-01-03");
   expect(gains).toHaveLength(1);
   expect(gains[0]).toMatchObject({ accountId: book.usdHolding.id, tickerSymbol: "ABC", market: "NASDAQ", currency: "USD", baseCurrency: "CAD", quantity: 1, costBasis: 20, saleProceeds: 29, realizedGain: 9, realizedGainBase: 13.5 });
+});
+
+it("reports portfolio cash flows, dividends, and sale gains from exact posting cents", async () => {
+  const book = await listings();
+  const bank = await databaseService.createAccount({ name: "Funding bank", currency: "CAD", type: AccountType.User });
+  const date = "2026-01-03";
+  await investmentService.depositCash(book.portfolioId, 100, bank.id, date, "Deposit", { tradeCashAccountId: book.cad.id });
+  const holding = { portfolioId: book.portfolioId, tickerSymbol: "ABC", securityAccountId: book.cadHolding.id };
+  await investmentService.recordBuy({ ...holding, date, quantity: 1, pricePerShare: 20 });
+  await investmentService.recordDividend({ ...holding, date, amount: 3 });
+  await investmentService.recordSell({ ...holding, date, quantity: 1, pricePerShare: 25 });
+  await databaseService.prismaClient.journalLine.updateMany({ data: { amount: 0 } });
+  const income = await investmentService.getDividendIncome(book.portfolioId, date, date);
+  expect(income.total).toBe(3);
+  const gains = await investmentService.getRealizedGains(book.portfolioId, date, date);
+  expect(gains[0]).toMatchObject({ costBasis: 20, saleProceeds: 25, realizedGain: 5 });
+  expect(await investmentService.getPortfolioPerformance(book.portfolioId, date, date)).toMatchObject({
+    deposits: 100, currentValue: 108,
+  });
 });
 it("includes zero-gain disposals and uses the consumed lots rather than today's remaining lots for age", async () => {
   const book = await listings(), common = { portfolioId: book.portfolioId, tickerSymbol: "ABC", securityAccountId: book.cadHolding.id };
