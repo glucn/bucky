@@ -155,6 +155,34 @@ it("keeps an ambiguous legacy checkpoint and its possible adjustments intact", a
   expect(await db().journalEntry.count()).toBe(2);
 });
 
+it("identifies an unambiguous legacy adjustment without writing a link", async () => {
+  const { cad } = await fixture();
+  const saved = await databaseService.createCheckpoint({ accountId: cad.id, date: "2026-11-01", balance: 20, description: "Older statement" });
+  await db().checkpoint.update({ where: { id: saved.checkpoint.id }, data: { journalEntryId: null } });
+  await db().journalEntry.update({ where: { id: saved.journalEntry.id }, data: { entryType: null } });
+  expect((await verifyBook()).findings).toEqual([expect.objectContaining({
+    code: "checkpoint-adjustment", checkpointId: saved.checkpoint.id, journalEntryId: saved.journalEntry.id,
+    amount: 20, unadjustedBalance: 0,
+  })]);
+  expect((await db().checkpoint.findUniqueOrThrow({ where: { id: saved.checkpoint.id } })).journalEntryId).toBeNull();
+});
+
+it("preserves a legacy journal when two checkpoints could claim it", async () => {
+  const { cad } = await fixture();
+  const data = { accountId: cad.id, date: "2026-11-01", balance: 200, description: "Statement" };
+  const saved = await databaseService.createCheckpoint(data);
+  await db().checkpoint.update({ where: { id: saved.checkpoint.id }, data: { journalEntryId: null } });
+  await db().journalEntry.update({ where: { id: saved.journalEntry.id }, data: { entryType: null } });
+  await db().checkpoint.create({ data: { ...data, balanceCents: "20000" } });
+  expect((await verifyBook()).findings).toEqual([
+    expect.objectContaining({ code: "checkpoint-adjustment-ambiguous" }),
+    expect.objectContaining({ code: "checkpoint-adjustment-ambiguous" }),
+  ]);
+  await expect(databaseService.reconcileCheckpoint(saved.checkpoint.id)).rejects.toThrow(/ambiguous/i);
+  expect(await db().checkpoint.count()).toBe(2);
+  expect(await db().journalEntry.count()).toBe(1);
+});
+
 it("reports a wrong checkpoint link and refuses to delete the linked ordinary journal", async () => {
   const { cad, category, entry } = await fixture();
   const ordinary = await entry([{ accountId: cad.id, amount: -12, currency: "CAD" }, { accountId: category.id, amount: 12, currency: "CAD" }]);

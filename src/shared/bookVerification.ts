@@ -7,6 +7,7 @@ export type BookFinding =
       expected: number; actual: number; currency: string; message: string }
   | { severity: "error"; code: "checkpoint-precision"; checkpointId: string; accountId: string; date: string; message: string }
   | { severity: "warning"; code: "checkpoint-legacy-precision"; checkpointId: string; accountId: string; date: string; message: string }
+  | { severity: "warning"; code: "checkpoint-adjustment-ambiguous"; checkpointId: string; accountId: string; date: string; message: string }
   | { severity: "warning"; code: "checkpoint-adjustment"; checkpointId: string; accountId: string; date: string;
       journalEntryId: string; amount: number; unadjustedBalance: number; currency: string; message: string }
   | { severity: "error"; code: "checkpoint-adjustment-link"; checkpointId: string; accountId: string;

@@ -8,7 +8,7 @@ import {
 import { localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
 import { autoCategorizationService } from "./autoCategorizationService";
 import { hasValidExchangePostings, isCurrencyExchange, resolveCurrencyTransferAmounts } from "./journalValidation";
-import { readLinkedCheckpointAdjustment } from "./checkpointAdjustment";
+import { resolveCheckpointAdjustment } from "./checkpointAdjustment";
 import { checkpointBalance, journalAmountFromCents, postingAmountFromCents, readCheckpointCents, readPostingCents, roundJournalAmount, sumJournalCents, toJournalCents, withPostingCents } from "./journalPrecision";
 import { resolveDatabaseFile } from "./localDatabase";
 import { createEncryptedPrisma, initializeEncryptedDatabase } from "./encryptedDatabase";
@@ -2392,27 +2392,10 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       throw new Error("Checkpoint not found");
     }
 
-    let entryId = checkpoint.journalEntryId;
-    if (entryId && !await readLinkedCheckpointAdjustment(tx, { ...checkpoint, journalEntryId: entryId })) {
-      throw new Error("The checkpoint adjustment link does not identify its journal entry");
-    }
-    if (!entryId) {
-      const candidates = await tx.journalEntry.findMany({
-        where: {
-          date: checkpoint.date, description: checkpoint.description || `Checkpoint for ${checkpoint.id}`,
-          checkpoint: null, type: null, entryType: { equals: null },
-          AND: [
-            { lines: { some: { accountId: checkpoint.accountId } } },
-            { lines: { some: { account: { type: AccountType.System, name: "Checkpoint Adjustment" } } } },
-          ],
-        },
-        select: { id: true, lines: { select: { accountId: true } } },
-      });
-      const adjustments = candidates.filter(({ lines }) => lines.length === 2 &&
-        lines.filter(({ accountId }) => accountId === checkpoint.accountId).length === 1);
-      if (adjustments.length > 1) throw new Error("Checkpoint adjustment is ambiguous. Review the original records before deleting it.");
-      entryId = adjustments[0]?.id ?? null;
-    }
+    const match = await resolveCheckpointAdjustment(tx, checkpoint);
+    if (match.status === "invalid-link") throw new Error("The checkpoint adjustment link does not identify its journal entry");
+    if (match.status === "ambiguous") throw new Error("Checkpoint adjustment is ambiguous. Review the original records before deleting it.");
+    const entryId = match.status === "matched" ? match.journalEntryId : null;
 
     const deletedCheckpoint = await tx.checkpoint.delete({ where: { id: checkpointId } });
     if (entryId) {

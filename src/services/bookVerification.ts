@@ -5,7 +5,7 @@ import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
 import { hasValidExchangePostings, isCurrencyExchange } from "./journalValidation";
-import { readLinkedCheckpointAdjustment } from "./checkpointAdjustment";
+import { resolveCheckpointAdjustment } from "./checkpointAdjustment";
 import { journalAmountFromCents, readCheckpointCents, readPostingCents, sumJournalCents } from "./journalPrecision";
 import { securityMarketData } from "./securityMarketData";
 import { securityQuoteCurrency } from "./securityQuoteCurrency";
@@ -28,7 +28,7 @@ type Entry = Prisma.JournalEntryGetPayload<{ select: typeof journalSelect }>;
 async function verifyCheckpoints(tx: Prisma.TransactionClient, findings: BookFinding[]) {
   const checkpoints = await tx.checkpoint.findMany({
     orderBy: [{ date: "asc" }, { id: "asc" }],
-    select: { id: true, date: true, accountId: true, balance: true, balanceCents: true, journalEntryId: true,
+    select: { id: true, date: true, accountId: true, balance: true, balanceCents: true, journalEntryId: true, description: true,
       account: { select: { currency: true } } },
   });
   for (const checkpoint of checkpoints) {
@@ -37,8 +37,13 @@ async function verifyCheckpoints(tx: Prisma.TransactionClient, findings: BookFin
       severity: "warning", code: "checkpoint-legacy-precision", checkpointId: id, accountId, date,
       message: "The original checkpoint balance needs review before it can be stored in exact cents",
     });
-    const journalEntryId = checkpoint.journalEntryId;
-    const adjustment = journalEntryId ? await readLinkedCheckpointAdjustment(tx, { journalEntryId, accountId, date }) : null;
+    const match = await resolveCheckpointAdjustment(tx, checkpoint);
+    if (match.status === "ambiguous") findings.push({
+      severity: "warning", code: "checkpoint-adjustment-ambiguous", checkpointId: id, accountId, date,
+      message: "The original checkpoint adjustment could belong to more than one record",
+    });
+    const adjustment = match.status === "matched" ? match.posting : null;
+    const journalEntryId = match.status === "matched" ? match.journalEntryId : checkpoint.journalEntryId;
     if (journalEntryId && (!adjustment || adjustment.currency !== account.currency)) findings.push({
       severity: "error", code: "checkpoint-adjustment-link", checkpointId: id, accountId, date, journalEntryId,
       message: "The linked adjustment does not match this checkpoint",

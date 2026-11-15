@@ -9,6 +9,14 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 79 — Verify recoverable legacy checkpoint adjustments
+
+- Verification, deletion, and reconciliation share the same matching rules for
+  old checkpoints. An unambiguous adjustment is visible in the report without
+  writing a link. Two possible journals or two checkpoints claiming the same
+  journal produce an ambiguity warning and stop deletion or reconciliation.
+- Verification covered 31 focused native tests, 29 encrypted tests, and TypeScript.
+
 ### Batch 78 — Show checkpoint adjustments in verification
 
 - A nonzero linked checkpoint adjustment appears as a warning with the journal
