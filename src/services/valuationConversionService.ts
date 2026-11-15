@@ -3,6 +3,17 @@ import { resolveValuationDate } from "./valuationDate";
 import { isValidStandardDate } from "../shared/dateUtils";
 
 type FxRateMap = Map<string, { date: string; rate: number }>;
+type FxRate = { sourceCurrency: string; targetCurrency: string; marketDate: string; rate: number; rateDecimal?: string | null };
+
+export const valuationFxSelect = {
+  sourceCurrency: true, targetCurrency: true, marketDate: true, rate: true, rateDecimal: true,
+} as const;
+
+function storedRate(entry: FxRate): number {
+  if (entry.rateDecimal == null) return entry.rate;
+  if (entry.rateDecimal.length > 64 || !/^\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(entry.rateDecimal)) return NaN;
+  return Number(entry.rateDecimal);
+}
 
 export type ConversionSource = "same_currency" | "as_of" | "latest_fallback" | "unavailable" | "zero_amount";
 
@@ -26,9 +37,7 @@ const setLatestRate = (map: FxRateMap, pair: string, date: string, rate: number)
 class ValuationConversionService {
   constructor(
     private readonly deps: {
-      findFxRates: () => Promise<
-        Array<{ sourceCurrency: string; targetCurrency: string; marketDate: string; rate: number }>
-      >;
+      findFxRates: () => Promise<FxRate[]>;
     }
   ) {}
 
@@ -59,12 +68,12 @@ class ValuationConversionService {
     const fxRatesLatest: FxRateMap = new Map();
 
     for (const entry of fxRates) {
-      if (!Number.isFinite(entry.rate) || entry.rate <= 0 || typeof entry.marketDate !== "string" || !isValidStandardDate(entry.marketDate)) {
+      const fromToRate = storedRate(entry);
+      if (!Number.isFinite(fromToRate) || fromToRate <= 0 || typeof entry.marketDate !== "string" || !isValidStandardDate(entry.marketDate)) {
         continue;
       }
 
-      const fromToRate = entry.rate;
-      const toFromRate = 1 / entry.rate;
+      const toFromRate = 1 / fromToRate;
 
       const fromToPair = toPairKey(entry.sourceCurrency, entry.targetCurrency);
       const toFromPair = toPairKey(entry.targetCurrency, entry.sourceCurrency);
@@ -117,12 +126,7 @@ export const createValuationConversionService = (
       (async () =>
         databaseService.prismaClient.fxDailyRate.findMany({
           orderBy: { marketDate: "asc" },
-          select: {
-            sourceCurrency: true,
-            targetCurrency: true,
-            marketDate: true,
-            rate: true,
-          },
+          select: valuationFxSelect,
         })),
   });
 

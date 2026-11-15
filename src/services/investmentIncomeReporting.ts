@@ -6,7 +6,7 @@ import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { cents, readLots, tradeGrossCents } from "./investmentPosting";
 import { journalAmountFromCents, readPostingCents, sumJournalCents } from "./journalPrecision";
-import { createValuationConversionService } from "./valuationConversionService";
+import { createValuationConversionService, valuationFxSelect } from "./valuationConversionService";
 
 export function investmentReportRange(start: string, end: string) {
   const startDate = typeof start === "string" ? parseToStandardDate(start) : null;
@@ -33,7 +33,7 @@ async function context(portfolioId: string | null, start: string, end: string, b
     const entries = await tx.journalEntry.findMany({ where: { date: { gte: startDate, lte: endDate },
       ...(portfolioId === null ? {} : { lines: { some: { account: { groupId: portfolioId } } } }),
     }, include, orderBy: [{ date: "asc" }, { id: "asc" }] });
-    const rates = await tx.fxDailyRate.findMany({ orderBy: { marketDate: "asc" } });
+    const rates = await tx.fxDailyRate.findMany({ orderBy: { marketDate: "asc" }, select: valuationFxSelect });
     const activityAccounts = [...new Set(entries.flatMap((entry) => entry.investmentActivityLink ? [entry.investmentActivityLink.activity.accountId] : []))];
     const history = await tx.investmentActivity.findMany({ where: { accountId: { in: activityAccounts } }, orderBy: { sequence: "asc" } });
     return { entries, rates, history };

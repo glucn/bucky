@@ -410,6 +410,7 @@ model FxDailyRate {
   targetCurrency String
   marketDate     String
   rate           Float
+  rateDecimal    String?  // Canonical decimal rate when the source value is known
   fetchedAt      DateTime @default(now())
   createdAt      DateTime @default(now())
 

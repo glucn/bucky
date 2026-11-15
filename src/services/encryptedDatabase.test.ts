@@ -64,6 +64,9 @@ describe("encrypted personal database lifecycle", () => {
       ('ambiguous','keep','2026-01-03',12.345,CURRENT_TIMESTAMP)`);
     await query("INSERT INTO JournalEntry (id,date,updatedAt) VALUES ('entry','2026-01-02',CURRENT_TIMESTAMP)");
     await query("INSERT INTO JournalLine (id,entryId,accountId,amount,currency) VALUES ('line','entry','keep',-12.34,'CAD')");
+    await query(`INSERT INTO FxDailyRate (id,sourceCurrency,targetCurrency,marketDate,rate) VALUES
+      ('exact-fx','USD','CAD','2026-01-02',1.25),
+      ('legacy-fx','USD','CAD','2026-01-03',1.2345678901234567)`);
     await query(`INSERT INTO InvestmentProperties (id,accountId,tickerSymbol,quantity,costBasisMethod,lots,updatedAt)
       VALUES ('legacy-holding','keep','ABC',3,'FIFO','[]',CURRENT_TIMESTAMP)`);
     await query(`INSERT INTO SecurityPriceHistory (id,tickerSymbol,date,price,source) VALUES ('legacy-price','ABC','2026-01-02',999,'manual')`);
@@ -80,6 +83,12 @@ describe("encrypted personal database lifecycle", () => {
     ]);
     expect(await query("SELECT balance FROM Checkpoint WHERE id='ambiguous'", result.backupPath!)).toEqual([{ balance: 12.345 }]);
     expect(await query("SELECT amount,amountCents FROM JournalLine WHERE id='line'")).toEqual([{ amount: -12.34, amountCents: "-1234" }]);
+    expect(await query("SELECT id,rate,rateDecimal FROM FxDailyRate ORDER BY id")).toEqual([
+      { id: "exact-fx", rate: 1.25, rateDecimal: "1.25" },
+      { id: "legacy-fx", rate: 1.2345678901234567, rateDecimal: null },
+    ]);
+    expect(await query("SELECT rate FROM FxDailyRate WHERE id='legacy-fx'", result.backupPath!))
+      .toEqual([{ rate: 1.2345678901234567 }]);
     expect((await query("SELECT name FROM Account"))[0].name).toBe(sentinel);
     expect((await query("SELECT name FROM Account", result.backupPath!))[0].name).toBe(sentinel);
     expect((await query("SELECT market FROM InvestmentProperties WHERE id='legacy-holding'"))[0].market).toBeNull();

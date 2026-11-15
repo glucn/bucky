@@ -9,6 +9,17 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 67 — Store valuation FX rates in decimal form
+
+- New `FxDailyRate` rows store the decimal representation of the received rate.
+  Valuation, investment reports, and book verification prefer that field.
+- The upgrade backfills rates that round-trip through SQLite's decimal representation.
+  Other legacy rates remain available through their original Float value.
+- Conversion still exposes numeric amounts and rates. Exact multiplication and
+  rounding of converted totals remain open.
+- Verification covered 1,228 native tests, 37 targeted encrypted tests, TypeScript,
+  Apple Silicon packaging, and two packaged valuation and reporting tests.
+
 ### Batch 66 — Round investment consideration and basis with decimal arithmetic
 
 - Buy and sell consideration, fees, and partial FIFO and average-cost basis releases

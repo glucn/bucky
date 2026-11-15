@@ -8,7 +8,7 @@ import { resolveCurrencyTransferAmounts } from "./journalValidation";
 import { journalAmountFromCents, readCheckpointCents, readPostingCents, sumJournalCents } from "./journalPrecision";
 import { securityMarketData } from "./securityMarketData";
 import { securityQuoteCurrency } from "./securityQuoteCurrency";
-import { createValuationConversionService, type ConversionResult } from "./valuationConversionService";
+import { createValuationConversionService, valuationFxSelect, type ConversionResult } from "./valuationConversionService";
 import { resolveValuationDate } from "./valuationDate";
 
 const journalSelect = {
@@ -159,7 +159,7 @@ async function verifyValuationFx(tx: Prisma.TransactionClient, findings: BookFin
   const nonzero = new Set(balances.filter(({ _sum }) => Math.round((_sum.amount ?? 0) * 100) !== 0).map(({ accountId }) => accountId));
   const exposures = [...valued, ...accounts.filter(({ id }) => nonzero.has(id)).map(({ id, currency }) => ({ accountId: id, currency }))];
   const rates = () => tx.fxDailyRate.findMany({ orderBy: { marketDate: "asc" },
-    select: { sourceCurrency: true, targetCurrency: true, marketDate: true, rate: true } });
+    select: valuationFxSelect });
   let readRates: ReturnType<typeof rates> | undefined;
   const conversion = createValuationConversionService({ findFxRates: () => readRates ??= rates() });
   const checked = new Map<string, ConversionResult["source"]>();

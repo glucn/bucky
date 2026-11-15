@@ -2,7 +2,7 @@ import { AccountType } from "../shared/accountTypes";
 import type { InvestmentCashFlows } from "../shared/investmentReporting";
 import { databaseService } from "./database";
 import { investmentReportRange } from "./investmentIncomeReporting";
-import { createValuationConversionService } from "./valuationConversionService";
+import { createValuationConversionService, valuationFxSelect } from "./valuationConversionService";
 import { cents } from "./investmentPosting";
 import { readPostingAmount, sumJournalCents } from "./journalPrecision";
 
@@ -16,7 +16,7 @@ export async function investmentCashFlows(portfolioId: string, start: string, en
     const entries = await tx.journalEntry.findMany({ where: { date: { gte: startDate, lte: endDate }, lines: { some: { account: { groupId: portfolioId, type: AccountType.User } } } },
       include: { lines: { include: { account: { select: { name: true, type: true, groupId: true, currency: true, investmentProperties: { select: { id: true } } } } } } },
       orderBy: [{ date: "asc" }, { createdAt: "asc" }, { id: "asc" }] });
-    return { entries, rates: await tx.fxDailyRate.findMany() };
+    return { entries, rates: await tx.fxDailyRate.findMany({ select: valuationFxSelect }) };
   }, { timeout: 30000 });
   const converter = createValuationConversionService({ findFxRates: async () => rates });
   const report: InvestmentCashFlows = { deposits: 0, withdrawals: 0, depositsByCurrency: {}, withdrawalsByCurrency: {}, rows: [] };

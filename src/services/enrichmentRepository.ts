@@ -77,6 +77,7 @@ class EnrichmentRepository {
             targetCurrency: key.targetCurrency,
             marketDate: point.marketDate,
             rate: point.rate,
+            rateDecimal: point.rate.toString(),
             fetchedAt: new Date(),
           },
         });

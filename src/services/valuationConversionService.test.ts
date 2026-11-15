@@ -1,7 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createValuationConversionService } from "./valuationConversionService";
+import { createValuationConversionService, valuationConversionService } from "./valuationConversionService";
+import { databaseService } from "./database";
+import { enrichmentRepository } from "./enrichmentRepository";
+import { resetTestDatabase } from "./database.test.utils";
 
 describe("valuationConversionService", () => {
+  it("persists and reads the decimal rate for both conversion directions", async () => {
+    await resetTestDatabase();
+    const pair = { sourceCurrency: "USD", targetCurrency: "CAD" };
+    const marketDate = "2026-01-02";
+    await enrichmentRepository.insertMissingFxDailyRates(pair, [{ marketDate, rate: 1.25 }]);
+    const db = databaseService.prismaClient;
+    const stored = await db.fxDailyRate.findFirstOrThrow();
+    expect(stored).toMatchObject({ rateDecimal: "1.25" });
+    await db.fxDailyRate.update({ where: { id: stored.id }, data: { rate: 99 } });
+    const asOfDate = "2026-01-03";
+    expect(await valuationConversionService.convertAmount({ ...pair, amount: 8, asOfDate }))
+      .toMatchObject({ convertedAmount: 10, rate: 1.25, source: "as_of" });
+    expect(await valuationConversionService.convertAmount({ sourceCurrency: "CAD", targetCurrency: "USD", amount: 10, asOfDate }))
+      .toMatchObject({ convertedAmount: 8, rate: 0.8, source: "as_of" });
+  });
   it("normalizes supported dates before selecting the canonical as-of rate", async () => {
     const service = createValuationConversionService({ findFxRates: async () => [
       { sourceCurrency: "USD", targetCurrency: "CAD", marketDate: "2026-01-02", rate: 1.3 },
