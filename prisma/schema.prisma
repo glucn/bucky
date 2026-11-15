@@ -126,6 +126,7 @@ model JournalEntry {
   lines        JournalLine[]
   investmentActivityLink InvestmentActivityJournal?
   investmentImportOrigin InvestmentImportOrigin?
+  checkpoint   Checkpoint?
   
   @@index([displayOrder])
   @@index([entryType])
@@ -150,6 +151,8 @@ model Checkpoint {
   date          String
   balance       Float    // The target balance for the account
   balanceCents  String?  // Canonical signed integer cents; null for legacy values awaiting review
+  journalEntryId String? @unique
+  journalEntry  JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
   description   String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

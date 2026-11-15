@@ -99,14 +99,13 @@ class DatabaseService {
       await tx.investmentCorrection.deleteMany({});
       await tx.investmentActivityJournal.deleteMany({});
       await tx.investmentActivity.deleteMany({});
+      await tx.checkpoint.deleteMany({});
       // Delete all journal lines
       await tx.journalLine.deleteMany({});
       // Delete all journal entries
       await tx.journalEntry.deleteMany({});
       // Delete all auto-categorization rules
       await tx.autoCategorizationRule.deleteMany({});
-      // Delete all checkpoints
-      await tx.checkpoint.deleteMany({});
       // Delete all investment properties (must be before accounts due to foreign key)
       await tx.investmentProperties.deleteMany({});
       // Delete all security price history
@@ -1942,6 +1941,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     if (!entry) {
       throw new Error("Journal entry not found");
     }
+    if (entry.entryType === "checkpoint-adjustment") throw new Error("Delete the checkpoint to remove its adjustment");
 
     if (["investment_buy", "investment_sell", "dividend_reinvest", "dividend_cash", "stock_split"].includes(entry.type || "") ||
       await prisma.investmentActivityJournal.findUnique({ where: { entryId } })) {
@@ -2240,7 +2240,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
 
     // 1. Get or create the 'Checkpoint Adjustment' system account
     let checkpointAccount = await tx.account.findFirst({
-      where: { name: "Checkpoint Adjustment" },
+      where: { name: "Checkpoint Adjustment", type: AccountType.System },
     });
 
     if (!checkpointAccount) {
@@ -2271,6 +2271,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       data: {
         date: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10),
         description: data.description || `Checkpoint for ${checkpoint.id}`,
+        entryType: "checkpoint-adjustment",
         displayOrder: Date.now(),
       },
     });
@@ -2328,7 +2329,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     });
 
     return {
-      checkpoint,
+      checkpoint: await tx.checkpoint.update({ where: { id: checkpoint.id }, data: { journalEntryId: journalEntry.id } }),
       journalEntry,
       adjustmentAmount,
     };
@@ -2390,43 +2391,34 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       throw new Error("Checkpoint not found");
     }
 
-    // Find the associated journal entry
-    // Look for journal entries that either contain the checkpoint ID in description
-    // or are checkpoint entries for this account on the same date
-    const journalEntry = await tx.journalEntry.findFirst({
-      where: {
-        OR: [
-          { description: { contains: checkpoint.id } },
-          {
-            AND: [
-              { date: checkpoint.date },
-              {
-                lines: {
-                  some: {
-                    accountId: checkpoint.accountId,
-                  },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    });
-
-    // Delete the journal lines and entry if found
-    if (journalEntry) {
-      await tx.journalLine.deleteMany({
-        where: { entryId: journalEntry.id },
+    let entryId = checkpoint.journalEntryId;
+    if (!entryId) {
+      const candidates = await tx.journalEntry.findMany({
+        where: {
+          date: checkpoint.date, description: checkpoint.description || `Checkpoint for ${checkpoint.id}`,
+          checkpoint: null, type: null, entryType: { equals: null },
+          AND: [
+            { lines: { some: { accountId: checkpoint.accountId } } },
+            { lines: { some: { account: { type: AccountType.System, name: "Checkpoint Adjustment" } } } },
+          ],
+        },
+        select: { id: true, lines: { select: { accountId: true } } },
       });
-      await tx.journalEntry.delete({
-        where: { id: journalEntry.id },
-      });
+      const adjustments = candidates.filter(({ lines }) => lines.length === 2 &&
+        lines.filter(({ accountId }) => accountId === checkpoint.accountId).length === 1);
+      if (adjustments.length > 1) throw new Error("Checkpoint adjustment is ambiguous. Review the original records before deleting it.");
+      entryId = adjustments[0]?.id ?? null;
     }
 
-    // Delete the checkpoint
-    const deletedCheckpoint = await tx.checkpoint.delete({
-      where: { id: checkpointId },
-    });
+    const deletedCheckpoint = await tx.checkpoint.delete({ where: { id: checkpointId } });
+    if (entryId) {
+      await tx.journalLine.deleteMany({
+        where: { entryId },
+      });
+      await tx.journalEntry.delete({
+        where: { id: entryId },
+      });
+    }
 
     return deletedCheckpoint;
   }
@@ -2671,6 +2663,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     if (!line) throw new Error("Journal line not found");
     const entry = line.entry;
     if (!entry) throw new Error("Journal entry not found");
+    if (entry.entryType === "checkpoint-adjustment") throw new Error("Reconcile the checkpoint to update its adjustment");
 
     if (["investment_buy", "investment_sell", "dividend_reinvest", "dividend_cash", "stock_split"].includes(entry.type || "") ||
       await prisma.investmentActivityJournal.findUnique({ where: { entryId: entry.id } })) {

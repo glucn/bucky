@@ -123,6 +123,30 @@ it("requires review before replacing a checkpoint with ambiguous legacy precisio
   expect(await db().checkpoint.findUnique({ where: { id: legacy.id } })).toEqual(legacy);
 });
 
+it("deletes only the checkpoint adjustment and retains unrelated same-day transactions", async () => {
+  const { cad, category, entry } = await fixture();
+  const ordinary = await entry([{ accountId: cad.id, amount: -12, currency: "CAD" }, { accountId: category.id, amount: 12, currency: "CAD" }]);
+  const saved = await databaseService.createCheckpoint({ accountId: cad.id, date: "2026-11-01", balance: 200, description: "Statement" });
+  expect(saved.checkpoint.journalEntryId).toBe(saved.journalEntry.id);
+  await expect(databaseService.deleteJournalEntry(saved.journalEntry.id)).rejects.toThrow(/checkpoint/i);
+  await databaseService.deleteCheckpoint(saved.checkpoint.id);
+  expect(await db().journalEntry.findUnique({ where: { id: ordinary.id }, include: { lines: true } })).toEqual(ordinary);
+  expect(await db().journalEntry.findUnique({ where: { id: saved.journalEntry.id } })).toBeNull();
+  expect(await databaseService.getAccountBalanceAtDate(cad.id, "2026-11-01")).toBe(-12);
+});
+
+it("keeps an ambiguous legacy checkpoint and its possible adjustments intact", async () => {
+  const { cad } = await fixture();
+  const data = { accountId: cad.id, date: "2026-11-01", balance: 200, description: "Statement" };
+  const first = await databaseService.createCheckpoint(data);
+  await databaseService.createCheckpoint(data);
+  await db().checkpoint.updateMany({ data: { journalEntryId: null } });
+  await db().journalEntry.updateMany({ data: { entryType: null } });
+  await expect(databaseService.deleteCheckpoint(first.checkpoint.id)).rejects.toThrow(/ambiguous/i);
+  expect(await db().checkpoint.count()).toBe(2);
+  expect(await db().journalEntry.count()).toBe(2);
+});
+
 it("checks retained investment activity and distinguishes legacy history from inconsistent lots", async () => {
   const portfolio = await investmentService.createInvestmentPortfolio("Verifier portfolio", "CAD");
   const holding = await investmentService.createSecurityAccount(portfolio.group.id, "ABC");

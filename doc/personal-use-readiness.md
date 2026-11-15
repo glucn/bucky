@@ -9,6 +9,16 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 76 — Link checkpoints to their own adjustments
+
+- New checkpoints retain the ID of their adjusting journal entry. Deletion and
+  reconciliation use that link, so another transaction on the same date keeps
+  its postings. The transaction editor protects linked adjustments.
+- Older checkpoints use their matching adjustment description and postings to
+  identify the entry. An ambiguous match leaves the checkpoint and journals
+  intact for review.
+- Verification covered 38 focused native tests, 25 encrypted tests, and TypeScript.
+
 ### Batch 75 — Retain decimal activity prices and split ratios
 
 - Investment activities store decimal trade and reinvestment prices and split
