@@ -15,6 +15,8 @@ import { Recovery } from "./pages/Recovery";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 
+const BookVerification = React.lazy(() => import("./pages/BookVerification").then((page) => ({ default: page.BookVerification })));
+
 const App: React.FC = () => {
   const Router = window.location.protocol === "file:" ? HashRouter : BrowserRouter;
   return (
@@ -39,6 +41,9 @@ const App: React.FC = () => {
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/settings/auto-categorization" element={<AutoCategorizationRules />} />
               <Route path="/settings/recovery" element={<Recovery />} />
+              <Route path="/settings/verify-books" element={
+                <React.Suspense fallback={<p role="status">Loading verification…</p>}><BookVerification /></React.Suspense>
+              } />
             </Routes>
           </main>
         </div>

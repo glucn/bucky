@@ -85,6 +85,10 @@ test("reviewed trade correction updates later gains and retains the original jou
     await history.getByRole("button", { name: /Broker confirmed execution price/ }).click();
     await expect(history).toContainText("Ending basis CAD 100.00");
     await expect(history).toContainText("Ending basis CAD 120.00");
+    await history.getByRole("button", { name: "Close" }).click();
+    await page.getByRole("link", { name: "Verify books" }).click();
+    await page.getByRole("button", { name: "Run verification" }).click();
+    await expect(page.getByText("No issues found in the checks run.")).toBeVisible();
     await app.stop();
     const profile = await readProtectedProfile(app.directory), key = unlockWithRecovery(profile.envelope, pending.recoverySecret, "default"), db = createEncryptedPrisma(profile.databaseFile, key);
     try {

@@ -127,6 +127,7 @@ export const APP_IPC_CHANNELS = [
   "update-transaction",
   "upsert-liability-profile",
   "validate-import-data",
+  "verify-books",
   "withdraw-cash"
 ] as const;
 

@@ -130,6 +130,10 @@ const Navbar: React.FC = () => {
                 className="border-transparent text-gray-500 hover:text-primary-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                 Backup &amp; recovery
               </Link>
+              <Link to="/settings/verify-books"
+                className="border-transparent text-gray-500 hover:text-primary-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                Verify books
+              </Link>
             </div>
           </div>
             <div className="flex items-center">

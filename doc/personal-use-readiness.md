@@ -9,6 +9,15 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 56 — Run verification from the app
+
+- **Verify books** runs on demand from the main navigation. It shows accounting issues and
+  warnings with the affected record IDs and both balances for a checkpoint discrepancy.
+- The action uses the authenticated data IPC path. Verification is read-only and uses the
+  existing cent policy. Market price and valuation FX coverage remain open.
+- Verification covered 23 focused tests, TypeScript, Apple Silicon packaging, and three
+  packaged restart runs that used the verification action after revising investment history.
+
 ### Batch 55 — Verify tracked investment holdings
 
 - Book verification checks structured investment activity, current quantities and lots,

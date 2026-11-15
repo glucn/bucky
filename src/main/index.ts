@@ -25,6 +25,7 @@ import { bookSetupService } from "../services/bookSetup";
 import { developmentServer } from "../shared/developmentServer";
 import { setupInvestmentIpcHandlers } from "./ipcHandlers.investments";
 import { setupOverviewIpcHandlers } from "./ipcHandlers.overview";
+import { verifyBook } from "../services/bookVerification";
 import { setupReportingIpcHandlers } from "./ipcHandlers.reporting";
 import { setupRecoveryIpcHandlers } from "./ipcHandlers.recovery";
 import { createSecureIpc, protectWindow, applicationContentSecurityPolicy } from "./ipcSecurity";
@@ -1111,6 +1112,8 @@ function setupIpcHandlers() {
   // Setup investment IPC handlers
   setupInvestmentIpcHandlers(ipcMain);
   setupOverviewIpcHandlers(ipcMain);
+  ipcMain.removeHandler("verify-books");
+  ipcMain.handle("verify-books", () => verifyBook());
   setupReportingIpcHandlers(ipcMain);
   setupAutoCategorizationIpcHandlers(ipcMain);
   setupEnrichmentIpcHandlers(ipcMain);
