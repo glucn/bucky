@@ -132,8 +132,11 @@ export async function recordSplit(accountId: string, splitRatio: number, inputDa
     const props = account.investmentProperties, lots = positionLots(props);
     const held = readInvestmentQuantity(props.quantity, props.quantityDecimal);
     const quantity = scaleInvestmentUnits(held, splitRatio);
-    const updatedLots = lots?.map((lot) => ({ ...lot, ...investmentQuantityFields(scaleInvestmentUnits(lot.quantity, splitRatio)),
-      pricePerShare: lot.pricePerShare / splitRatio }));
+    const updatedLots = lots?.map((lot) => {
+      const pricePerShare = lot.pricePerShare / splitRatio;
+      return { ...lot, ...investmentQuantityFields(scaleInvestmentUnits(lot.quantity, splitRatio)),
+        pricePerShare, priceDecimal: pricePerShare.toString() };
+    });
     if (!Number.isFinite(quantity) || (held > 0 && quantity <= 0) || updatedLots?.some((lot) => !Number.isFinite(lot.quantity) || lot.quantity <= 0 || !Number.isFinite(lot.pricePerShare))) {
       throw new Error("Split result exceeds supported precision");
     }

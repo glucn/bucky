@@ -9,6 +9,17 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 75 — Retain decimal activity prices and split ratios
+
+- Investment activities store decimal trade and reinvestment prices and split
+  ratios. Historical gain checks and reviewed replay use the stored terms.
+  New and modified FIFO lots also retain their unit price as decimal text.
+- The migration backfills round-trippable legacy terms. Legacy numeric fields
+  remain readable, and split-adjusted lot unit prices still project a
+  potentially repeating quotient to the existing numeric precision.
+- Verification covered 107 focused native tests, 61 encrypted tests, TypeScript,
+  Apple Silicon packaging, and two packaged replay and reporting tests.
+
 ### Batch 74 — Store FIFO lot quantities and basis in exact form
 
 - New FIFO lots and lots confirmed at a reviewed baseline store decimal units

@@ -35,6 +35,22 @@ it("checks investment basis and replays trades using retained posting cents", as
   });
   expect(preview.after.costBasis).toBe(60);
 });
+
+it("uses stored decimal trade prices and split ratios in correction replay", async () => {
+  const { holding, activity } = await setup();
+  const db = databaseService.prismaClient;
+  const split = await db.investmentActivity.findFirstOrThrow({ where: { accountId: holding.id, kind: "split" } });
+  const sale = await db.investmentActivity.findFirstOrThrow({ where: { accountId: holding.id, kind: "sell" } });
+  expect(split).toMatchObject({ splitRatioDecimal: "2" });
+  expect(sale).toMatchObject({ priceDecimal: "15" });
+  await db.investmentActivity.update({ where: { id: split.id }, data: { splitRatio: 9 } });
+  await db.investmentActivity.update({ where: { id: sale.id }, data: { price: 99 } });
+  expect(await investmentService.getRealizedGains((await db.account.findUniqueOrThrow({ where: { id: holding.id } })).groupId!,
+    "2026-01-03", "2026-01-03")).toMatchObject([{ saleProceeds: 150, realizedGain: 100 }]);
+  const preview = await correction.previewInvestmentTradeCorrection({ activityId: activity.id, date: activity.date, quantity: 10, pricePerShare: 12 });
+  expect(preview.after).toMatchObject({ quantity: 10, costBasis: 60 });
+  expect(preview.affected.find(({ kind }) => kind === "sell")?.after).toMatchObject({ cashAmount: 150, realizedGain: 90 });
+});
 it("inserts a missed trade and recalculates future FIFO without a duplicate retry", async () => {
   const { holding, cash } = await setup(), before = await ledger();
   const change = { operation: "insert", kind: "buy", accountId: holding.id, tradeCashAccountId: cash.id,

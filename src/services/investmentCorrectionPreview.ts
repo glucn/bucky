@@ -5,7 +5,7 @@ import { isValidStandardDate } from "../shared/dateUtils";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
 import { recordCashDividend, recordReinvestment, recordSplit } from "./investmentDistributions";
 import { readPostingAmount } from "./journalPrecision";
-import { cents, investmentTransaction, readInvestmentQuantity } from "./investmentPosting";
+import { cents, investmentTransaction, readInvestmentQuantity, readInvestmentTerm } from "./investmentPosting";
 import { defaultTradeDescription, recordInvestmentTrade } from "./investmentTrades";
 import type { TradeInsertion } from "../shared/investmentReplay";
 
@@ -95,18 +95,22 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
     const common = { portfolioId: account.groupId, tickerSymbol: row.ticker, securityAccountId: row.accountId,
       tradeCashAccountId: posting.cashId, description: posting.description, date };
     switch (row.kind) {
-      case "buy": case "sell":
+      case "buy": case "sell": {
+        const price = readInvestmentTerm(row.price, row.priceDecimal);
+        if (price === null) throw new Error("Stored trade price is missing");
         await recordInvestmentTrade(row.kind, { ...common, ...(row.id === target?.id && input.operation !== "void" && input.operation !== "insert"
           ? { quantity: input.quantity, pricePerShare: input.pricePerShare, fee: input.fee ?? row.fee ?? 0,
-            description: posting.description === defaultTradeDescription(row.kind, row.ticker, row.units!, row.price!) ? undefined : posting.description }
-          : { quantity: row.units!, pricePerShare: row.price!, fee: row.fee ?? 0 }) }, tx);
+            description: posting.description === defaultTradeDescription(row.kind, row.ticker, row.units!, price) ? undefined : posting.description }
+          : { quantity: row.units!, pricePerShare: price, fee: row.fee ?? 0 }) }, tx);
         break;
-      case "split": await recordSplit(row.accountId, row.splitRatio!, date, posting.description, tx); break;
+      }
+      case "split": await recordSplit(row.accountId, readInvestmentTerm(row.splitRatio, row.splitRatioDecimal) ?? NaN, date, posting.description, tx); break;
       case "dividend": case "return_of_capital":
         await recordCashDividend({ ...common, amount: row.cashAmount, isReturnOfCapital: row.kind === "return_of_capital" }, tx);
         break;
       case "income_reinvestment": case "capital_reinvestment":
-        await recordReinvestment({ ...common, dividendAmount: posting.dividendAmount!, reinvestmentPrice: row.price!, recordAsIncome: row.kind === "income_reinvestment" }, tx);
+        await recordReinvestment({ ...common, dividendAmount: posting.dividendAmount!,
+          reinvestmentPrice: readInvestmentTerm(row.price, row.priceDecimal) ?? NaN, recordAsIncome: row.kind === "income_reinvestment" }, tx);
         break;
       default: throw new Error("Unsupported event in correction replay");
     }
@@ -159,12 +163,14 @@ export async function getInvestmentTradeCorrection(accountId: string, entryId: s
   return investmentTransaction(async (tx) => {
     const link = await tx.investmentActivityJournal.findUnique({ where: { entryId }, include: { activity: { include: { account: { include: { investmentProperties: true } } } } } });
     const row = link?.activity;
-    if (!row || row.accountId !== accountId || (row.kind !== "buy" && row.kind !== "sell") || row.units === null || row.price === null || row.account.isArchived) {
+    if (!row || row.accountId !== accountId || (row.kind !== "buy" && row.kind !== "sell") || row.units === null || row.account.isArchived) {
       throw new Error("Only a tracked buy or sale on this active holding can be corrected");
     }
     const baseline = await tx.investmentActivity.findFirst({ where: { accountId, kind: "baseline" }, select: { date: true } });
     if (!row.account.investmentProperties?.hasCompleteActivityHistory || (baseline && row.date <= baseline.date)) throw new Error("This trade is outside the holding's verified history");
-    return { activityId: row.id, kind: row.kind, ticker: row.ticker, currency: row.currency, date: row.date, quantity: row.units, pricePerShare: row.price, fee: row.fee ?? 0 };
+    const price = readInvestmentTerm(row.price, row.priceDecimal);
+    if (price === null) throw new Error("Stored trade price is missing");
+    return { activityId: row.id, kind: row.kind, ticker: row.ticker, currency: row.currency, date: row.date, quantity: row.units, pricePerShare: price, fee: row.fee ?? 0 };
   });
 }
 

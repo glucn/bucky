@@ -13,7 +13,7 @@ export function investmentTransaction<T>(operation: (tx: Prisma.TransactionClien
 export type InvestmentSelection = { portfolioId: string; tickerSymbol: string; securityAccountId?: string; tradeCashAccountId?: string };
 
 export type Lot = { date: string; quantity: number; pricePerShare: number; amount: number;
-  quantityDecimal?: string; amountCents?: string };
+  quantityDecimal?: string; amountCents?: string; priceDecimal?: string };
 
 export function cents(value: number): number {
   return toJournalCents(value);
@@ -57,7 +57,14 @@ export function investmentQuantityFields(quantity: number) {
 }
 
 export function investmentLot(date: string, quantity: number, pricePerShare: number, basisCents: number): Lot {
-  return { date, ...investmentQuantityFields(quantity), pricePerShare, ...postingAmountFromCents(basisCents) };
+  return { date, ...investmentQuantityFields(quantity), pricePerShare, priceDecimal: pricePerShare.toString(), ...postingAmountFromCents(basisCents) };
+}
+
+export function readInvestmentTerm(value: number | null, decimal: string | null): number | null {
+  if (value === null && decimal === null) return null;
+  const term = readUnsignedDecimal(decimal ?? value!);
+  if (!Number.isFinite(term) || term < 0) throw new Error("Invalid stored investment price or split ratio");
+  return term;
 }
 
 export async function readInvestmentBasisCents(tx: Prisma.TransactionClient, accountId: string): Promise<bigint> {
@@ -71,12 +78,14 @@ export function readLots(value: string | null, quantity: number): Lot[] {
     if (!lot || !parseToStandardDate(lot.date) ||
       (lot.quantityDecimal !== undefined && typeof lot.quantityDecimal !== "string") ||
       (lot.amountCents !== undefined && typeof lot.amountCents !== "string") ||
+      (lot.priceDecimal !== undefined && typeof lot.priceDecimal !== "string") ||
       (lot.amountCents === undefined && (!Number.isFinite(lot.amount) || lot.amount < 0)) ||
       (lot.quantityDecimal === undefined && !Number.isFinite(lot.quantity))) throw new Error("Invalid FIFO lot data");
     const units = readInvestmentQuantity(lot.quantity, lot.quantityDecimal);
     const amount = readPostingAmount({ amount: lot.amount, amountCents: lot.amountCents ?? null });
     if (units <= 0 || amount < 0) throw new Error("Invalid FIFO lot data");
-    return { ...lot, quantity: units, amount };
+    const price = lot.priceDecimal === undefined ? lot.pricePerShare : readInvestmentTerm(null, lot.priceDecimal)!;
+    return { ...lot, quantity: units, amount, pricePerShare: price };
   });
   if (Math.abs(normalized.reduce((sum, lot) => sum + lot.quantity, 0) - quantity) > 1e-8 * Math.max(1, quantity)) {
     throw new Error("FIFO lots do not match the position quantity");

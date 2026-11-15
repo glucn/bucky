@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { databaseService } from "./database";
-import { cents, investmentLot, investmentQuantityFields, investmentTransaction, readInvestmentBasisCents, readInvestmentQuantity, readLots, type Lot } from "./investmentPosting";
+import { cents, investmentLot, investmentQuantityFields, investmentTransaction, readInvestmentBasisCents, readInvestmentQuantity, readInvestmentTerm, readLots, type Lot } from "./investmentPosting";
 import { journalAmountFromCents, sumJournalCents } from "./journalPrecision";
 import { AccountSubtype, AccountType } from "../shared/accountTypes";
 import { isValidStandardDate, localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
@@ -32,7 +32,7 @@ function baselineBasis(activity: Activity, preceding: Activity[]) {
 function validActivity(row: Activity): boolean {
   if (!isValidStandardDate(row.date) || !Number.isFinite(row.quantityBefore) || !Number.isFinite(row.quantityAfter) ||
     row.quantityBefore < 0 || row.quantityAfter < 0 || cents(row.basisBefore) < 0 || cents(row.basisAfter) < 0) return false;
-  const units = row.units ?? NaN, ratio = row.splitRatio ?? NaN;
+  const units = row.units ?? NaN, ratio = readInvestmentTerm(row.splitRatio, row.splitRatioDecimal) ?? NaN;
   const changed = row.quantityAfter - row.quantityBefore;
   switch (row.kind) {
     case "buy": case "income_reinvestment": case "capital_reinvestment": if (!(units > 0) || !close(changed, units)) return false; break;
@@ -208,6 +208,8 @@ export async function finishInvestmentActivity(tx: Prisma.TransactionClient, bef
     quantityBefore, quantityAfter,
     quantityBeforeDecimal: before.props.quantityDecimal ?? quantityBefore.toString(),
     quantityAfterDecimal: props.quantityDecimal ?? quantityAfter.toString(),
+    priceDecimal: details.price?.toString(),
+    splitRatioDecimal: details.splitRatio?.toString(),
     basisBefore: journalAmountFromCents(before.basisCents), basisAfter: journalAmountFromCents(basis),
     lotsAfter: props.lots, journalLinks: { create: entryIds.map((entryId) => ({ entryId })) },
   } });

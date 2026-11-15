@@ -293,8 +293,10 @@ model InvestmentActivity {
   lotsAfter       String?
   units           Float?
   price           Float?
+  priceDecimal    String?
   fee             Float?
   splitRatio      Float?
+  splitRatioDecimal String?
   cashAmount      Float
   createdAt       DateTime @default(now())
   account         Account @relation(fields: [accountId], references: [id], onDelete: Restrict)

@@ -4,7 +4,7 @@ import { parseToStandardDate } from "../shared/dateUtils";
 import type { InvestmentIncomeReport, RealizedGainReportRow, ReportFxSource } from "../shared/investmentReporting";
 import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
-import { addInvestmentUnits, cents, readInvestmentQuantity, readLots, tradeGrossCents } from "./investmentPosting";
+import { addInvestmentUnits, cents, readInvestmentQuantity, readInvestmentTerm, readLots, tradeGrossCents } from "./investmentPosting";
 import { journalAmountFromCents, readPostingCents, sumJournalCents } from "./journalPrecision";
 import { createValuationConversionService, valuationFxSelect, type ValuationQuote } from "./valuationConversionService";
 
@@ -148,15 +148,16 @@ async function gainsFromContext(ctx: Awaited<ReturnType<typeof context>>, portfo
     const otherCategoryCents = sumJournalCents(categories.filter((line) => !gainLineIds.has(line.id)));
     const gainCents = -sumJournalCents(gainCategories), realizedGain = journalAmountFromCents(gainCents);
     if (basisCents < 0n || proceedsCents - basisCents + otherCategoryCents !== gainCents) throw new Error("Sale journal gain requires review");
+    const price = activity ? readInvestmentTerm(activity.price, activity.priceDecimal) : null;
     if (activity && (activity.kind !== "sell" || activity.accountId !== security.accountId || !(activity.units! > 0) ||
-      !Number.isFinite(activity.units) || !Number.isFinite(activity.price) || activity.price! < 0 || !Number.isFinite(activity.fee ?? 0) || (activity.fee ?? 0) < 0 ||
+      !Number.isFinite(activity.units) || price === null || !Number.isFinite(activity.fee ?? 0) || (activity.fee ?? 0) < 0 ||
       Math.abs(readInvestmentQuantity(activity.quantityBefore, activity.quantityBeforeDecimal) -
         readInvestmentQuantity(activity.quantityAfter, activity.quantityAfterDecimal) - activity.units!) > 1e-8 * Math.max(1, activity.units!) ||
       activity.ticker !== security.account.investmentProperties!.tickerSymbol ||
       // Older activities posted with binary rounding. Preserve the recorded proceeds
       // when either the current decimal policy or the original calculation explains them.
-      (tradeGrossCents(activity.units!, activity.price!) - cents(activity.fee ?? 0) !== cents(saleProceeds) &&
-        Math.round(activity.units! * activity.price! * 100) - cents(activity.fee ?? 0) !== cents(saleProceeds)) ||
+      (tradeGrossCents(activity.units!, activity.priceDecimal ?? price) - cents(activity.fee ?? 0) !== cents(saleProceeds) &&
+        Math.round(activity.units! * price * 100) - cents(activity.fee ?? 0) !== cents(saleProceeds)) ||
       otherCategoryCents !== 0n || cents(activity.basisBefore - activity.basisAfter) !== cents(costBasis) || cents(activity.cashAmount) !== cents(saleProceeds))) throw new Error("Sale activity conflicts with its journal");
     const conversion = await ctx.convert(realizedGain, currency, entry.date);
     rows.push({ entryId: entry.id, date: entry.date, accountId: security.accountId,
