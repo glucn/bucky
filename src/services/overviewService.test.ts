@@ -7,6 +7,7 @@ import { databaseService } from "./database";
 import { resetTestDatabase } from "./database.test.utils";
 import { investmentService } from "./investmentService";
 import { overviewService } from "./overviewService";
+import { reportingService } from "./reportingService";
 
 async function recordCanonicalTestPrice(ticker: string, price: number, date: string, _source: string) {
   const holdings = await databaseService.prismaClient.investmentProperties.findMany({ where: { tickerSymbol: ticker } });
@@ -46,6 +47,25 @@ async function seedFxRate(
 describe("overviewService", () => {
   beforeEach(async () => {
     await resetTestDatabase();
+  });
+
+  it("uses stored posting cents for net worth and spending reports before FX conversion", async () => {
+    const date = "2026-02-10";
+    await appSettingsService.setBaseCurrency("CAD");
+    await seedFxRate("USD", "CAD", date, 1.5);
+    const bank = await databaseService.createAccount({ name: "USD checking", type: AccountType.User, currency: "USD" });
+    const groceries = (await databaseService.getAccounts(true)).find((account) => account.name === "Groceries")!;
+    const saved = await databaseService.createJournalEntry({
+      date, amount: 12.34, fromAccountId: bank.id, toAccountId: groceries.id,
+    });
+    await databaseService.prismaClient.journalLine.updateMany({ where: { entryId: saved.entry!.id }, data: { amount: 999 } });
+    const dashboard = await overviewService.getOverviewDashboard(date);
+    expect(dashboard.netWorth.amount).toBe(-18.51);
+    expect(dashboard.incomeExpenseTrend6m.months.at(-1)?.expense).toBe(18.51);
+    const trend = await reportingService.getIncomeExpenseTrendReport({ preset: "LAST_6_MONTHS" }, date);
+    expect(trend.months.at(-1)?.expense).toBe(18.51);
+    const breakdown = await reportingService.getIncomeExpenseBreakdownReport({ preset: "THIS_MONTH" }, date);
+    expect(breakdown.kpis.expenseTotal).toBe(18.51);
   });
 
   it("returns a single payload shape for all dashboard cards", async () => {

@@ -9,6 +9,13 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 63 — Read exact postings in dashboard and spending reports
+
+- Net worth sums stored posting cents before converting currencies. Dashboard trends,
+  spending trends, and category breakdowns read the stored posting amount before FX
+  conversion. A regression changes the compatibility field and verifies all four totals.
+- Verification covered 19 native tests, 19 encrypted tests, and TypeScript.
+
 ### Batch 62 — Persist exact journal posting cents
 
 - Regular entries, transfers, opening balances, checkpoints, and investment postings

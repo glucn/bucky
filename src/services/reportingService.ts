@@ -9,6 +9,7 @@ import {
 } from "../shared/reporting";
 import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
+import { readPostingAmount } from "./journalPrecision";
 import { valuationConversionService } from "./valuationConversionService";
 
 const round2 = (value: number): number => Math.round(value * 100) / 100;
@@ -236,7 +237,7 @@ class ReportingService {
           continue;
         }
 
-        const convertedAmount = await currencyConverter.convert(Math.abs(line.amount), line.currency);
+        const convertedAmount = await currencyConverter.convert(Math.abs(readPostingAmount(line)), line.currency);
         if (convertedAmount === null) {
           continue;
         }
@@ -320,7 +321,7 @@ class ReportingService {
           continue;
         }
 
-        const convertedAmount = await currencyConverter.convert(Math.abs(line.amount), line.currency);
+        const convertedAmount = await currencyConverter.convert(Math.abs(readPostingAmount(line)), line.currency);
         if (convertedAmount === null) {
           continue;
         }

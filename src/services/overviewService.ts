@@ -5,6 +5,7 @@ import { databaseService } from "./database";
 import { investmentService, InvestmentHistoryUnavailableError } from "./investmentService";
 import { valuationConversionService } from "./valuationConversionService";
 import { resolveValuationDate } from "./valuationDate";
+import { journalAmountFromCents, readPostingAmount, sumJournalCents } from "./journalPrecision";
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -37,10 +38,10 @@ class OverviewService {
           },
         },
       },
-      select: { amount: true },
+      select: { amount: true, amountCents: true },
     });
 
-    return round2(lines.reduce((sum, line) => sum + line.amount, 0));
+    return journalAmountFromCents(sumJournalCents(lines));
   }
 
   public async getOverviewDashboard(asOfDate?: string): Promise<OverviewDashboardPayload> {
@@ -160,7 +161,7 @@ class OverviewService {
           continue;
         }
 
-        const convertedAmount = await convertToReportingCurrency(Math.abs(line.amount), line.currency);
+        const convertedAmount = await convertToReportingCurrency(Math.abs(readPostingAmount(line)), line.currency);
         if (convertedAmount === null) {
           if (line.account.subtype === AccountSubtype.Asset) {
             month.income = null;

@@ -63,6 +63,10 @@ export function readPostingCents(posting: { amount: number; amountCents: string 
   return readStoredCents(posting.amountCents, posting.amount);
 }
 
+export function readPostingAmount(posting: { amount: number; amountCents: string | null }): number {
+  return journalAmountFromCents(readPostingCents(posting));
+}
+
 export function sumJournalCents(postings: ReadonlyArray<{ amount: number; amountCents: string | null }>): bigint {
   return postings.reduce((total, posting) => total + readPostingCents(posting), 0n);
 }
