@@ -1,7 +1,7 @@
 import { databaseService } from "./database";
 import { resolveValuationDate } from "./valuationDate";
 import { isValidStandardDate } from "../shared/dateUtils";
-import { decimalRatio, journalAmountFromCents, roundDecimalRatio } from "./journalPrecision";
+import { decimalRatio, journalAmountFromCents, readUnsignedDecimal, roundDecimalRatio } from "./journalPrecision";
 
 type Rate = { rate: number; ratio: ReturnType<typeof decimalRatio> };
 type FxRateMap = Map<string, Rate & { date: string }>;
@@ -13,8 +13,7 @@ export const valuationFxSelect = {
 
 function storedRate(entry: FxRate): Rate | null {
   const value = entry.rateDecimal ?? entry.rate;
-  if (typeof value === "string" && (value.length > 64 || !/^\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value))) return null;
-  const rate = Number(value);
+  const rate = readUnsignedDecimal(value);
   return Number.isFinite(rate) && rate > 0 ? { rate, ratio: decimalRatio(value) } : null;
 }
 

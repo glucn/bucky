@@ -27,6 +27,10 @@ it("saves an explicitly reviewed raw close to the account's canonical market wit
   const input = request(holding.id), preview = await previewSecurityPrices(input);
   expect(preview.rows[0]).toMatchObject({ date: "2026-01-02", action: "insert", token: null });
   expect(await saveSecurityPrices({ ...input, expected: preview.rows.map(({ date, price, token }) => ({ date, price, token })) })).toMatchObject({ inserted: 1, corrected: 0 });
+  const stored = await databaseService.prismaClient.securityDailyPrice.findFirstOrThrow();
+  expect(stored).toMatchObject({ closeDecimal: "12.3456789" });
+  await databaseService.prismaClient.securityDailyPrice.update({ where: { id: stored.id }, data: { close: 2 } });
+  expect((await getSecurityPriceContext({ accountId: holding.id })).prices[0].price).toBe(12.3456789);
   expect((await investmentService.getPositionDetails(holding.id)).marketPrice).toBe(12.3456789);
   expect((await databaseService.prismaClient.securityPriceHistory.findFirstOrThrow()).price).toBe(999);
 });

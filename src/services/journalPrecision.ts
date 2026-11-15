@@ -1,6 +1,11 @@
 const maxCents = BigInt(Number.MAX_SAFE_INTEGER);
 const precisionError = () => new Error("Journal amount exceeds supported precision");
 
+export function readUnsignedDecimal(value: number | string): number {
+  if (typeof value === "string" && (value.length > 64 || !/^\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value))) return NaN;
+  return Number(value);
+}
+
 /** Recover the decimal spelled by the legacy Number boundary, including exponent notation. */
 function decimalParts(value: number | string) {
   if (!Number.isFinite(Number(value))) throw precisionError();

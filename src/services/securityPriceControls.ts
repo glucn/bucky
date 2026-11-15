@@ -4,7 +4,7 @@ import { databaseService } from "./database";
 import { parseSecurityIdentity } from "../shared/securityMarket";
 import { parseToStandardDate } from "../shared/dateUtils";
 import type { PriceRequest, PricePreviewRow } from "../shared/securityPrices";
-import { securityMarketData } from "./securityMarketData";
+import { readSecurityClose, securityMarketData } from "./securityMarketData";
 import { resolveValuationDate } from "./valuationDate";
 import { resolveConfiguredEnrichmentProvider } from "./enrichmentRuntimeService";
 import { securityQuoteCurrency } from "./securityQuoteCurrency";
@@ -15,7 +15,7 @@ async function holding(tx: Prisma.TransactionClient, id: string) {
   if (!account?.investmentProperties || !account.groupId) throw new Error("Portfolio security account not found");
   return account;
 }
-const token = (row: any): string | null => row ? createHash("sha256").update(JSON.stringify([row.id, row.close, row.source, row.priceBasis, row.barStatus, row.basisAsOf, row.fetchedAt])).digest("hex") : null;
+const token = (row: any): string | null => row ? createHash("sha256").update(JSON.stringify([row.id, row.closeDecimal ?? row.close, row.source, row.priceBasis, row.barStatus, row.basisAsOf, row.fetchedAt])).digest("hex") : null;
 
 export async function searchSecurityMarkets(accountId: string, resolve = resolveConfiguredEnrichmentProvider) {
   const account = await holding(databaseService.prismaClient, accountId), ticker = account.investmentProperties!.tickerSymbol;
@@ -44,7 +44,7 @@ export async function getSecurityPriceContext(input: { accountId: string; endDat
       .filter((row) => !end || row.normalizedDate === null || row.normalizedDate <= end)
       .sort((a, b) => (b.normalizedDate || "9999-99-99").localeCompare(a.normalizedDate || "9999-99-99") || a.id.localeCompare(b.id));
     return { accountId: account.id, ticker: props.tickerSymbol, market: props.market, currency: account.currency, ...quoteUnit, hasTrackedHistory: props.hasCompleteActivityHistory,
-      prices: quoteUnit.quoteCurrencyIssue ? [] : prices.map((row) => ({ id: row.id, date: row.marketDate, price: row.close, source: row.source, priceBasis: row.priceBasis, barStatus: row.barStatus, basisAsOf: row.basisAsOf, token: token(row) })),
+      prices: quoteUnit.quoteCurrencyIssue ? [] : prices.map((row) => ({ id: row.id, date: row.marketDate, price: readSecurityClose(row), source: row.source, priceBasis: row.priceBasis, barStatus: row.barStatus, basisAsOf: row.basisAsOf, token: token(row) })),
       legacyPrices: legacyPrices.slice(0, 200),
       priceCount: where ? await tx.securityDailyPrice.count({ where }) : 0, legacyCount: legacyPrices.length,
     };
@@ -88,7 +88,7 @@ async function review(tx: Prisma.TransactionClient, input: PriceRequest) {
     seen.add(date);
     const existing = await tx.securityDailyPrice.findUnique({ where: { ticker_market_marketDate: { ...identity, marketDate: date } } });
     rows.push({ date, price: point.price, token: token(existing), action: existing ? input.mode === "fill" ? "retain" : "correct" : "insert",
-      existing: existing ? { price: existing.close, source: existing.source, priceBasis: existing.priceBasis, barStatus: existing.barStatus } : null });
+      existing: existing ? { price: readSecurityClose(existing), source: existing.source, priceBasis: existing.priceBasis, barStatus: existing.barStatus } : null });
   }
   return { identity, rows };
 }

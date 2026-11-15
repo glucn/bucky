@@ -9,6 +9,19 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 69 — Store canonical closing prices as decimals
+
+- Manual, imported, and provider prices store an unrounded decimal alongside the
+  numeric compatibility field. Valuation, price history, and reviewed corrections
+  all read the same decimal value. Review tokens also use that value.
+- Populated native and encrypted upgrade tests verify safe backfill of existing
+  closing prices. Values outside SQLite's round-trip range retain their original
+  numeric representation.
+- Valuation still exposes numeric prices. Exact price multiplication and holding
+  quantity storage remain open.
+- Verification covered 38 focused native tests, 25 encrypted tests, TypeScript,
+  Apple Silicon packaging, and two packaged valuation and price review tests.
+
 ### Batch 68 — Round converted report postings with exact FX ratios
 
 - Spending trends, category breakdowns, and investment income and gains round
