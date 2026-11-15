@@ -5,6 +5,20 @@ import { enrichmentRepository } from "./enrichmentRepository";
 import { resetTestDatabase } from "./database.test.utils";
 
 describe("valuationConversionService", () => {
+  it("rounds direct and inverse conversions from decimal ratios at the cent boundary", async () => {
+    const asOfDate = "2026-01-03";
+    const service = createValuationConversionService({ findFxRates: async () => [
+      { sourceCurrency: "USD", targetCurrency: "CAD", marketDate: asOfDate, rate: 1.005, rateDecimal: "1.005" },
+      { sourceCurrency: "USD", targetCurrency: "EUR", marketDate: asOfDate, rate: 2, rateDecimal: "2" },
+      { sourceCurrency: "USD", targetCurrency: "GBP", marketDate: asOfDate, rate: 1.005, rateDecimal: "1.00499999999999999999" },
+    ] });
+    expect(await service.convertAmount({ amount: 1, sourceCurrency: "USD", targetCurrency: "CAD", asOfDate, roundToCents: true }))
+      .toMatchObject({ convertedAmount: 1.01, rate: 1.005 });
+    expect(await service.convertAmount({ amount: -2.01, sourceCurrency: "EUR", targetCurrency: "USD", asOfDate, roundToCents: true }))
+      .toMatchObject({ convertedAmount: -1.01, rate: 0.5 });
+    expect(await service.convertAmount({ amount: 1, sourceCurrency: "USD", targetCurrency: "GBP", asOfDate, roundToCents: true }))
+      .toMatchObject({ convertedAmount: 1, rate: 1.005 });
+  });
   it("persists and reads the decimal rate for both conversion directions", async () => {
     await resetTestDatabase();
     const pair = { sourceCurrency: "USD", targetCurrency: "CAD" };

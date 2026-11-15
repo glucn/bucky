@@ -10,7 +10,7 @@ import {
 import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { readPostingAmount } from "./journalPrecision";
-import { valuationConversionService } from "./valuationConversionService";
+import { valuationConversionService, type ValuationQuote } from "./valuationConversionService";
 
 const round2 = (value: number): number => Math.round(value * 100) / 100;
 
@@ -116,13 +116,7 @@ const isInternalTransferEntry = (
 };
 
 const createCurrencyConverter = (reportingCurrency: string, asOfDate: string) => {
-  type CachedConversion = {
-    rate: number | null;
-    source: import("./valuationConversionService").ConversionSource;
-    pair: string | null;
-  };
-
-  const conversionRateCache = new Map<string, CachedConversion>();
+  const conversionRateCache = new Map<string, ValuationQuote>();
   const missingFxPairs = new Set<string>();
   let usedEstimatedFxRate = false;
 
@@ -132,17 +126,11 @@ const createCurrencyConverter = (reportingCurrency: string, asOfDate: string) =>
     let conversion = conversionRateCache.get(cacheKey);
 
     if (!conversion) {
-      const result = await valuationConversionService.convertAmount({
-        amount: 1,
+      conversion = await valuationConversionService.getQuote({
         sourceCurrency,
         targetCurrency: reportingCurrency,
         asOfDate,
       });
-      conversion = {
-        rate: result.rate,
-        source: result.source,
-        pair: result.pair,
-      };
       conversionRateCache.set(cacheKey, conversion);
     }
 
@@ -157,7 +145,7 @@ const createCurrencyConverter = (reportingCurrency: string, asOfDate: string) =>
       return null;
     }
 
-    return amount * conversion.rate;
+    return conversion.apply(amount, true);
   };
 
   return {

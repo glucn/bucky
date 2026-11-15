@@ -3,7 +3,7 @@ import { OverviewDashboardPayload } from "../shared/overview";
 import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { investmentService, InvestmentHistoryUnavailableError } from "./investmentService";
-import { valuationConversionService } from "./valuationConversionService";
+import { valuationConversionService, type ValuationQuote } from "./valuationConversionService";
 import { resolveValuationDate } from "./valuationDate";
 import { journalAmountFromCents, readPostingAmount, sumJournalCents } from "./journalPrecision";
 
@@ -60,29 +60,24 @@ class OverviewService {
 
     let usedEstimatedFxRate = false;
     const missingFxPairs = new Set<string>();
-    const conversionRateCache = new Map<string, { rate: number | null; source: string; pair: string | null }>();
+    const conversionRateCache = new Map<string, ValuationQuote>();
 
     const convertToReportingCurrency = async (
       amount: number,
-      fromCurrency: string
+      fromCurrency: string,
+      roundToCents = false,
     ): Promise<number | null> => {
       if (amount === 0) return 0;
       const cacheKey = `${fromCurrency}->${reportingCurrency}@${effectiveAsOfDate}`;
       let conversion = conversionRateCache.get(cacheKey);
 
       if (!conversion) {
-        const result = await valuationConversionService.convertAmount({
-          amount: 1,
+        conversion = await valuationConversionService.getQuote({
           sourceCurrency: fromCurrency,
           targetCurrency: reportingCurrency,
           asOfDate: effectiveAsOfDate,
         });
 
-        conversion = {
-          rate: result.rate,
-          source: result.source,
-          pair: result.pair,
-        };
         conversionRateCache.set(cacheKey, conversion);
       }
 
@@ -97,7 +92,7 @@ class OverviewService {
         return null;
       }
 
-      return amount * conversion.rate;
+      return conversion.apply(amount, roundToCents);
     };
 
     for (const account of userAccounts) {
@@ -161,7 +156,7 @@ class OverviewService {
           continue;
         }
 
-        const convertedAmount = await convertToReportingCurrency(Math.abs(readPostingAmount(line)), line.currency);
+        const convertedAmount = await convertToReportingCurrency(Math.abs(readPostingAmount(line)), line.currency, true);
         if (convertedAmount === null) {
           if (line.account.subtype === AccountSubtype.Asset) {
             month.income = null;

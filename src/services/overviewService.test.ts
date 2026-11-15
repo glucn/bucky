@@ -68,6 +68,18 @@ describe("overviewService", () => {
     expect(breakdown.kpis.expenseTotal).toBe(18.51);
   });
 
+  it("rounds each converted spending posting at its exact half-cent boundary", async () => {
+    const date = "2026-02-10";
+    await appSettingsService.setBaseCurrency("CAD");
+    await seedFxRate("USD", "CAD", date, 1.005);
+    const bank = await databaseService.createAccount({ name: "USD checking", type: AccountType.User, currency: "USD" });
+    const groceries = (await databaseService.getAccounts(true)).find((account) => account.name === "Groceries")!;
+    await databaseService.createJournalEntry({ date, amount: 1, fromAccountId: bank.id, toAccountId: groceries.id });
+    expect((await overviewService.getOverviewDashboard(date)).incomeExpenseTrend6m.months.at(-1)?.expense).toBe(1.01);
+    expect((await reportingService.getIncomeExpenseTrendReport({ preset: "LAST_6_MONTHS" }, date)).months.at(-1)?.expense).toBe(1.01);
+    expect((await reportingService.getIncomeExpenseBreakdownReport({ preset: "THIS_MONTH" }, date)).kpis.expenseTotal).toBe(1.01);
+  });
+
   it("returns a single payload shape for all dashboard cards", async () => {
     const payload = await overviewService.getOverviewDashboard();
 

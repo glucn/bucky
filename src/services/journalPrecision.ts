@@ -2,14 +2,14 @@ const maxCents = BigInt(Number.MAX_SAFE_INTEGER);
 const precisionError = () => new Error("Journal amount exceeds supported precision");
 
 /** Recover the decimal spelled by the legacy Number boundary, including exponent notation. */
-function decimalParts(value: number) {
-  if (!Number.isFinite(value)) throw precisionError();
-  const [mantissa, exponent = "0"] = value.toString().split("e");
+function decimalParts(value: number | string) {
+  if (!Number.isFinite(Number(value))) throw precisionError();
+  const [mantissa, exponent = "0"] = value.toString().toLowerCase().split("e");
   const [whole, fraction = ""] = mantissa.split(".");
   return { digits: BigInt(whole + fraction), exponent: Number(exponent) - fraction.length };
 }
 
-export function decimalRatio(value: number) {
+export function decimalRatio(value: number | string) {
   const { digits, exponent } = decimalParts(value);
   return exponent >= 0
     ? { numerator: digits * 10n ** BigInt(exponent), denominator: 1n }

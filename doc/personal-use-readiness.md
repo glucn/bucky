@@ -9,6 +9,17 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 68 — Round converted report postings with exact FX ratios
+
+- Spending trends, category breakdowns, and investment income and gains round
+  converted postings to cents using the stored decimal rate. Inverse quotes use
+  the reciprocal of the exact ratio. Half cents round away from zero.
+- A regression distinguishes two decimal rates that become the same JavaScript
+  number. Report conversion retains that distinction through cent rounding.
+- Net worth, allocation, and portfolio cash-flow totals continue to round at
+  their aggregate boundaries. Exact arithmetic for those aggregates remains open.
+- Verification covered 1,230 native tests, 48 targeted encrypted tests, and TypeScript.
+
 ### Batch 67 — Store valuation FX rates in decimal form
 
 - New `FxDailyRate` rows store the decimal representation of the received rate.

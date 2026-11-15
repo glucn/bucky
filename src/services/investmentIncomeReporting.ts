@@ -6,7 +6,7 @@ import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { cents, readLots, tradeGrossCents } from "./investmentPosting";
 import { journalAmountFromCents, readPostingCents, sumJournalCents } from "./journalPrecision";
-import { createValuationConversionService, valuationFxSelect } from "./valuationConversionService";
+import { createValuationConversionService, valuationFxSelect, type ValuationQuote } from "./valuationConversionService";
 
 export function investmentReportRange(start: string, end: string) {
   const startDate = typeof start === "string" ? parseToStandardDate(start) : null;
@@ -39,18 +39,18 @@ async function context(portfolioId: string | null, start: string, end: string, b
     return { entries, rates, history };
   }, { timeout: 30000 });
   const converter = createValuationConversionService({ findFxRates: async () => data.rates });
-  const conversions = new Map<string, Awaited<ReturnType<typeof converter.convertAmount>>>();
+  const conversions = new Map<string, ValuationQuote>();
   async function convert(amount: number, currency: string, date: string) {
     if (!Number.isFinite(amount)) throw new Error("Invalid investment report amount");
     const key = `${currency}:${date}:${amount === 0 ? "zero" : "rate"}`;
     let result = conversions.get(key);
     if (!result) {
-      result = await converter.convertAmount({ amount: amount === 0 ? 0 : 1, sourceCurrency: currency, targetCurrency: baseCurrency, asOfDate: date });
+      result = await converter.getQuote({ sourceCurrency: currency, targetCurrency: baseCurrency, asOfDate: date }, amount === 0);
       conversions.set(key, result);
     }
     // A current fallback rate must not masquerade as a historical posting-date rate.
     const available = result.source !== "unavailable" && result.source !== "latest_fallback";
-    return { amountBase: available ? rounded(amount === 0 ? 0 : amount * result.rate!) : null,
+    return { amountBase: available ? result.apply(amount, true) : null,
       fxSource: (available ? result.source : "unavailable") as ReportFxSource, fxRate: available ? result.rate : null };
   }
   return { ...data, baseCurrency, convert };
