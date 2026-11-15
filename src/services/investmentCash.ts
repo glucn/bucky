@@ -3,6 +3,7 @@ import { AccountType } from "../shared/accountTypes";
 import { parseToStandardDate } from "../shared/dateUtils";
 import { cents, investmentTransaction } from "./investmentPosting";
 import { selectPortfolioCash } from "./securityHolding";
+import { withPostingCents } from "./journalPrecision";
 
 /** Cash-only investment events must select a currency just as trades do. */
 export async function recordInvestmentCash(input: {
@@ -27,6 +28,6 @@ export async function recordInvestmentCash(input: {
     const categoryLine = { accountId: category.id, amount: -cashLine.amount, currency: cash.currency, description };
     return tx.journalEntry.create({ data: { date, description, displayOrder: Date.now(),
       type: input.kind === "fee" ? "investment_fee" : "interest_income",
-      lines: { create: input.kind === "fee" ? [categoryLine, cashLine] : [cashLine, categoryLine] } }, include: { lines: true } });
+      lines: { create: (input.kind === "fee" ? [categoryLine, cashLine] : [cashLine, categoryLine]).map(withPostingCents) } }, include: { lines: true } });
   }, transaction);
 }

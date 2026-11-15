@@ -1,3 +1,4 @@
+import { postingAmountFromCents } from "./journalPrecision";
 import type { Prisma } from "@prisma/client";
 import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
@@ -70,7 +71,7 @@ export async function recordInvestmentTrade(kind: "buy" | "sell", input: Investm
     }
     if (!Number.isSafeInteger(basis)) throw new Error("Cost basis exceeds supported precision");
     const description = input.description || defaultTradeDescription(kind, ticker, input.quantity, input.pricePerShare);
-    const line = (accountId: string, amount: number) => ({ accountId, amount: amount / 100, currency: cash.currency, description });
+    const line = (accountId: string, cents: number) => ({ accountId, ...postingAmountFromCents(cents), currency: cash.currency, description });
     const lines = [line(security.id, kind === "buy" ? consideration : -basis), line(cash.id, kind === "buy" ? -consideration : consideration)];
     if (kind === "sell" && consideration !== basis) {
       const gain = await tx.account.findFirst({ where: { name: "Realized Gains/Losses", type: AccountType.Category, isArchived: false } });

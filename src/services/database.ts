@@ -8,7 +8,7 @@ import {
 import { localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
 import { autoCategorizationService } from "./autoCategorizationService";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
-import { checkpointBalance, journalAmountFromCents, readCheckpointCents, roundJournalAmount, sumJournalCents, toJournalCents } from "./journalPrecision";
+import { checkpointBalance, journalAmountFromCents, postingAmountFromCents, readCheckpointCents, readPostingCents, roundJournalAmount, sumJournalCents, toJournalCents, withPostingCents } from "./journalPrecision";
 import { resolveDatabaseFile } from "./localDatabase";
 import { createEncryptedPrisma, initializeEncryptedDatabase } from "./encryptedDatabase";
 import { PrismaSession } from "./prismaSession";
@@ -1166,7 +1166,7 @@ class DatabaseService {
           postingDate: postingDateStr,
           displayOrder: Date.now(),
           lines: {
-            create: [fromLine, toLine],
+            create: [fromLine, toLine].map(withPostingCents),
           },
         },
         include: { lines: true },
@@ -1175,10 +1175,7 @@ class DatabaseService {
       await this.adjustOpeningBalanceForEntryChange(
         {
           entryDate: dateStr,
-          lines: entry.lines.map((line: any) => ({
-            accountId: line.accountId,
-            amount: line.amount,
-          })),
+          lines: entry.lines,
           sign: 1,
         },
         prisma
@@ -1207,7 +1204,7 @@ class DatabaseService {
             lines: {
               some: {
                 accountId: data.fromAccountId,
-                amount: -(amountFrom!),
+                amount: -amountFrom,
                 currency: currencyFrom,
               },
             },
@@ -1242,14 +1239,14 @@ class DatabaseService {
             create: [
               {
                 accountId: data.fromAccountId,
-                amount: -(amountFrom!),
+                ...postingAmountFromCents(-toJournalCents(amountFrom)),
                 currency: currencyFrom,
                 exchangeRate,
                 description: data.description,
               },
               {
                 accountId: data.toAccountId,
-                amount: amountTo!,
+                ...postingAmountFromCents(toJournalCents(amountTo)),
                 currency: currencyTo,
                 exchangeRate,
                 description: data.description,
@@ -1263,10 +1260,7 @@ class DatabaseService {
       await this.adjustOpeningBalanceForEntryChange(
         {
           entryDate: dateStr,
-          lines: entry.lines.map((line: any) => ({
-            accountId: line.accountId,
-            amount: line.amount,
-          })),
+          lines: entry.lines,
           sign: 1,
         },
         prisma
@@ -1512,10 +1506,8 @@ class DatabaseService {
       return null;
     }
 
-    const displayAmount =
-      account.subtype === AccountSubtype.Liability
-        ? Math.round(-accountLine.amount * 100) / 100
-        : Math.round(accountLine.amount * 100) / 100;
+    const cents = readPostingCents(accountLine);
+    const displayAmount = journalAmountFromCents(account.subtype === AccountSubtype.Liability ? -cents : cents);
 
     return {
       entryId: entry.id,
@@ -1554,7 +1546,7 @@ class DatabaseService {
       throw new Error("Invalid opening balance date.");
     }
 
-    const roundedDisplay = Math.round(data.displayAmount * 100) / 100;
+    const roundedDisplay = roundJournalAmount(data.displayAmount);
     const rawAmount =
       account.subtype === AccountSubtype.Liability
         ? -roundedDisplay
@@ -1591,13 +1583,13 @@ class DatabaseService {
             create: [
               {
                 accountId: account.id,
-                amount: rawAmount,
+                ...postingAmountFromCents(toJournalCents(rawAmount)),
                 currency: account.currency,
                 description: "Opening Balance",
               },
               {
                 accountId: equityAccount.id,
-                amount: Math.round(-rawAmount * 100) / 100,
+                ...postingAmountFromCents(-toJournalCents(rawAmount)),
                 currency: account.currency,
                 description: "Opening Balance",
               },
@@ -1631,7 +1623,7 @@ class DatabaseService {
     await prisma.journalLine.update({
       where: { id: accountLine.id },
       data: {
-        amount: rawAmount,
+        ...postingAmountFromCents(toJournalCents(rawAmount)),
         currency: account.currency,
         description: "Opening Balance",
       },
@@ -1640,7 +1632,7 @@ class DatabaseService {
     await prisma.journalLine.update({
       where: { id: equityLine.id },
       data: {
-        amount: Math.round(-rawAmount * 100) / 100,
+        ...postingAmountFromCents(-toJournalCents(rawAmount)),
         currency: account.currency,
         description: "Opening Balance",
       },
@@ -1655,7 +1647,7 @@ class DatabaseService {
   private async applyOpeningBalanceDelta(
     openingEntryId: string,
     accountId: string,
-    delta: number,
+    deltaCents: bigint,
     prisma: TransactionClient
   ) {
     const entry = await prisma.journalEntry.findUnique({
@@ -1674,10 +1666,10 @@ class DatabaseService {
       throw new Error("Opening balance entry is missing required lines.");
     }
 
-    const nextAccountAmount = Math.round((accountLine.amount + delta) * 100) / 100;
-    const nextEquityAmount = Math.round((equityLine.amount - delta) * 100) / 100;
+    const nextAccount = readPostingCents(accountLine) + deltaCents;
+    const nextEquity = readPostingCents(equityLine) - deltaCents;
 
-    if (nextAccountAmount === 0) {
+    if (nextAccount === 0n) {
       await prisma.journalLine.deleteMany({ where: { entryId: entry.id } });
       await prisma.journalEntry.delete({ where: { id: entry.id } });
       return;
@@ -1685,19 +1677,19 @@ class DatabaseService {
 
     await prisma.journalLine.update({
       where: { id: accountLine.id },
-      data: { amount: nextAccountAmount },
+      data: postingAmountFromCents(nextAccount),
     });
 
     await prisma.journalLine.update({
       where: { id: equityLine.id },
-      data: { amount: nextEquityAmount },
+      data: postingAmountFromCents(nextEquity),
     });
   }
 
   private async adjustOpeningBalanceForEntryChange(
     data: {
       entryDate: string;
-      lines: { accountId: string; amount: number }[];
+      lines: { accountId: string; amount: number; amountCents: string | null }[];
       sign: 1 | -1;
     },
     prisma: TransactionClient
@@ -1738,8 +1730,8 @@ class DatabaseService {
         continue;
       }
 
-      const delta = Math.round(-data.sign * line.amount * 100) / 100;
-      if (delta === 0) {
+      const delta = -BigInt(data.sign) * readPostingCents(line);
+      if (delta === 0n) {
         continue;
       }
 
@@ -1963,10 +1955,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       await this.adjustOpeningBalanceForEntryChange(
         {
           entryDate: parseToStandardDate(entry.date) || entry.date,
-          lines: entry.lines.map((line: any) => ({
-            accountId: line.accountId,
-            amount: line.amount,
-          })),
+          lines: entry.lines,
           sign: -1,
         },
         prisma
@@ -2304,7 +2293,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
           date: { lte: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10) },
         },
       },
-      select: { amount: true },
+      select: { amount: true, amountCents: true },
     });
 
     const adjustmentAmount = journalAmountFromCents(
@@ -2335,7 +2324,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     // Create all lines
     console.log("Creating journal lines:", linesData);
     await tx.journalLine.createMany({
-      data: linesData,
+      data: linesData.map(withPostingCents),
     });
 
     return {
@@ -2468,7 +2457,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
 
     const lines = await prisma.journalLine.findMany({
       where: { accountId, entry: { date: { gt: checkpoint?.date, lte: cutoff } } },
-      select: { amount: true },
+      select: { amount: true, amountCents: true },
     });
     const opening = checkpoint ? readCheckpointCents(checkpoint) : 0n;
     return journalAmountFromCents(opening + sumJournalCents(lines));
@@ -2693,10 +2682,6 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     if (lines.length !== 2) throw new Error("Expected double-entry transaction");
 
     const originalEntryDate = parseToStandardDate(entry.date) || entry.date;
-    const originalLines = lines.map((existingLine: any) => ({
-      accountId: existingLine.accountId,
-      amount: existingLine.amount,
-    }));
     const isOpeningBalanceEntry =
       entry.entryType === "opening-balance" || entry.description === "Opening Balance";
 
@@ -2739,11 +2724,11 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     // Update both lines
     await prisma.journalLine.update({
       where: { id: fromLine.id },
-      data: fromLineData,
+      data: withPostingCents(fromLineData),
     });
     await prisma.journalLine.update({
       where: { id: toLine.id },
-      data: toLineData,
+      data: withPostingCents(toLineData),
     });
 
     const updatedEntry = await prisma.journalEntry.findUnique({
@@ -2756,7 +2741,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       await this.adjustOpeningBalanceForEntryChange(
         {
           entryDate: originalEntryDate,
-          lines: originalLines,
+          lines,
           sign: -1,
         },
         prisma
@@ -2764,10 +2749,7 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       await this.adjustOpeningBalanceForEntryChange(
         {
           entryDate: updatedEntryDate,
-          lines: updatedEntry.lines.map((updatedLine: any) => ({
-            accountId: updatedLine.accountId,
-            amount: updatedLine.amount,
-          })),
+          lines: updatedEntry.lines,
           sign: 1,
         },
         prisma

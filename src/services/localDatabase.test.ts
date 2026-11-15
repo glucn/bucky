@@ -64,6 +64,9 @@ describe("Personal database lifecycle", () => {
       ('whole-cents','keep','2026-01-02',-12.34,CURRENT_TIMESTAMP),
       ('sub-cent','keep','2026-01-03',12.345,CURRENT_TIMESTAMP),
       ('large','keep','2026-01-04',80000000000000.06,CURRENT_TIMESTAMP)`);
+    await sql("INSERT INTO JournalEntry (id,date,updatedAt) VALUES ('entry','2026-01-02',CURRENT_TIMESTAMP)");
+    await sql(`INSERT INTO JournalLine (id,entryId,accountId,amount,currency) VALUES
+      ('whole','entry','keep',-0.29,'CAD'), ('ambiguous','entry','keep',0.005,'CAD')`);
     await sql(`INSERT INTO InvestmentProperties (id,accountId,tickerSymbol,quantity,costBasisMethod,lots,updatedAt)
       VALUES ('legacy-holding','keep','ABC',3,'FIFO','[]',CURRENT_TIMESTAMP)`);
     await sql(`INSERT INTO SecurityPriceHistory (id,tickerSymbol,date,price,source) VALUES ('legacy-price','ABC','2026-01-02',999,'manual')`);
@@ -80,6 +83,9 @@ describe("Personal database lifecycle", () => {
       { id: "whole-cents", balance: -12.34, balanceCents: "-1234" },
     ]);
     expect(await sql("SELECT balance FROM Checkpoint WHERE id='sub-cent'", result.backupPath!)).toEqual([{ balance: 12.345 }]);
+    expect(await sql("SELECT id,amount,amountCents FROM JournalLine ORDER BY id")).toEqual([
+      { id: "ambiguous", amount: 0.005, amountCents: null }, { id: "whole", amount: -0.29, amountCents: "-29" },
+    ]);
     expect(await sql("SELECT name FROM Account WHERE id='keep'"))
       .toEqual([{ name: "Keep through upgrade" }]);
     expect(await sql("SELECT name FROM Account WHERE id='keep'", result.backupPath!))

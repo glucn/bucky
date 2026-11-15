@@ -2,6 +2,7 @@ export type JournalVerificationCode = "journal-unbalanced" | "journal-account-cu
 
 export type BookFinding =
   | { severity: "error"; code: JournalVerificationCode; entryId: string; date: string; description: string | null; message: string; lineId?: string }
+  | { severity: "warning"; code: "journal-legacy-precision"; entryId: string; date: string; description: string | null; message: string; lineId: string }
   | { severity: "error"; code: "checkpoint-balance"; checkpointId: string; accountId: string; date: string;
       expected: number; actual: number; currency: string; message: string }
   | { severity: "error"; code: "checkpoint-precision"; checkpointId: string; accountId: string; date: string; message: string }

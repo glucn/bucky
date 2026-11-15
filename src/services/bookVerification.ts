@@ -5,7 +5,7 @@ import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
-import { journalAmountFromCents, readCheckpointCents, sumJournalCents, toJournalCents } from "./journalPrecision";
+import { journalAmountFromCents, readCheckpointCents, readPostingCents, sumJournalCents } from "./journalPrecision";
 import { securityMarketData } from "./securityMarketData";
 import { securityQuoteCurrency } from "./securityQuoteCurrency";
 import { createValuationConversionService, type ConversionResult } from "./valuationConversionService";
@@ -18,7 +18,7 @@ const journalSelect = {
   type: true,
   lines: {
     orderBy: { id: "asc" },
-    select: { id: true, amount: true, currency: true, exchangeRate: true, account: { select: { type: true, currency: true } } },
+    select: { id: true, amount: true, amountCents: true, currency: true, exchangeRate: true, account: { select: { type: true, currency: true } } },
   },
 } satisfies Prisma.JournalEntrySelect;
 
@@ -26,11 +26,12 @@ type Entry = Prisma.JournalEntryGetPayload<{ select: typeof journalSelect }>;
 
 function validExchange(entry: Entry): boolean {
   if (entry.lines.length !== 2) return false;
-  const from = entry.lines.find((line) => line.amount < 0);
-  const to = entry.lines.find((line) => line.amount > 0);
+  const from = entry.lines.find((line) => readPostingCents(line) < 0n);
+  const to = entry.lines.find((line) => readPostingCents(line) > 0n);
   if (!from || !to || from.exchangeRate === null || to.exchangeRate !== from.exchangeRate) return false;
   try {
-    resolveCurrencyTransferAmounts({ amountFrom: -from.amount, amountTo: to.amount, exchangeRate: from.exchangeRate });
+    resolveCurrencyTransferAmounts({ amountFrom: journalAmountFromCents(-readPostingCents(from)),
+      amountTo: journalAmountFromCents(readPostingCents(to)), exchangeRate: from.exchangeRate });
     return true;
   } catch {
     return false;
@@ -52,7 +53,7 @@ async function verifyCheckpoints(tx: Prisma.TransactionClient, findings: BookFin
     // The projected account balance takes this checkpoint as an input, so it cannot verify it.
     const lines = await tx.journalLine.findMany({
       where: { accountId, currency: account.currency, entry: { date: { lte: date } } },
-      select: { amount: true },
+      select: { amount: true, amountCents: true },
     });
     try {
       const expected = readCheckpointCents(checkpoint);
@@ -80,12 +81,17 @@ function verifyJournal(entry: Entry, findings: BookFinding[]) {
   const totals = new Map<string, bigint>();
   let invalidAmount = false;
   for (const line of entry.lines) {
+    if (line.amountCents === null) findings.push({
+      severity: "warning", code: "journal-legacy-precision", entryId: entry.id, lineId: line.id,
+      date: entry.date, description: entry.description,
+      message: "The original posting amount needs review before it can be stored in exact cents",
+    });
     // Categories and system accounts can carry postings in multiple currencies.
     if (line.account.type === AccountType.User && line.currency !== line.account.currency) {
       report("journal-account-currency", "Posting currency differs from the account currency", line.id);
     }
     try {
-      const cents = BigInt(toJournalCents(line.amount));
+      const cents = readPostingCents(line);
       totals.set(line.currency, (totals.get(line.currency) ?? 0n) + cents);
     } catch {
       report("journal-amount", "Posting amount exceeds the current supported cent range", line.id);

@@ -61,7 +61,7 @@ export async function recordPortfolioFunding(kind: "deposit" | "withdrawal", por
     if (outgoingCash) {
       const postings = await tx.journalLine.findMany({
         where: { accountId: outgoingCash.id, entry: { date: { lte: date } } },
-        select: { currency: true, amount: true },
+        select: { currency: true, amount: true, amountCents: true },
       });
       if (postings.some(({ currency }) => currency !== outgoingCash.currency)) throw new Error("Portfolio cash journal currency requires review");
       const balance = await databaseService.getAccountBalanceAtDate(outgoingCash.id, date, tx);

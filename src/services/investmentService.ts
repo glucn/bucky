@@ -789,7 +789,7 @@ class InvestmentService {
       if (requireDatedHistory) {
         const postings = await databaseService.prismaClient.journalLine.findMany({
           where: { accountId: tradeCashAccount.id, entry: { date: { lte: asOfDate } } },
-          select: { amount: true, currency: true },
+          select: { amount: true, amountCents: true, currency: true },
         });
         if (postings.some(({ currency }) => currency !== tradeCashAccount.currency)) throw new Error("Portfolio cash journal currency requires review");
         if (sumJournalCents(postings) !== BigInt(toJournalCents(balance))) cashSummaryUnavailable = true;

@@ -42,18 +42,34 @@ export function roundJournalAmount(value: number): number {
   return journalAmountFromCents(BigInt(toJournalCents(value)));
 }
 
-export function sumJournalCents(postings: ReadonlyArray<{ amount: number }>): bigint {
-  return postings.reduce((total, posting) => total + BigInt(toJournalCents(posting.amount)), 0n);
+export function postingAmountFromCents(cents: number | bigint) {
+  const exact = BigInt(cents);
+  return { amount: journalAmountFromCents(exact), amountCents: exact.toString() };
 }
 
-export function readCheckpointCents(checkpoint: { balance: number; balanceCents: string | null }): bigint {
-  if (checkpoint.balanceCents === null) return BigInt(toJournalCents(checkpoint.balance));
-  if (!/^(?:0|-?[1-9][0-9]{0,15})$/.test(checkpoint.balanceCents)) throw precisionError();
-  const cents = BigInt(checkpoint.balanceCents);
+export function withPostingCents<T extends { amount: number }>(posting: T) {
+  return { ...posting, ...postingAmountFromCents(toJournalCents(posting.amount)) };
+}
+
+function readStoredCents(exact: string | null, legacy: number): bigint {
+  if (exact === null) return BigInt(toJournalCents(legacy));
+  if (!/^(?:0|-?[1-9][0-9]{0,15})$/.test(exact)) throw precisionError();
+  const cents = BigInt(exact);
   if (cents < -maxCents || cents > maxCents) throw precisionError();
   return cents;
 }
 
+export function readPostingCents(posting: { amount: number; amountCents: string | null }): bigint {
+  return readStoredCents(posting.amountCents, posting.amount);
+}
+
+export function sumJournalCents(postings: ReadonlyArray<{ amount: number; amountCents: string | null }>): bigint {
+  return postings.reduce((total, posting) => total + readPostingCents(posting), 0n);
+}
+
+export function readCheckpointCents(checkpoint: { balance: number; balanceCents: string | null }): bigint {
+  return readStoredCents(checkpoint.balanceCents, checkpoint.balance);
+}
 export function checkpointBalance(checkpoint: { balance: number; balanceCents: string | null }): number {
   return checkpoint.balanceCents === null ? checkpoint.balance : journalAmountFromCents(readCheckpointCents(checkpoint));
 }

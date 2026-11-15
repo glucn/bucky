@@ -136,6 +136,7 @@ model JournalLine {
   entryId       String
   accountId     String
   amount        Float         // Positive for debit, negative for credit (or vice versa, depending on convention)
+  amountCents   String?       // Canonical signed integer cents
   currency      String        // ISO 4217 currency code, e.g., 'USD', 'EUR'
   exchangeRate  Float?        // Optional, for currency-transfer transactions
   description   String?

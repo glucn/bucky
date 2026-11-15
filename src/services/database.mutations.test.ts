@@ -24,6 +24,8 @@ describe("Journal mutation integrity", () => {
     const result = await databaseService.createJournalEntry({ ...terms, amount: 1.005 });
     expect(result.entry?.lines.map((line: { amount: number }) => line.amount).sort((a: number, b: number) => a - b))
       .toEqual([-1.01, 1.01]);
+    expect(result.entry?.lines.map((line: { amountCents: string }) => line.amountCents).sort())
+      .toEqual(["-101", "101"]);
     const before = await snapshot();
     expect(await databaseService.createJournalEntry({ ...terms, amount: Number.MAX_SAFE_INTEGER }))
       .toMatchObject({ skipped: true, reason: expect.stringContaining("precision") });

@@ -9,6 +9,20 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 62 — Persist exact journal posting cents
+
+- Regular entries, transfers, opening balances, checkpoints, and investment postings
+  now write signed integer cents alongside the numeric amount. Account balances,
+  opening-balance adjustments, checkpoint and portfolio cash calculations, and
+  journal verification use the exact field when available.
+- The migration backfills legacy postings that round-trip through cents within a
+  conservative Float range. **Verify books** links postings outside that range or
+  with sub-cent values to their original entry for review.
+- Other reporting and investment calculations still read the numeric amount. The
+  numeric field remains during the transition of those paths and their contracts.
+- Verification covered 1,219 native tests, 35 targeted encrypted tests, TypeScript,
+  Apple Silicon packaging, and the packaged investment replay and funding workflows.
+
 ### Batch 61 — Persist exact checkpoint cents
 
 - Checkpoints now store canonical signed integer cents as text. Balance calculations
@@ -1459,10 +1473,8 @@ After this small pilot succeeds, expand toward the project plan's criterion: man
 **three months without returning to the old app**. Retaining recovery copies during that period
 remains necessary.
 
-The original recommended first tasks were transaction correctness hardening and personal storage
-with recovery. See the implementation log for delivered portions. The next implementation work
-is **investment corrections and replay,
-exact decimals and whole-book verification**,
-alongside full installed/native recovery/conversion acceptance. Real OS-authentication
-acceptance and the manual recovery drill remain acceptance
-gate; do not treat the delivered recovery code as approval to use Bucky as the sole record.
+The implementation log records the delivered work. The next precision step is to use stored
+posting cents throughout reporting and investment calculations, then migrate the remaining
+financial fields. Bulk backdated statement review and stronger verification remain open.
+Using Bucky as the sole record still depends on the installed macOS authentication and recovery
+drill and completion of the personal pilot.

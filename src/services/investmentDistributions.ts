@@ -1,3 +1,4 @@
+import { postingAmountFromCents } from "./journalPrecision";
 import type { Prisma } from "@prisma/client";
 import { beginInvestmentActivity, finishInvestmentActivity } from "./investmentActivity";
 import { AccountType } from "../shared/accountTypes";
@@ -60,7 +61,7 @@ async function reducedBasis(tx: Prisma.TransactionClient, accountId: string, lot
 function journal(tx: Prisma.TransactionClient, date: string, description: string, type: string, currency: string,
   postings: Array<{ accountId: string; cents: number }>) {
   return tx.journalEntry.create({ data: { date, description, type, displayOrder: Date.now(), lines: { create:
-    postings.map((posting) => ({ accountId: posting.accountId, amount: posting.cents / 100, currency, description })),
+    postings.map((posting) => ({ accountId: posting.accountId, ...postingAmountFromCents(posting.cents), currency, description })),
   } }, include: { lines: true } });
 }
 async function incomeAccount(tx: Prisma.TransactionClient) {

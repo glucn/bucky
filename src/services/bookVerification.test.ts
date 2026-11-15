@@ -4,6 +4,7 @@ import { databaseService } from "./database";
 import { resetTestDatabase } from "./database.test.utils";
 import { verifyBook } from "./bookVerification";
 import { investmentService } from "./investmentService";
+import { withPostingCents } from "./journalPrecision";
 
 const db = () => databaseService.prismaClient;
 beforeEach(async () => { await resetTestDatabase(); });
@@ -16,7 +17,7 @@ async function fixture(date = "2026-11-01") {
     db().account.create({ data: { name: "Checker equity", currency: "USD", type: AccountType.System } }),
   ]);
   const entry = (lines: Array<{ accountId: string; amount: number; currency: string; exchangeRate?: number }>, type?: string) =>
-    db().journalEntry.create({ data: { date, type, lines: { create: lines } }, include: { lines: true } });
+    db().journalEntry.create({ data: { date, type, lines: { create: lines.map(withPostingCents) } }, include: { lines: true } });
   return { cad, usd, category, equity, entry };
 }
 
@@ -27,6 +28,18 @@ it("accepts balanced native-currency postings, portfolio FX and nonfinancial spl
   await entry([{ accountId: cad.id, amount: -12, currency: "CAD", exchangeRate: 0.75 }, { accountId: usd.id, amount: 9, currency: "USD", exchangeRate: 0.75 }], "investment_cash_deposit");
   await entry([], "stock_split");
   expect(await verifyBook()).toEqual({ findings: [] });
+});
+
+it("reports a retained posting whose original precision needs review", async () => {
+  const { cad, category } = await fixture();
+  const saved = await db().journalEntry.create({ data: { date: "2026-11-01", lines: { create: [
+    { accountId: cad.id, amount: -1.005, currency: "CAD" },
+    { accountId: category.id, amount: 1.005, currency: "CAD" },
+  ] } } });
+  expect((await verifyBook()).findings).toEqual([
+    expect.objectContaining({ entryId: saved.id, code: "journal-legacy-precision", severity: "warning" }),
+    expect.objectContaining({ entryId: saved.id, code: "journal-legacy-precision", severity: "warning" }),
+  ]);
 });
 
 it("reports persisted posting discrepancies by record and leaves the book unchanged", async () => {
@@ -75,6 +88,18 @@ it("preserves a cent between large offsetting postings when creating and verifyi
   const result = await databaseService.createCheckpoint({ accountId: cad.id, date: "2026-02-01", balance: 0.02 });
   expect(result.adjustmentAmount).toBe(0.01);
   expect(await verifyBook("2026-02-01")).toEqual({ findings: [] });
+});
+
+it("calculates balances and verifies a posted entry from its exact stored cents", async () => {
+  const { cad, category } = await fixture();
+  const saved = await databaseService.createJournalEntry({
+    fromAccountId: cad.id, toAccountId: category.id, amount: 12.34, date: "2026-11-01",
+  });
+  const posting = saved.entry!.lines.find((line: { accountId: string }) => line.accountId === cad.id)!;
+  expect(posting.amountCents).toBe("-1234");
+  await db().journalLine.update({ where: { id: posting.id }, data: { amount: -999 } });
+  expect(await databaseService.getAccountBalanceAtDate(cad.id, "2026-11-01")).toBe(-12.34);
+  expect(await verifyBook()).toEqual({ findings: [] });
 });
 
 it("uses persisted exact checkpoint cents and calls out a legacy checkpoint awaiting review", async () => {
