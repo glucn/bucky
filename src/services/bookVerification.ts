@@ -5,6 +5,7 @@ import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
 import { hasValidExchangePostings, isCurrencyExchange } from "./journalValidation";
+import { readLinkedCheckpointAdjustment } from "./checkpointAdjustment";
 import { journalAmountFromCents, readCheckpointCents, readPostingCents, sumJournalCents } from "./journalPrecision";
 import { securityMarketData } from "./securityMarketData";
 import { securityQuoteCurrency } from "./securityQuoteCurrency";
@@ -27,13 +28,20 @@ type Entry = Prisma.JournalEntryGetPayload<{ select: typeof journalSelect }>;
 async function verifyCheckpoints(tx: Prisma.TransactionClient, findings: BookFinding[]) {
   const checkpoints = await tx.checkpoint.findMany({
     orderBy: [{ date: "asc" }, { id: "asc" }],
-    select: { id: true, date: true, accountId: true, balance: true, balanceCents: true, account: { select: { currency: true } } },
+    select: { id: true, date: true, accountId: true, balance: true, balanceCents: true, journalEntryId: true,
+      account: { select: { currency: true } } },
   });
   for (const checkpoint of checkpoints) {
     const { id, date, accountId, account } = checkpoint;
     if (checkpoint.balanceCents === null) findings.push({
       severity: "warning", code: "checkpoint-legacy-precision", checkpointId: id, accountId, date,
       message: "The original checkpoint balance needs review before it can be stored in exact cents",
+    });
+    const journalEntryId = checkpoint.journalEntryId;
+    const adjustment = journalEntryId ? await readLinkedCheckpointAdjustment(tx, { journalEntryId, accountId, date }) : null;
+    if (journalEntryId && (!adjustment || adjustment.currency !== account.currency)) findings.push({
+      severity: "error", code: "checkpoint-adjustment-link", checkpointId: id, accountId, date, journalEntryId,
+      message: "The linked adjustment does not match this checkpoint",
     });
     // Include the recorded adjustment and other postings through the end of the checkpoint date.
     // The projected account balance takes this checkpoint as an input, so it cannot verify it.
@@ -44,6 +52,15 @@ async function verifyCheckpoints(tx: Prisma.TransactionClient, findings: BookFin
     try {
       const expected = readCheckpointCents(checkpoint);
       const actual = sumJournalCents(lines);
+      if (adjustment?.currency === account.currency && journalEntryId) {
+        const difference = readPostingCents(adjustment);
+        if (difference !== 0n) findings.push({
+          severity: "warning", code: "checkpoint-adjustment", checkpointId: id, accountId, date, journalEntryId,
+          currency: account.currency, amount: journalAmountFromCents(difference),
+          unadjustedBalance: journalAmountFromCents(actual - difference),
+          message: "An adjustment was posted to match the checkpoint balance",
+        });
+      }
       if (actual !== expected) findings.push({
         severity: "error", code: "checkpoint-balance", checkpointId: id, accountId, date,
         expected: journalAmountFromCents(expected), actual: journalAmountFromCents(actual), currency: account.currency,

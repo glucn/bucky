@@ -69,13 +69,17 @@ it("keeps foreign-currency checkpoint postings balanced and verifies the stored 
   const { checkpoint, journalEntry } = await databaseService.createCheckpoint({ accountId: cad.id, date: "2026-11-01", balance: 200 });
   const offsets = await db().journalLine.findMany({ where: { entryId: journalEntry.id } });
   expect(offsets.map(({ currency }) => currency)).toEqual(["CAD", "CAD"]);
-  expect(await verifyBook()).toEqual({ findings: [] });
+  const adjustment = expect.objectContaining({ code: "checkpoint-adjustment", severity: "warning",
+    checkpointId: checkpoint.id, amount: 200, unadjustedBalance: 0, currency: "CAD" });
+  expect(await verifyBook()).toEqual({ findings: [adjustment] });
 
   await entry([{ accountId: cad.id, amount: -12, currency: "CAD" }, { accountId: category.id, amount: 12, currency: "CAD" }]);
-  expect(await verifyBook()).toEqual({ findings: [expect.objectContaining({
+  expect(await verifyBook()).toEqual({ findings: expect.arrayContaining([
+    expect.objectContaining({ code: "checkpoint-adjustment", amount: 200, unadjustedBalance: -12 }),
+    expect.objectContaining({
     code: "checkpoint-balance", checkpointId: checkpoint.id, accountId: cad.id,
     expected: 200, actual: 188, currency: "CAD",
-  })] });
+  })]) });
   expect((await db().checkpoint.findUniqueOrThrow({ where: { id: checkpoint.id } })).balance).toBe(200);
 });
 
@@ -87,7 +91,9 @@ it("preserves a cent between large offsetting postings when creating and verifyi
   expect(await databaseService.getAccountBalanceAtDate(cad.id, "2026-02-01")).toBe(0.01);
   const result = await databaseService.createCheckpoint({ accountId: cad.id, date: "2026-02-01", balance: 0.02 });
   expect(result.adjustmentAmount).toBe(0.01);
-  expect(await verifyBook("2026-02-01")).toEqual({ findings: [] });
+  expect(await verifyBook("2026-02-01")).toEqual({ findings: [expect.objectContaining({
+    code: "checkpoint-adjustment", severity: "warning", amount: 0.01, unadjustedBalance: 0.01,
+  })] });
 });
 
 it("calculates balances and verifies a posted entry from its exact stored cents", async () => {
@@ -109,7 +115,9 @@ it("uses persisted exact checkpoint cents and calls out a legacy checkpoint awai
   await db().checkpoint.update({ where: { id: checkpoint.id }, data: { balance: 99 } });
   expect(await databaseService.getAccountBalanceAtDate(cad.id, "2026-11-01")).toBe(10.01);
   expect((await databaseService.getLatestCheckpointForAccount(cad.id))?.balance).toBe(10.01);
-  expect(await verifyBook()).toEqual({ findings: [] });
+  expect(await verifyBook()).toEqual({ findings: [expect.objectContaining({
+    code: "checkpoint-adjustment", severity: "warning", amount: 10.01,
+  })] });
   const legacy = await db().checkpoint.create({ data: { accountId: cad.id, date: "2026-11-02", balance: 10.011 } });
   expect((await verifyBook()).findings).toContainEqual(expect.objectContaining({
     severity: "warning", code: "checkpoint-legacy-precision", checkpointId: legacy.id,
@@ -145,6 +153,19 @@ it("keeps an ambiguous legacy checkpoint and its possible adjustments intact", a
   await expect(databaseService.deleteCheckpoint(first.checkpoint.id)).rejects.toThrow(/ambiguous/i);
   expect(await db().checkpoint.count()).toBe(2);
   expect(await db().journalEntry.count()).toBe(2);
+});
+
+it("reports a wrong checkpoint link and refuses to delete the linked ordinary journal", async () => {
+  const { cad, category, entry } = await fixture();
+  const ordinary = await entry([{ accountId: cad.id, amount: -12, currency: "CAD" }, { accountId: category.id, amount: 12, currency: "CAD" }]);
+  const { checkpoint } = await databaseService.createCheckpoint({ accountId: cad.id, date: "2026-11-01", balance: 200 });
+  await db().checkpoint.update({ where: { id: checkpoint.id }, data: { journalEntryId: ordinary.id } });
+  expect((await verifyBook()).findings).toContainEqual(expect.objectContaining({
+    code: "checkpoint-adjustment-link", severity: "error", checkpointId: checkpoint.id,
+  }));
+  await expect(databaseService.deleteCheckpoint(checkpoint.id)).rejects.toThrow(/adjustment.*link/i);
+  expect(await db().journalEntry.findUnique({ where: { id: ordinary.id }, include: { lines: true } })).toEqual(ordinary);
+  expect(await db().checkpoint.count()).toBe(1);
 });
 
 it("reconciles the destination of an FX transfer without reversing the stored rate", async () => {

@@ -8,6 +8,7 @@ import {
 import { localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
 import { autoCategorizationService } from "./autoCategorizationService";
 import { hasValidExchangePostings, isCurrencyExchange, resolveCurrencyTransferAmounts } from "./journalValidation";
+import { readLinkedCheckpointAdjustment } from "./checkpointAdjustment";
 import { checkpointBalance, journalAmountFromCents, postingAmountFromCents, readCheckpointCents, readPostingCents, roundJournalAmount, sumJournalCents, toJournalCents, withPostingCents } from "./journalPrecision";
 import { resolveDatabaseFile } from "./localDatabase";
 import { createEncryptedPrisma, initializeEncryptedDatabase } from "./encryptedDatabase";
@@ -2392,6 +2393,9 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     }
 
     let entryId = checkpoint.journalEntryId;
+    if (entryId && !await readLinkedCheckpointAdjustment(tx, { ...checkpoint, journalEntryId: entryId })) {
+      throw new Error("The checkpoint adjustment link does not identify its journal entry");
+    }
     if (!entryId) {
       const candidates = await tx.journalEntry.findMany({
         where: {

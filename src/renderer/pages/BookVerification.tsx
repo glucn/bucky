@@ -13,6 +13,15 @@ function FindingDetails({ finding }: { finding: BookFinding }) {
     <p>Journal balance {formatValuationAmount(finding.actual, finding.currency, { disambiguate: true })}</p>
     <p>Account {finding.accountId}</p>
   </>;
+  if (finding.code === "checkpoint-adjustment") return <>
+    <p>{finding.date} · Checkpoint {finding.checkpointId}</p>
+    <p>Journal excluding this adjustment {formatValuationAmount(finding.unadjustedBalance, finding.currency, { disambiguate: true })}</p>
+    <p>Adjustment {formatValuationAmount(finding.amount, finding.currency, { disambiguate: true })}</p>
+    <p>Journal entry {finding.journalEntryId} · Account {finding.accountId}</p>
+  </>;
+  if (finding.code === "checkpoint-adjustment-link") {
+    return <p>{finding.date} · Checkpoint {finding.checkpointId} · Journal entry {finding.journalEntryId}</p>;
+  }
   if ("checkpointId" in finding) {
     return <p>{finding.date} · Checkpoint {finding.checkpointId} · Account {finding.accountId}</p>;
   }

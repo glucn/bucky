@@ -9,6 +9,17 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 78 — Show checkpoint adjustments in verification
+
+- A nonzero linked checkpoint adjustment appears as a warning with the journal
+  balance excluding the adjustment and the amount posted. Verification still
+  checks the resulting balance separately.
+- A bad link reports an error. Deletion and reconciliation validate the linked
+  journal's identity before changing either record.
+- Adjustment findings cover checkpoints with explicit journal links. Legacy
+  checkpoints still use the balance check.
+- Verification covered 29 focused native tests, 27 encrypted tests, and TypeScript.
+
 ### Batch 77 — Reconcile both sides of an FX transfer
 
 - Checkpoint reconciliation validates the stored debit and credit in their
