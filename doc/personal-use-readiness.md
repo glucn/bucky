@@ -9,6 +9,16 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 83 — Review the replacement adjustment before reconciling
+
+- Reconciliation first shows the journal balance excluding the checkpoint's
+  current adjustment, the retained statement balance, and the existing and
+  proposed adjustments. The preview leaves the book intact.
+- Saving checks the preview again in the replacement transaction. A missing
+  or stale review leaves the original checkpoint and journal in place.
+- Verification covered 37 focused native tests, 19 encrypted tests, TypeScript,
+  Apple Silicon packaging, and the packaged checkpoint replacement workflow.
+
 ### Batch 82 — Review statement differences before posting checkpoints
 
 - Both checkpoint creation forms request a read-only preview of the journal

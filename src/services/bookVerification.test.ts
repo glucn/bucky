@@ -175,6 +175,25 @@ it("previews the statement discrepancy without writing and refuses a stale revie
   expect(saved.adjustmentAmount).toBe(7);
 });
 
+it("previews a replacement without its old adjustment and rejects a stale reconciliation", async () => {
+  const { cad, category, entry } = await fixture();
+  const input = { accountId: cad.id, date: "2026-11-01", balance: 20 };
+  await entry([{ accountId: cad.id, amount: 12, currency: "CAD" }, { accountId: category.id, amount: -12, currency: "CAD" }]);
+  const saved = await databaseService.createCheckpoint(input);
+  await entry([{ accountId: cad.id, amount: 1, currency: "CAD" }, { accountId: category.id, amount: -1, currency: "CAD" }]);
+  const preview = await databaseService.reviewCheckpointReconciliation(saved.checkpoint.id);
+  expect(preview).toMatchObject({ journalBalance: 13, statementBalance: 20, previousAdjustmentAmount: 8, adjustmentAmount: 7 });
+  expect(await db().checkpoint.count()).toBe(1);
+  expect(await db().journalEntry.count()).toBe(3);
+  await entry([{ accountId: cad.id, amount: 2, currency: "CAD" }, { accountId: category.id, amount: -2, currency: "CAD" }]);
+  await expect(databaseService.reconcileCheckpoint(saved.checkpoint.id, undefined, preview.token)).rejects.toThrow(/review/i);
+  expect(await db().checkpoint.findUnique({ where: { id: saved.checkpoint.id } })).not.toBeNull();
+  expect(await db().journalEntry.findUnique({ where: { id: saved.journalEntry.id } })).not.toBeNull();
+  const current = await databaseService.reviewCheckpointReconciliation(saved.checkpoint.id);
+  const replacement = await databaseService.reconcileCheckpoint(saved.checkpoint.id, undefined, current.token);
+  expect(replacement.adjustmentAmount).toBe(5);
+});
+
 it("keeps an ambiguous legacy checkpoint and its possible adjustments intact", async () => {
   const { cad } = await fixture();
   const data = { accountId: cad.id, date: "2026-11-01", balance: 200, description: "Statement" };

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { expect, it, vi } from "vitest";
-import { saveCheckpointAfterReview } from "./checkpointReview";
+import { reconcileCheckpointAfterReview, saveCheckpointAfterReview } from "./checkpointReview";
 
 const draft = { accountId: "cash", date: "2026-11-01", balance: 20 };
 
@@ -17,6 +17,25 @@ it("shows the statement discrepancy and leaves a cancelled review unwritten", as
     confirm.mockReturnValue(true);
     await saveCheckpointAfterReview(draft);
     expect(invoke).toHaveBeenLastCalledWith("create-checkpoint", { ...draft, reviewToken: "review-1" });
+  } finally {
+    confirm.mockRestore();
+  }
+});
+
+it("shows the previous and replacement adjustments before reconciling", async () => {
+  const invoke = vi.fn().mockResolvedValue({ success: true, preview: {
+    currency: "CAD", statementBalance: 20, journalBalance: 13, previousAdjustmentAmount: 8, adjustmentAmount: 7,
+    token: "replacement-1",
+  } });
+  Object.defineProperty(window, "electron", { configurable: true, value: { ipcRenderer: { invoke } } });
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  try {
+    expect(await reconcileCheckpointAfterReview("cp")).toBeNull();
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/Existing adjustment CAD 8\.00[\s\S]*Replacement adjustment CAD 7\.00/));
+    expect(invoke).toHaveBeenCalledTimes(1);
+    confirm.mockReturnValue(true);
+    await reconcileCheckpointAfterReview("cp");
+    expect(invoke).toHaveBeenLastCalledWith("reconcile-checkpoint", { checkpointId: "cp", reviewToken: "replacement-1" });
   } finally {
     confirm.mockRestore();
   }

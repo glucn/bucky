@@ -181,6 +181,7 @@ function setupIpcHandlers() {
   ipcMain.removeHandler("restore-account");
   ipcMain.removeHandler("create-checkpoint");
   ipcMain.removeHandler("review-checkpoint");
+  ipcMain.removeHandler("review-checkpoint-reconciliation");
   ipcMain.removeHandler("get-checkpoints-for-account");
   ipcMain.removeHandler("get-latest-checkpoint-for-account");
   ipcMain.removeHandler("delete-checkpoint");
@@ -857,9 +858,18 @@ function setupIpcHandlers() {
     }
   );
 
-  ipcMain.handle("reconcile-checkpoint", async (_, checkpointId: string) => {
+  ipcMain.handle("review-checkpoint-reconciliation", async (_, checkpointId: string) => {
     try {
-      const result = await databaseService.reconcileCheckpoint(checkpointId);
+      return { success: true, preview: await databaseService.reviewCheckpointReconciliation(checkpointId) };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : "Failed to review reconciliation" };
+    }
+  });
+
+  ipcMain.handle("reconcile-checkpoint", async (_, input: { checkpointId: string; reviewToken?: string }) => {
+    try {
+      if (typeof input?.checkpointId !== "string") throw new Error("Select a checkpoint and review its adjustment first");
+      const result = await databaseService.reconcileCheckpoint(input.checkpointId, undefined, input.reviewToken ?? null);
       return { success: true, checkpoint: result };
     } catch (error) {
       console.error("Error in reconcile-checkpoint:", error);

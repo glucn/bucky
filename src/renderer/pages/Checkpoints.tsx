@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Account } from "../types";
 import { useAccounts } from "../context/AccountsContext";
 import { formatCurrencyAmountDetail } from "../utils/currencyUtils";
-import { saveCheckpointAfterReview } from "../utils/checkpointReview";
+import { reconcileCheckpointAfterReview, saveCheckpointAfterReview } from "../utils/checkpointReview";
 
 interface Checkpoint {
   id: string;
@@ -170,17 +170,10 @@ This action cannot be undone.`;
   };
 
   const handleReconcileAgain = async (checkpointId: string) => {
-    if (
-      !confirm(
-        "Are you sure you want to reconcile this checkpoint again? This will update the checkpoint to match the current sum of all transactions up to its date."
-      )
-    )
-      return;
+    setError(null);
     try {
-      const result = await window.electron.ipcRenderer.invoke(
-        "reconcile-checkpoint",
-        checkpointId
-      );
+      const result = await reconcileCheckpointAfterReview(checkpointId);
+      if (!result) return;
       if (result.success) {
         await fetchCheckpoints();
         await refreshAccounts();

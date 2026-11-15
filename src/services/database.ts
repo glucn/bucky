@@ -6,7 +6,7 @@ import {
   AccountSubtype,
 } from "../shared/accountTypes";
 import { localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
-import type { CheckpointReview } from "../shared/checkpointReview";
+import type { CheckpointReconciliationReview, CheckpointReview } from "../shared/checkpointReview";
 import { autoCategorizationService } from "./autoCategorizationService";
 import { hasValidExchangePostings, isCurrencyExchange, isOpeningBalanceEntry, resolveCurrencyTransferAmounts } from "./journalValidation";
 import { resolveCheckpointAdjustment } from "./checkpointAdjustment";
@@ -2201,13 +2201,19 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
   public async reviewCheckpoint(data: { accountId: string; date: string | Date; balance: number },
     tx?: TransactionClient): Promise<CheckpointReview> {
     if (!tx) return this.prisma.$transaction((transaction) => this.reviewCheckpoint(data, transaction));
+    return this.calculateCheckpointReview(data, tx);
+  }
+
+  private async calculateCheckpointReview(data: { accountId: string; date: string | Date; balance: number },
+    tx: TransactionClient, excludedEntryId?: string): Promise<CheckpointReview> {
     const date = parseToStandardDate(data.date);
     if (!date) throw new Error("Invalid checkpoint date");
     const account = await tx.account.findUnique({ where: { id: data.accountId }, select: { currency: true } });
     if (!account) throw new Error("Account not found");
     const { currency } = account;
     const postings = await tx.journalLine.findMany({
-      where: { accountId: data.accountId, currency, entry: { date: { lte: date } } },
+      where: { accountId: data.accountId, currency, entryId: excludedEntryId ? { not: excludedEntryId } : undefined,
+        entry: { date: { lte: date } } },
       select: { amount: true, amountCents: true },
     });
     const journalCents = sumJournalCents(postings);
@@ -2472,30 +2478,15 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     return balances;
   }
 
-  /**
-   * Reconcile a checkpoint: delete the old checkpoint and its journal entry, then create a new one at the same date with the original balance.
-   */
-  public async reconcileCheckpoint(
-    checkpointId: string,
-    tx?: TransactionClient
-  ): Promise<any> {
-    // If no transaction provided, create one
-    if (!tx) {
-      return this.prisma.$transaction(
-        async (trx) => {
-          return this.reconcileCheckpoint(checkpointId, trx);
-        },
-        { timeout: 20000 }
-      );
-    }
-
-    console.log("Starting reconcileCheckpoint for", checkpointId);
+  private async prepareCheckpointReconciliation(checkpointId: string, tx: TransactionClient) {
     const checkpoint = await tx.checkpoint.findUnique({
       where: { id: checkpointId },
     });
     if (!checkpoint) throw new Error("Checkpoint not found");
     if (checkpoint.balanceCents === null) throw new Error("Review the original statement before replacing this checkpoint");
-    console.log("Found checkpoint:", checkpoint);
+    const match = await resolveCheckpointAdjustment(tx, checkpoint);
+    if (match.status === "invalid-link") throw new Error("The checkpoint adjustment link does not identify its journal entry");
+    if (match.status === "ambiguous") throw new Error("Checkpoint adjustment is ambiguous. Review the original records.");
 
     // --- Multi-currency reconciliation validation ---
     // Find all journal lines for this account up to the checkpoint date
@@ -2518,34 +2509,35 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
         throw new Error(`Currency transfer inconsistency detected in entry ${entry.id}. Review the amounts and recorded exchange rate.`);
       }
     }
-    // --- End multi-currency validation ---
-
-    // Store the original balance before deleting
     const originalBalance = checkpointBalance(checkpoint);
-    const originalDescription = checkpoint.description;
+    const oldEntryId = match.status === "matched" ? match.journalEntryId : undefined;
+    const previousAdjustmentAmount = match.status === "matched" ? journalAmountFromCents(readPostingCents(match.posting)) : null;
+    const review = await this.calculateCheckpointReview({ ...checkpoint, balance: originalBalance }, tx, oldEntryId);
+    const preview: CheckpointReconciliationReview = { ...review, previousAdjustmentAmount,
+      token: JSON.stringify([checkpoint.id, oldEntryId, previousAdjustmentAmount, review.token]) };
+    return { checkpoint, originalBalance, preview };
+  }
 
-    await this.deleteCheckpoint(checkpointId, tx);
-    console.log("Deleted old checkpoint");
+  public async reviewCheckpointReconciliation(checkpointId: string): Promise<CheckpointReconciliationReview> {
+    return this.prisma.$transaction(async (tx) => (await this.prepareCheckpointReconciliation(checkpointId, tx)).preview);
+  }
 
-    try {
-      const result = await this.createCheckpoint(
-        {
-          accountId: checkpoint.accountId,
-          date: checkpoint.date,
-          balance: originalBalance, // Use the original balance, not recalculated
-          description: originalDescription || "Reconciled again",
-        },
-        tx
-      );
-      console.log(
-        "Created new checkpoint with original balance:",
-        originalBalance
-      );
-      return result;
-    } catch (err) {
-      console.error("Error creating new checkpoint:", err);
-      throw err;
+  /** Replace the adjustment at the same date with the retained statement balance. */
+  public async reconcileCheckpoint(checkpointId: string, tx?: TransactionClient, reviewToken?: string | null): Promise<any> {
+    if (!tx) {
+      return this.prisma.$transaction((trx) => this.reconcileCheckpoint(checkpointId, trx, reviewToken), { timeout: 20000 });
     }
+    const { checkpoint, originalBalance, preview } = await this.prepareCheckpointReconciliation(checkpointId, tx);
+    if (reviewToken !== undefined && reviewToken !== preview.token) {
+      throw new Error("Review the current statement and replacement adjustment before reconciling");
+    }
+    await this.deleteCheckpoint(checkpointId, tx);
+    return this.createCheckpoint({
+      accountId: checkpoint.accountId,
+      date: checkpoint.date,
+      balance: originalBalance,
+      description: checkpoint.description || "Reconciled again",
+    }, tx);
   }
   /**
    * Update a journal entry (transaction) by lineId.

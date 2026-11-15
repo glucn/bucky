@@ -64,7 +64,11 @@ test("packaged native and FX funding select cash explicitly, retain refusals and
     expect(reviewed).toMatchObject({ success: true, preview: { journalBalance: 240, statementBalance: 245, adjustmentAmount: 5 } });
     const checkpoint = await invoke("create-checkpoint", { ...statement, reviewToken: reviewed.preview.token });
     expect(checkpoint).toMatchObject({ success: true, checkpoint: { adjustmentAmount: 5 } });
-    const reconciled = await invoke("reconcile-checkpoint", checkpoint.checkpoint.checkpoint.id);
+    const checkpointId = checkpoint.checkpoint.checkpoint.id;
+    expect(await invoke("reconcile-checkpoint", { checkpointId })).toMatchObject({ success: false, error: expect.stringMatching(/review/i) });
+    const replacement = await invoke("review-checkpoint-reconciliation", checkpointId);
+    expect(replacement).toMatchObject({ success: true, preview: { journalBalance: 240, previousAdjustmentAmount: 5, adjustmentAmount: 5 } });
+    const reconciled = await invoke("reconcile-checkpoint", { checkpointId, reviewToken: replacement.preview.token });
     expect(reconciled).toMatchObject({ success: true, checkpoint: { adjustmentAmount: 5 } });
     expect(await invoke("delete-checkpoint", reconciled.checkpoint.checkpoint.id)).toMatchObject({ success: true });
     expect(await invoke("get-account-balance", cadId)).toEqual({ success: true, balance: 156 });

@@ -5,3 +5,7 @@ export type CheckpointReview = {
   adjustmentAmount: number;
   token: string;
 };
+
+export type CheckpointReconciliationReview = CheckpointReview & {
+  previousAdjustmentAmount: number | null;
+};

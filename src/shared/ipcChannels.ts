@@ -102,6 +102,7 @@ export const APP_IPC_CHANNELS = [
   "move-transaction-up",
   "reconcile-checkpoint",
   "review-checkpoint",
+  "review-checkpoint-reconciliation",
   "record-buy",
   "record-dividend",
   "record-fee",
