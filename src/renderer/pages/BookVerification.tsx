@@ -13,6 +13,9 @@ function FindingDetails({ finding }: { finding: BookFinding }) {
     <p>Journal balance {formatValuationAmount(finding.actual, finding.currency, { disambiguate: true })}</p>
     <p>Account {finding.accountId}</p>
   </>;
+  if (finding.code === "checkpoint-precision") {
+    return <p>{finding.date} · Checkpoint {finding.checkpointId} · Account {finding.accountId}</p>;
+  }
   if (finding.code === "valuation-fx" || finding.code === "valuation-price") {
     return <p>{finding.date} · Account {finding.accountId}</p>;
   }

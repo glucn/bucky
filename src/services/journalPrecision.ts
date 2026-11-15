@@ -41,3 +41,7 @@ export function journalAmountFromCents(cents: bigint): number {
 export function roundJournalAmount(value: number): number {
   return journalAmountFromCents(BigInt(toJournalCents(value)));
 }
+
+export function sumJournalCents(postings: ReadonlyArray<{ amount: number }>): bigint {
+  return postings.reduce((total, posting) => total + BigInt(toJournalCents(posting.amount)), 0n);
+}

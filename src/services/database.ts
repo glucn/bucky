@@ -8,7 +8,7 @@ import {
 import { localCalendarDate, parseToStandardDate } from "../shared/dateUtils";
 import { autoCategorizationService } from "./autoCategorizationService";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
-import { roundJournalAmount } from "./journalPrecision";
+import { journalAmountFromCents, roundJournalAmount, sumJournalCents, toJournalCents } from "./journalPrecision";
 import { resolveDatabaseFile } from "./localDatabase";
 import { createEncryptedPrisma, initializeEncryptedDatabase } from "./encryptedDatabase";
 import { PrismaSession } from "./prismaSession";
@@ -2265,11 +2265,12 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
     }
 
     // 2. Create the checkpoint record
+    const balance = roundJournalAmount(data.balance);
     const checkpoint = await tx.checkpoint.create({
       data: {
         accountId: data.accountId,
         date: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10),
-        balance: data.balance,
+        balance,
         description: data.description,
       },
     });
@@ -2292,24 +2293,21 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       throw new Error("Account not found");
     }
 
-    // Calculate the current balance BEFORE the checkpoint date (excluding checkpoint entries)
+    // Include existing postings through the end of the checkpoint date.
     const linesBeforeCheckpoint = await tx.journalLine.findMany({
       where: {
         accountId: data.accountId,
+        currency: account.currency,
         entry: {
           date: { lte: typeof data.date === "string" ? data.date : data.date.toISOString().slice(0, 10) },
         },
       },
-      include: { entry: true },
+      select: { amount: true },
     });
 
-    let currentBalance = linesBeforeCheckpoint.reduce(
-      (sum: number, line: any) => sum + line.amount,
-      0
+    const adjustmentAmount = journalAmountFromCents(
+      BigInt(toJournalCents(balance)) - sumJournalCents(linesBeforeCheckpoint)
     );
-    currentBalance = Math.round(currentBalance * 100) / 100;
-    let adjustmentAmount =
-      Math.round((data.balance - currentBalance) * 100) / 100;
 
     const linesData = [];
 
@@ -2464,52 +2462,12 @@ console.log("getIncomeExpenseThisMonth returning:", { income, expenses });
       orderBy: { date: "desc" },
     });
 
-    let balance = 0;
-
-    if (checkpoint) {
-      // Start with the checkpoint balance
-
-      // Add all transactions after the checkpoint date up to the target date
-      // BUT exclude checkpoint entries themselves
-      const lines = await prisma.journalLine.findMany({
-        where: {
-          accountId,
-          entry: {
-            date: {
-              gt: checkpoint.date,
-              lte: cutoff,
-            },
-          },
-        },
-        include: { entry: true },
-      });
-
-      // Debug: print the dates of the lines being considered
-      console.log("[getAccountBalanceAtDate] lines after checkpoint:", lines.map(l => l.entry?.date));
-
-      balance = checkpoint.balance + lines.reduce((sum: number, line: any) => sum + line.amount, 0);
-    } else {
-      // No checkpoint, calculate balance from all transactions up to the date
-      // BUT exclude checkpoint entries
-      const lines = await prisma.journalLine.findMany({
-        where: {
-          accountId,
-          entry: { date: { lte: cutoff } },
-        },
-        include: { entry: true },
-      });
-
-      // Debug: print the raw lines array to check if l.entry is present
-      console.log("[getAccountBalanceAtDate] raw lines:", lines);
-
-      // With no checkpoint, the journal is authoritative through the same cutoff.
-      balance = lines.reduce((sum: number, line: any) => sum + line.amount, 0);
-
-      // Debug: print the total balance
-      console.log("[getAccountBalanceAtDate] total balance at cutoff:", balance);
-    }
-
-    return balance;
+    const lines = await prisma.journalLine.findMany({
+      where: { accountId, entry: { date: { gt: checkpoint?.date, lte: cutoff } } },
+      select: { amount: true },
+    });
+    const opening = checkpoint ? BigInt(toJournalCents(checkpoint.balance)) : 0n;
+    return journalAmountFromCents(opening + sumJournalCents(lines));
   }
 
   /**

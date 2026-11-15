@@ -9,6 +9,16 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 59 — Accumulate checkpoint balances in exact cents
+
+- Account balances and checkpoint adjustments sum posting cents as integers through
+  the relevant dates. The verifier calculates the native-currency journal total
+  independently of the recorded checkpoint and reports totals outside the supported range.
+- A regression preserves a cent between large offsetting postings, then checks the
+  resulting checkpoint adjustment and assertion. The Float columns remain in use
+  pending migration.
+- Verification covered 1,214 native tests, 19 targeted encrypted tests, and TypeScript.
+
 ### Batch 58 — Round journal postings with exact decimal arithmetic
 
 - Regular journal creation and editing round the decimal value received at the service

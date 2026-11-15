@@ -5,7 +5,7 @@ import { appSettingsService } from "./appSettingsService";
 import { databaseService } from "./database";
 import { verifyInvestmentSnapshot } from "./investmentActivity";
 import { resolveCurrencyTransferAmounts } from "./journalValidation";
-import { toJournalCents } from "./journalPrecision";
+import { journalAmountFromCents, sumJournalCents, toJournalCents } from "./journalPrecision";
 import { securityMarketData } from "./securityMarketData";
 import { securityQuoteCurrency } from "./securityQuoteCurrency";
 import { createValuationConversionService, type ConversionResult } from "./valuationConversionService";
@@ -45,11 +45,18 @@ async function verifyCheckpoints(tx: Prisma.TransactionClient, findings: BookFin
   for (const { id, date, accountId, balance, account } of checkpoints) {
     // Include the recorded adjustment and other postings through the end of the checkpoint date.
     // The projected account balance takes this checkpoint as an input, so it cannot verify it.
-    const { _sum } = await tx.journalLine.aggregate({
+    const lines = await tx.journalLine.findMany({
       where: { accountId, currency: account.currency, entry: { date: { lte: date } } },
-      _sum: { amount: true },
+      select: { amount: true },
     });
-    const actual = Math.round((_sum.amount ?? 0) * 100) / 100;
+    let actual: number;
+    try {
+      actual = journalAmountFromCents(sumJournalCents(lines));
+    } catch {
+      findings.push({ severity: "error", code: "checkpoint-precision", checkpointId: id, accountId, date,
+        message: "The checkpoint's journal balance exceeds the supported cent range" });
+      continue;
+    }
     if (actual !== balance) findings.push({
       severity: "error", code: "checkpoint-balance", checkpointId: id, accountId, date,
       expected: balance, actual, currency: account.currency,

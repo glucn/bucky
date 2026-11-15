@@ -66,6 +66,17 @@ it("keeps foreign-currency checkpoint postings balanced and verifies the stored 
   expect((await db().checkpoint.findUniqueOrThrow({ where: { id: checkpoint.id } })).balance).toBe(200);
 });
 
+it("preserves a cent between large offsetting postings when creating and verifying checkpoints", async () => {
+  const { cad, category, entry } = await fixture("2026-02-01");
+  for (const amount of [80_000_000_000_000, 0.01, -80_000_000_000_000]) {
+    await entry([{ accountId: cad.id, amount, currency: "CAD" }, { accountId: category.id, amount: -amount, currency: "CAD" }]);
+  }
+  expect(await databaseService.getAccountBalanceAtDate(cad.id, "2026-02-01")).toBe(0.01);
+  const result = await databaseService.createCheckpoint({ accountId: cad.id, date: "2026-02-01", balance: 0.02 });
+  expect(result.adjustmentAmount).toBe(0.01);
+  expect(await verifyBook("2026-02-01")).toEqual({ findings: [] });
+});
+
 it("checks retained investment activity and distinguishes legacy history from inconsistent lots", async () => {
   const portfolio = await investmentService.createInvestmentPortfolio("Verifier portfolio", "CAD");
   const holding = await investmentService.createSecurityAccount(portfolio.group.id, "ABC");
