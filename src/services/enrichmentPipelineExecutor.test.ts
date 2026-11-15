@@ -26,12 +26,15 @@ const provider = (): EnrichmentProviderAdapter => ({
 describe("executeEnrichmentPipeline", () => {
   it("reports a retained quarantined price as an issue rather than a successful usable refresh", async () => {
     const p = provider();
+    const points = [{ marketDate: "2024-01-01", close: "100.00000000000000001", priceBasis: "raw", barStatus: "complete" }];
+    p.fetchSecurityDailyPrices = vi.fn().mockResolvedValue(points);
     const repo = { upsertSecurityMetadataFillMissing: vi.fn(), insertMissingSecurityDailyPrices: vi.fn().mockResolvedValue({ unavailable: 1 }), insertMissingFxDailyRates: vi.fn() };
     const coordinator = createEnrichmentRunCoordinator(), { run } = coordinator.startOrGetExistingRun({ securityMetadata: false, securityPrices: true, fxRates: false });
     const result = await executeEnrichmentPipeline({ runId: run.id, provider: p, repository: repo, coordinator, scope: run.scope,
       securities: [{ ticker: "AAPL", market: "NASDAQ", quoteCurrency: "USD", startDate: "2024-01-01", endDate: "2024-01-03" }], fxPairs: [], retryOptions: { maxRetries: 0, initialDelayMs: 0 } });
     expect(result.status).toBe("completed_with_issues");
     expect(result.failedItems[0].reason).toMatch(/review|unverified/i);
+    expect(repo.insertMissingSecurityDailyPrices).toHaveBeenCalledWith({ ticker: "AAPL", market: "NASDAQ" }, points);
   });
   it.each([
     { symbol: "OTHER", market: "NASDAQ", quoteCurrency: "USD" },

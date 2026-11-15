@@ -1,9 +1,10 @@
 import type { EnrichmentRunScope } from "./enrichmentRunCoordinator";
-import type { EnrichmentProviderAdapter, SecurityDailyPricePoint } from "./enrichmentProviderRegistry";
+import type { EnrichmentProviderAdapter, FxDailyRatePoint, SecurityDailyPricePoint } from "./enrichmentProviderRegistry";
 import { verifyPricePolicy } from "./securityPricePolicy";
 import { withTransientRetry } from "./enrichmentRetry";
 import { parseSecurityIdentity } from "../shared/securityMarket";
 import { isValidStandardDate } from "../shared/dateUtils";
+import { parseSecurityPrice } from "../shared/securityPrices";
 
 type SecurityRange = {
   ticker: string;
@@ -35,7 +36,7 @@ type RepositoryContract = {
   ): Promise<{ unavailable: number } | void>;
   insertMissingFxDailyRates(
     key: { sourceCurrency: string; targetCurrency: string },
-    points: Array<{ marketDate: string; rate: number }>
+    points: FxDailyRatePoint[]
   ): Promise<unknown>;
 };
 
@@ -201,7 +202,7 @@ export const executeEnrichmentPipeline = async (input: PipelineInput) => {
         );
         if (shouldCancel()) return canceledResult();
         if (!Array.isArray(points) || points.some((point) => !isValidStandardDate(point.marketDate) || point.marketDate < security.startDate ||
-          point.marketDate > security.endDate || typeof point.close !== "number" || !Number.isFinite(point.close) || point.close < 0)) {
+          point.marketDate > security.endDate || !parseSecurityPrice(point.close))) {
           throw new Error("Provider returned an invalid or out-of-range security price batch");
         }
         for (const point of points) verifyPricePolicy(point);

@@ -2,7 +2,8 @@ import { databaseService } from "./database";
 import { Prisma } from "@prisma/client";
 import { securityMarketData } from "./securityMarketData";
 import { parseSecurityIdentity } from "../shared/securityMarket";
-import type { SecurityDailyPricePoint } from "./enrichmentProviderRegistry";
+import type { FxDailyRatePoint, SecurityDailyPricePoint } from "./enrichmentProviderRegistry";
+import { parseSecurityPrice } from "../shared/securityPrices";
 
 type SecurityKey = {
   ticker: string;
@@ -63,13 +64,18 @@ class EnrichmentRepository {
 
   async insertMissingFxDailyRates(
     key: FxKey,
-    points: Array<{ marketDate: string; rate: number }>
+    points: FxDailyRatePoint[]
   ) {
     if (points.length === 0) {
       return;
     }
 
-    for (const point of points) {
+    const rates = points.map((point) => {
+      const parsed = parseSecurityPrice(point.rate);
+      if (!parsed || parsed.price <= 0) throw new Error("Provider FX rate must be finite and positive");
+      return { marketDate: point.marketDate, rate: parsed.price, rateDecimal: parsed.priceDecimal };
+    });
+    for (const point of rates) {
       try {
         await databaseService.prismaClient.fxDailyRate.create({
           data: {
@@ -77,7 +83,7 @@ class EnrichmentRepository {
             targetCurrency: key.targetCurrency,
             marketDate: point.marketDate,
             rate: point.rate,
-            rateDecimal: point.rate.toString(),
+            rateDecimal: point.rateDecimal,
             fetchedAt: new Date(),
           },
         });

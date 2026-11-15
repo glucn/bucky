@@ -28,7 +28,7 @@ describe("createTwelveDataEnrichmentProvider", () => {
       ] })); vi.stubGlobal("fetch", fetch);
       const points = await createTwelveDataEnrichmentProvider("test-key").fetchSecurityDailyPrices({ symbol: "ABC", market: "NASDAQ", quoteCurrency: "USD", startDate: "2026-01-01", endDate: "2026-01-03" });
       expect(new URL(fetch.mock.calls[0][0]).searchParams.get("adjust")).toBe("none");
-      expect(points).toEqual([{ marketDate: "2026-01-01", close: 100, priceBasis: "raw", barStatus: "complete" }]);
+      expect(points).toEqual([{ marketDate: "2026-01-01", close: "100", priceBasis: "raw", barStatus: "complete" }]);
     } finally { vi.useRealTimers(); }
   });
   it("qualifies security requests by exchange and rejects a response from another listing", async () => {
@@ -121,7 +121,7 @@ describe("createTwelveDataEnrichmentProvider", () => {
         asJsonResponse({
           meta: { symbol: "AAPL", exchange: "NASDAQ", currency: "USD", interval: "1day", exchange_timezone: "America/New_York" },
           values: [
-            { datetime: "2024-01-02", close: "188.12" },
+            { datetime: "2024-01-02", close: "188.12000000000000001" },
             { datetime: "2024-01-01", close: "187.43" },
           ],
         })
@@ -137,8 +137,8 @@ describe("createTwelveDataEnrichmentProvider", () => {
     });
 
     expect(result).toEqual([
-      { marketDate: "2024-01-01", close: 187.43, priceBasis: "raw", barStatus: "complete" },
-      { marketDate: "2024-01-02", close: 188.12, priceBasis: "raw", barStatus: "complete" },
+      { marketDate: "2024-01-01", close: "187.43", priceBasis: "raw", barStatus: "complete" },
+      { marketDate: "2024-01-02", close: "188.12000000000000001", priceBasis: "raw", barStatus: "complete" },
     ]);
   });
 
@@ -161,6 +161,6 @@ describe("createTwelveDataEnrichmentProvider", () => {
       endDate: "2024-01-01",
     });
 
-    expect(result).toEqual([{ marketDate: "2024-01-01", rate: 1.355 }]);
+    expect(result).toEqual([{ marketDate: "2024-01-01", rate: "1.355" }]);
   });
 });

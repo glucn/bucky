@@ -24,12 +24,12 @@ export type SecurityMetadataSnapshot = {
 
 export type SecurityDailyPricePoint = import("./securityPricePolicy").SecurityPricePolicy & {
   marketDate: string;
-  close: number;
+  close: number | string;
 };
 
 export type FxDailyRatePoint = {
   marketDate: string;
-  rate: number;
+  rate: number | string;
 };
 
 export interface EnrichmentProviderAdapter {

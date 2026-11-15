@@ -3,6 +3,7 @@ import { createValuationConversionService, valuationConversionService } from "./
 import { databaseService } from "./database";
 import { enrichmentRepository } from "./enrichmentRepository";
 import { resetTestDatabase } from "./database.test.utils";
+import { createTwelveDataEnrichmentProvider } from "./providers/twelveDataEnrichmentProvider";
 
 describe("valuationConversionService", () => {
   it("rounds direct and inverse conversions from decimal ratios at the cent boundary", async () => {
@@ -40,6 +41,20 @@ describe("valuationConversionService", () => {
       { sourceCurrency: "USD", targetCurrency: "CAD", marketDate: "2026-01-04", rate: 1.4 },
     ] });
     expect(await service.convertAmount({ amount: 100, sourceCurrency: "USD", targetCurrency: "CAD", asOfDate: "1/3/2026" })).toMatchObject({ convertedAmount: 130, source: "as_of" });
+  });
+  it("retains the provider's decimal through ingestion and cent rounding", async () => {
+    await resetTestDatabase();
+    const pair = { sourceCurrency: "USD", targetCurrency: "CAD" };
+    const marketDate = "2026-01-02", rateDecimal = "1.00499999999999999999";
+    const provider = createTwelveDataEnrichmentProvider("synthetic-key");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      values: [{ datetime: marketDate, close: rateDecimal }],
+    })));
+    const points = await provider.fetchFxDailyRates({ ...pair, startDate: marketDate, endDate: marketDate });
+    await enrichmentRepository.insertMissingFxDailyRates(pair, points);
+    expect(await databaseService.prismaClient.fxDailyRate.findFirstOrThrow()).toMatchObject({ rate: 1.005, rateDecimal });
+    expect(await valuationConversionService.convertAmount({ ...pair, amount: 1, asOfDate: marketDate, roundToCents: true }))
+      .toMatchObject({ rate: 1.005, convertedAmount: 1 });
   });
   it("returns a known zero without querying rates or inventing a cross-currency rate", async () => {
     const findFxRates = vi.fn(async () => []), service = createValuationConversionService({ findFxRates });

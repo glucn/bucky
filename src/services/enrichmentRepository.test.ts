@@ -13,7 +13,9 @@ describe("enrichmentRepository", () => {
   });
   it("does not advance provider refresh coverage with manual points or future provider dates", async () => {
     const key = { ticker: "ABC", market: "NASDAQ" };
-    await enrichmentRepository.insertMissingSecurityDailyPrices(key, [{ marketDate: "2024-01-02", close: 10, priceBasis: "raw" as const, barStatus: "complete" as const }]);
+    const closeDecimal = "10.00000000000000001";
+    await enrichmentRepository.insertMissingSecurityDailyPrices(key, [{ marketDate: "2024-01-02", close: closeDecimal, priceBasis: "raw", barStatus: "complete" }]);
+    expect(await databaseService.prismaClient.securityDailyPrice.findFirstOrThrow()).toMatchObject({ close: 10, closeDecimal });
     await securityMarketData.write({ identity: key, points: [{ date: "2024-01-05", price: 12, priceBasis: "raw" as const, barStatus: "complete" as const }], mode: "fill", source: "manual" });
     await databaseService.prismaClient.securityDailyPrice.create({ data: { ...key, marketDate: "2999-01-01", close: 999, source: "provider" } });
     expect(await enrichmentRepository.getLatestSecurityPriceDate(key)).toBe("2024-01-02");

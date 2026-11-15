@@ -4,6 +4,7 @@ import type {
   SecurityDailyPricePoint,
 } from "../enrichmentProviderRegistry";
 import { parseSecurityIdentity } from "../../shared/securityMarket";
+import { parseSecurityPrice } from "../../shared/securityPrices";
 import { exchangeCalendarDate } from "../securityPricePolicy";
 
 const toUserFriendlyProviderMessage = (value: unknown): string => {
@@ -15,17 +16,14 @@ const toUserFriendlyProviderMessage = (value: unknown): string => {
   return cleaned || "Unable to fetch data from provider";
 };
 
-const mapSeriesValues = (values: any[]): Array<{ marketDate: string; close: number }> =>
+const mapSeriesValues = (values: any[]): Array<{ marketDate: string; close: string }> =>
   (values || [])
-    .map((value) => ({
-      marketDate: value?.datetime,
-      close: (() => {
-        const text = typeof value?.close === "string" ? value.close.trim() : String(value?.close);
-        if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(text) || !Number.isFinite(Number(text)) || Number(text) < 0) throw new Error("Invalid provider price number");
-        return Number(text);
-      })(),
-    }))
-    .filter((value) => value.marketDate && Number.isFinite(value.close))
+    .map((value) => {
+      const close = parseSecurityPrice(value?.close);
+      if (!close) throw new Error("Invalid provider price number");
+      return { marketDate: value?.datetime, close: close.priceDecimal };
+    })
+    .filter((value) => value.marketDate)
     .sort((left, right) => left.marketDate.localeCompare(right.marketDate));
 
 export const createTwelveDataEnrichmentProvider = (

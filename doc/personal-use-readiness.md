@@ -9,6 +9,15 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 87 — Preserve provider closing-price and FX decimals
+
+- Twelve Data closing prices and rates retain the provider's decimal text
+  through enrichment and storage. Numeric feeds still use the representation
+  available at their input boundary.
+- The FX regression ingests a rate just below a half-cent threshold into
+  `FxDailyRate` and verifies the converted amount rounds down. Provider
+  refresh still fills missing records and preserves existing quotes.
+
 ### Batch 86 — Preserve entered closing-price digits through review
 
 - Manual and CSV closes keep their decimal text through preview, history,
