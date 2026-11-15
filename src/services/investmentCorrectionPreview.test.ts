@@ -66,6 +66,35 @@ it("inserts a missed trade and recalculates future FIFO without a duplicate retr
   expect(await investmentService.getPositionDetails(holding.id, "2026-01-03")).toMatchObject({ quantity: 20, costBasis: 100 });
 });
 
+it("reviews several missed trades together and replays the holding once in date order", async () => {
+  const { holding, cash } = await setup(), before = await ledger();
+  const common = { operation: "insert", kind: "buy", accountId: holding.id, tradeCashAccountId: cash.id } as const;
+  const change = { operation: "insert-batch", trades: [
+    { ...common, date: "2026-01-02", quantity: 2, pricePerShare: 9 },
+    { ...common, date: "2025-12-31", quantity: 5, pricePerShare: 8 },
+  ] } as const;
+  const preview = await correction.previewInvestmentTradeCorrection(change);
+  expect(preview.affected.map(({ kind, before, after }) => [kind, before?.date, after?.date, after?.quantityAfter])).toEqual([
+    ["buy", undefined, "2025-12-31", 5],
+    ["buy", "2026-01-01", "2026-01-01", 15],
+    ["split", "2026-01-02", "2026-01-02", 30],
+    ["buy", undefined, "2026-01-02", 32],
+    ["sell", "2026-01-03", "2026-01-03", 22],
+  ]);
+  expect(await ledger()).toEqual(before);
+  await expect(correction.previewInvestmentTradeCorrection({ ...change, trades: [
+    { ...change.trades[0], kind: "sell" as const, quantity: 1000 }, change.trades[1],
+  ] })).rejects.toThrow(/insufficient|enough/i);
+  expect(await ledger()).toEqual(before);
+  await expect(correction.saveInvestmentTradeCorrection({ ...change, trades: [{ ...change.trades[0], quantity: 3 }, change.trades[1]] },
+    preview.reviewToken, "Changed statement")).rejects.toThrow(/preview/i);
+  expect(await ledger()).toEqual(before);
+  const saved = await correction.saveInvestmentTradeCorrection(change, preview.reviewToken, "Two missed statement trades");
+  const revision = await databaseService.prismaClient.investmentCorrection.findUniqueOrThrow({ where: { id: saved.revisionId } });
+  expect(JSON.parse(revision.afterJson).filter(({ replaces }: { replaces: string | null }) => replaces === null)).toHaveLength(2);
+  expect(await investmentService.getPositionDetails(holding.id, "2026-01-03")).toMatchObject({ quantity: 22, costBasis: 118 });
+});
+
 it("inserts after existing same-day activity and refuses an unrelated settlement account", async () => {
   const { holding, cash, activity } = await setup();
   const other = await investmentService.createInvestmentPortfolio("Other brokerage", "CAD");

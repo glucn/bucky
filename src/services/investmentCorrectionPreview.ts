@@ -9,7 +9,7 @@ import { cents, investmentTransaction, readInvestmentQuantity, readInvestmentTer
 import { defaultTradeDescription, recordInvestmentTrade } from "./investmentTrades";
 import type { TradeInsertion } from "../shared/investmentReplay";
 
-export type TradeCorrection = TradeInsertion | ({ activityId: string } & (
+export type TradeCorrection = TradeInsertion | { operation: "insert-batch"; trades: readonly TradeInsertion[] } | ({ activityId: string } & (
   { operation?: "correct"; date: string; quantity: number; pricePerShare: number; fee?: number } |
   { operation: "void" }
 ));
@@ -41,15 +41,16 @@ function readPosting(row: Event) {
 }
 
 async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeCorrection) {
-  const insertion = input.operation === "insert" ? input : null;
-  const target = input.operation === "insert" ? null : await tx.investmentActivity.findUnique({ where: { id: input.activityId } });
-  if (!insertion && (!target || (target.kind !== "buy" && target.kind !== "sell"))) throw new Error("Select an active holding's recorded buy or sell");
-  const accountId = insertion?.accountId ?? target!.accountId;
+  const insertions = input.operation === "insert-batch" ? input.trades : input.operation === "insert" ? [input] : [];
+  const target = "activityId" in input ? await tx.investmentActivity.findUnique({ where: { id: input.activityId } }) : null;
+  if (!insertions.length && (!target || (target.kind !== "buy" && target.kind !== "sell"))) throw new Error("Select an active holding's recorded buy or sell");
+  const accountId = insertions[0]?.accountId ?? target!.accountId;
   const account = await tx.account.findUnique({ where: { id: accountId }, include: { investmentProperties: true } });
   if (!account?.investmentProperties || !account.groupId || account.isArchived) throw new Error("Select an active investment holding");
   const before = await verifyInvestmentSnapshot(tx, accountId, "9999-12-31");
   if (before.status !== "available") throw new Error("Verify the holding history before replaying corrections");
-  const correctedDate = input.operation === "void" ? target!.date : input.date;
+  const correctedDate = input.operation === "void" ? target!.date :
+    input.operation === "insert-batch" ? input.trades.map(({ date }) => date).sort()[0] : input.date;
   const earliest = target && target.date < correctedDate ? target.date : correctedDate;
   const rows = await tx.investmentActivity.findMany({ where: { accountId }, orderBy: { sequence: "asc" }, include: { journalLinks: journals } });
   const baseline = rows.find(({ kind }) => kind === "baseline");
@@ -57,12 +58,16 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
   const index = rows.findIndex((row) => row.date > earliest || (row.date === earliest && target !== null && (earliest !== target.date || row.sequence >= target.sequence)));
   if (index < 0) throw new Error("Use ordinary trade entry when there is no later activity to replay");
   const previous = rows[index - 1], suffix = rows.slice(index);
-  const planned = suffix.map((row) => ({ row, date: row.id === target?.id ? correctedDate : row.date }));
-  planned.sort((a, b) => a.date.localeCompare(b.date) || a.row.sequence - b.row.sequence);
+  const planned: Array<{ date: string; row: Event } | { date: string; insertion: TradeInsertion }> = [
+    ...suffix.map((row) => ({ row, date: row.id === target?.id ? correctedDate : row.date })),
+    ...insertions.map((insertion) => ({ insertion, date: insertion.date })),
+  ];
+  // Stable sorting keeps the retained sequence and puts statement rows after retained activity on the same day.
+  planned.sort((a, b) => a.date.localeCompare(b.date));
 
   const entryIds = suffix.flatMap((row) => row.journalLinks.map(({ entryId }) => entryId));
   const accountIds = [...new Set(suffix.flatMap((row) => row.journalLinks.flatMap(({ entry }) => entry.lines.map(({ accountId }) => accountId))))];
-  if (insertion) accountIds.push(accountId, insertion.tradeCashAccountId);
+  if (insertions.length) accountIds.push(accountId, ...insertions.map(({ tradeCashAccountId }) => tradeCashAccountId));
   const checkpoint = await tx.checkpoint.findFirst({ where: { accountId: { in: accountIds }, date: { gte: earliest } }, select: { id: true } });
   if (checkpoint) throw new Error("Correction crosses a retained checkpoint; reconcile affected account history before replay");
   await tx.investmentActivity.deleteMany({ where: { id: { in: suffix.map(({ id }) => id) } } });
@@ -76,16 +81,19 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
 
   const affected = [], replacement: Array<{ replaces: string | null; event: Event | null }> = [];
   let insertedId: string | null = null;
-  if (insertion) {
-    await recordInvestmentTrade(insertion.kind, {
-      ...insertion, portfolioId: account.groupId, tickerSymbol: account.investmentProperties.tickerSymbol, securityAccountId: accountId,
-    }, tx);
-    const event = await tx.investmentActivity.findFirstOrThrow({ where: { accountId }, orderBy: { sequence: "desc" }, include: { journalLinks: journals } });
-    insertedId = event.id;
-    affected.push({ activityId: null, kind: event.kind, before: null, after: summary(event) });
-    replacement.push({ replaces: null, event });
-  }
-  for (const { row, date } of planned) {
+  for (const eventPlan of planned) {
+    if ("insertion" in eventPlan) {
+      const { insertion } = eventPlan;
+      await recordInvestmentTrade(insertion.kind, {
+        ...insertion, portfolioId: account.groupId, tickerSymbol: account.investmentProperties.tickerSymbol, securityAccountId: accountId,
+      }, tx);
+      const event = await tx.investmentActivity.findFirstOrThrow({ where: { accountId }, orderBy: { sequence: "desc" }, include: { journalLinks: journals } });
+      insertedId ??= event.id;
+      affected.push({ activityId: null, kind: event.kind, before: null, after: summary(event) });
+      replacement.push({ replaces: null, event });
+      continue;
+    }
+    const { row, date } = eventPlan;
     if (row.id === target?.id && input.operation === "void") {
       affected.push({ activityId: row.id, kind: row.kind, before: summary(row), after: null });
       replacement.push({ replaces: row.id, event: null });
@@ -98,7 +106,7 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
       case "buy": case "sell": {
         const price = readInvestmentTerm(row.price, row.priceDecimal);
         if (price === null) throw new Error("Stored trade price is missing");
-        await recordInvestmentTrade(row.kind, { ...common, ...(row.id === target?.id && input.operation !== "void" && input.operation !== "insert"
+        await recordInvestmentTrade(row.kind, { ...common, ...(row.id === target?.id && "activityId" in input && input.operation !== "void"
           ? { quantity: input.quantity, pricePerShare: input.pricePerShare, fee: input.fee ?? row.fee ?? 0,
             description: posting.description === defaultTradeDescription(row.kind, row.ticker, row.units!, price) ? undefined : posting.description }
           : { quantity: row.units!, pricePerShare: price, fee: row.fee ?? 0 }) }, tx);
@@ -147,6 +155,14 @@ async function replayTradeCorrection(tx: Prisma.TransactionClient, input: TradeC
 }
 
 function validateCorrection(input: TradeCorrection) {
+  if (input?.operation === "insert-batch") {
+    if (!Array.isArray(input.trades) || !input.trades.length || input.trades.some((trade) =>
+      trade?.operation !== "insert" || trade.accountId !== input.trades[0].accountId)) {
+      throw new Error("Select statement trades for one holding");
+    }
+    for (const trade of input.trades) validateCorrection(trade);
+    return;
+  }
   if (input?.operation === "insert") {
     if (!["buy", "sell"].includes(input.kind) || typeof input.accountId !== "string" || !input.accountId ||
       typeof input.tradeCashAccountId !== "string" || !input.tradeCashAccountId || typeof input.date !== "string" || !isValidStandardDate(input.date) ||

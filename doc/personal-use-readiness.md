@@ -9,6 +9,17 @@ the implementation log records subsequent changes and verification.
 
 ## Implementation Log
 
+### Batch 90 — Replay several missed trades together for one holding
+
+- The correction service can preview several buys and sells in one replay of
+  the affected holding. Retained activity keeps its order, and statement trades
+  follow retained activity on the same date in the order supplied.
+- Preview rolls back the whole replay. Save rechecks the review token and
+  retains the complete before-and-after revision. Tests cover retained splits,
+  FIFO sales, stale confirmations, and a failed trade partway through replay.
+- The statement wizard still excludes historical rows from ordinary import.
+  Connecting the batch replay to statement review and import origins remains open.
+
 ### Batch 89 — Identify historical investment rows before importing
 
 - Statement preview uses the same holding-date rule as ordinary posting. Rows
